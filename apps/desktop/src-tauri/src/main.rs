@@ -130,6 +130,13 @@ impl Bridge {
             _job: job,
         })
     }
+    fn stop_tree(&mut self) {
+        #[cfg(windows)]
+        unsafe {
+            windows_sys::Win32::System::JobObjects::TerminateJobObject(self._job.0, 1);
+        }
+        let _ = self.child.kill();
+    }
     fn request(&mut self, request: Value) -> Result<Value, String> {
         if self.broken {
             return Err("COORDINATOR_STOPPED_RESTART_APP".into());
@@ -152,14 +159,14 @@ impl Bridge {
         })();
         if result.is_err() {
             self.broken = true;
-            let _ = self.child.kill();
+            self.stop_tree();
         }
         result
     }
 }
 impl Drop for Bridge {
     fn drop(&mut self) {
-        let _ = self.child.kill();
+        self.stop_tree();
         let _ = self.child.wait();
     }
 }
@@ -219,8 +226,65 @@ fn main() {
             if stop.get("ok") != Some(&Value::Bool(true)) {
                 return Err("STOP_FAILED".to_string());
             }
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            loop {
+                if let Some(status) = bridge.child.try_wait().map_err(|_| "WAIT_FAILED")? {
+                    if !status.success() {
+                        return Err("UNCLEAN_COORDINATOR_EXIT".into());
+                    }
+                    break;
+                }
+                if std::time::Instant::now() > deadline {
+                    return Err("COORDINATOR_DID_NOT_EXIT".into());
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            drop(bridge);
+            // Fault injection stays inside developer smoke, never in the UI/IPC command set.
+            let mut interrupted = Bridge::start()?;
+            interrupted.request(json!({"v":1,"command":"snapshot"}))?;
+            let _ = interrupted.child.kill();
+            if interrupted
+                .request(json!({"v":1,"command":"snapshot"}))
+                .is_ok()
+            {
+                return Err("DEAD_COORDINATOR_NOT_DETECTED".into());
+            }
+            #[cfg(windows)]
+            {
+                use windows_sys::Win32::System::JobObjects::*;
+                let deadline = std::time::Instant::now() + Duration::from_secs(5);
+                loop {
+                    let mut info: JOBOBJECT_BASIC_ACCOUNTING_INFORMATION =
+                        unsafe { std::mem::zeroed() };
+                    let ok = unsafe {
+                        QueryInformationJobObject(
+                            interrupted._job.0,
+                            JobObjectBasicAccountingInformation,
+                            &mut info as *mut _ as _,
+                            std::mem::size_of_val(&info) as u32,
+                            std::ptr::null_mut(),
+                        )
+                    };
+                    if ok == 0 {
+                        return Err("JOB_QUERY_FAILED".into());
+                    }
+                    if info.ActiveProcesses == 0 {
+                        break;
+                    }
+                    if std::time::Instant::now() > deadline {
+                        return Err("DESCENDANTS_STILL_RUNNING".into());
+                    }
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+            }
             Ok::<(), String>(())
         })();
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(dir) = exe.parent() {
+                let _ = std::fs::write(dir.join("SMOKE.txt"), match &result { Ok(()) => "PASS packaged IPC, refusal, natural quit, unexpected coordinator death and descendant cleanup".to_string(), Err(error) => format!("FAIL {error}") });
+            }
+        }
         std::process::exit(if result.is_ok() { 0 } else { 1 });
     }
     tauri::Builder::default()
