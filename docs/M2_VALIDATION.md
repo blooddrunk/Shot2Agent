@@ -53,3 +53,7 @@ All exit **0**. Observed queued -> succeeded, exactly one attempt, Markdown accu
 | Windows local save + restart after native Agent interruption | NOT VERIFIED | File/hash, queued recovery, started unknown/no replay |
 
 Exact prerequisites, commands, expected results, evidence fields and failure troubleshooting are in [the Windows acceptance table](LOCAL_MVP_USAGE.md#windows-人工验收记录表). No Relay/VPS or local HTTP is required. One short stabilization pass should fix only observed Windows failures. Full Tauri/tray, folder watch, CF_HDROP, Remote delivery/mobile notifications and installers stay deferred V1 capabilities.
+
+## Cross-platform CI correction
+
+Initial push run [39423017975](https://github.com/blooddrunk/Shot2Agent/actions/runs/39423017975) passed Linux Node 22/24; both Windows jobs identified `ERR_UNSUPPORTED_ESM_URL_SCHEME` in the smoke harness. Corrected injected-module and generated Sharp imports to standard file URLs, matching the existing M1 harness. This was a failing check and was fixed before acceptance; no product safety setting was weakened. Both Windows jobs already passed the native synthetic DIB/Unicode/stale-sequence test, distinct from user Snipping Tool/focus/live Windows Codex acceptance. See PR checks for the final-head rerun.
