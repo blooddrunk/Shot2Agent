@@ -1,6 +1,6 @@
 # M3-L: Windows Local tray app and configurable automatic capture (next single development round)
 
-Status: **planned**, not implemented. Baseline: M2-L merged as PR #2, `a1d1a7c7ccfa6b16e8b7c98ebf9bed419c4b61b0`. M2-L minimum Local loop has scoped operator acceptance; do not claim that all Windows Smart/focus/interruption cases passed. Relevant evidence: [M2 validation](M2_VALIDATION.md), [Windows acceptance](WINDOWS_ACCEPTANCE.md).
+Status: **implemented for automated/build validation; native user acceptance pending**. See [current controls and run steps](M3_WINDOWS_RUN.md) and [executed evidence](M3_VALIDATION.md). The implementation provides worker-owned profile/configuration visibility, not a profile editor. Baseline: M2-L merged as PR #2, `a1d1a7c7ccfa6b16e8b7c98ebf9bed419c4b61b0`. M2-L minimum Local loop has scoped operator acceptance; do not claim that all Windows Smart/focus/interruption cases passed. Relevant evidence: [M2 validation](M2_VALIDATION.md), [Windows acceptance](WINDOWS_ACCEPTANCE.md).
 
 ## User decision and goal
 

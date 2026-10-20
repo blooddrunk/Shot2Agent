@@ -1,5 +1,7 @@
 # Implementation roadmap: thin vertical slices and gates
 
+M3-L bounded Windows Local desktop is implemented; see [run guide](M3_WINDOWS_RUN.md) and [evidence](M3_VALIDATION.md). Native acceptance remains individually NOT VERIFIED. The broader M3–M5 lists below remain deferred V1 scope.
+
 > M2-L update (2026-10-20): M2-L minimum Local functional acceptance was closed on operator feedback dated 2026-10-20; full V1 and dedicated unobserved native cases remain outside that conclusion. See [usage](LOCAL_MVP_USAGE.md) and [executed verification](M2_VALIDATION.md). Keep deferred V1 capabilities below; a single bounded stabilization pass should address observed Windows failures, not restart sequential infrastructure milestones.
 
 **Status:** implementation plan. This is not a completion report. Prioritize automated tests and reproducible evidence. Do not use GitHub issues as a prerequisite for this personal project.

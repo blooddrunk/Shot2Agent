@@ -1,3 +1,5 @@
+> **M3-L desktop implementation:** Windows Tauri 2 + Vue 3 Local shell, opt-in automatic new-image submission, confirmation preview, pause/resume, history, independent Smart/manual/Always clipboard and Markdown save. No Relay/listener. See [Windows build/run and five native observations](docs/M3_WINDOWS_RUN.md) and [M3 evidence](docs/M3_VALIDATION.md). M2 operator acceptance is preserved; M3 native acceptance is separate.
+
 # Shot2Agent
 
 **Capture once. Process anywhere.**

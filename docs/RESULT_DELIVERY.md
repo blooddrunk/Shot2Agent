@@ -1,5 +1,7 @@
 # Result delivery policy — confirmed V1 behavior
 
+> M3-L desktop update: Tauri 2/Vue 3 uses a restricted anonymous-pipe Node child; no network listener or Relay. Windows Job containment owns descendants; EOF/quit aborts and settles work. Versioned capture settings share M2 settings with backup; SQLite tasks are retained. Worker exclusion is transactional and PID-aware. See [desktop operation](M3_WINDOWS_RUN.md) and [evidence](M3_VALIDATION.md).
+
 > M2-L update (2026-10-20): M2-L implements Local text clipboard (manual/Smart/explicit Always), independent atomic Markdown save, persistent per-channel reservations/outcomes and explicit delivery-only retry. Local history is always retained. Remote push, CF_HDROP/files, toast and Remote receiver remain planned. See [Local operation](LOCAL_MVP_USAGE.md). The older M3/M4 ordering below is superseded only for this Local slice.
 
 **Status:** confirmed V1 behavior as of 2026-10-20. M2-L implements independent Local Markdown save and text clipboard return, with successful [operator-reported receipts](M2_VALIDATION.md#operator-acceptance-2026-10-20). File clipboard, Remote push/receiver and toast remain planned; a successful receipt does not prove actual paste or first-attempt Smart behavior. The M3-M5 sections retain the deferred full V1 scope.

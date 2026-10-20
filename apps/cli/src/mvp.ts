@@ -82,6 +82,7 @@ async function main() {
       log({ taskId: id ?? null, status: app.lastCaptureStatus, next: 'work or watch' });
     } else if (command === 'work') log({ worked: await app.work(controller.signal) });
     else if (command === 'watch') {
+      await app.arm();
       log(`Ready (${settings.adapter}, ${values.auto ? 'AUTO submission enabled' : 'confirm: type submit after screenshot'}). Commands: submit, current, list, show ID, copy ID, delivery ID, quit. No Relay/HTTP. Minimize this console; it will not activate windows.`);
       const input = createInterface({ input: process.stdin, output: process.stdout });
       let commands = Promise.resolve(); let worker: Promise<unknown> | undefined;

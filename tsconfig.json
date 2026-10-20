@@ -4,5 +4,6 @@
     "strict": true, "erasableSyntaxOnly": true, "noEmit": true, "allowImportingTsExtensions": true,
     "skipLibCheck": true, "types": ["node"]
   },
+  "exclude": ["apps/desktop"],
   "include": ["packages/*/src/**/*.ts", "services/*/src/**/*.ts", "apps/*/src/**/*.ts"]
 }

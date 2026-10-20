@@ -1,5 +1,7 @@
 # Architecture / product decisions
 
+> M3-L desktop update: Tauri 2/Vue 3 uses a restricted anonymous-pipe Node child; no network listener or Relay. Windows Job containment owns descendants; EOF/quit aborts and settles work. Versioned capture settings share M2 settings with backup; SQLite tasks are retained. Worker exclusion is transactional and PID-aware. See [desktop operation](M3_WINDOWS_RUN.md) and [evidence](M3_VALIDATION.md).
+
 > M2-L update (2026-10-20): M2-L implementation supersedes the old M1 16 MP resource guard: tested 64 MP, bounded bytes, still images and serial native decode. Local CLI + hidden Win32 helper precede full Tauri UI. Smart checks sequence and writes while holding OpenClipboard; baseline from another helper lifecycle is blocked. Worker pins exact Codex version, read-only permissions, no user config/rules and no shell tool; unknown execution is never replayed. See [Local usage](LOCAL_MVP_USAGE.md).
 
 This is a lightweight decision log. 'Proposed' choices may be revised when tests show concrete problems. 'Confirmed' are user-approved product requirements.

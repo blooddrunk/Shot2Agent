@@ -1,3 +1,7 @@
+# Current M3-L desktop acceptance
+
+Use [M3 Windows run guide](M3_WINDOWS_RUN.md) for the ready-to-run portable build, actual GUI/tray control names, isolated staging root, deterministic 8-second Fake result and five affected observations. M3 native observations are NOT VERIFIED until recorded in [M3 evidence](M3_VALIDATION.md). M2 minimum-loop acceptance below remains historical and valid at its recorded scope.
+
 # Windows 验收：只做本次改动需要确认的项目
 
 **当前 M2-L 最小闭环已由操作者在 2026-10-20 反馈验收通过，无需为了补表重新做一遍。** [结果和证据边界](M2_VALIDATION.md#operator-acceptance-2026-10-20)。本页用于以后改动触及相应功能时复验；不是每次更新都要完成的作业。
