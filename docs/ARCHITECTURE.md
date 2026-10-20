@@ -39,6 +39,17 @@ Rust/Windows SDK features should be developed **on Windows**, not through a Linu
 
 ## Components
 
+### Confirmed V1 return-to-origin delivery capability (implemented during M3/M4)
+
+The Windows capture client also acts as an outbound-only authenticated result receiver; it never needs a public inbound port. Relay stores the worker result and artifacts; the receiver verifies and atomically saves local files (if enabled), or writes either text or local file-drop references to the interactive Windows clipboard, while independently sending remote push notifications.
+
+These are **parallel delivery destinations**, not a single exclusive destination selector. Capture-device defaults plus optional per-Profile overrides determine the delivery policy. History always exists; all optional destinations may be disabled. A failing notification, filesystem write or clipboard attempt must not change agent execution status or prevent the other destinations.
+
+Windows clipboard `smart/always/manual` is a choice of write policy *within* the clipboard channel. Smart mode protects newer user clipboard activity. Results saved locally must not be recursively re-ingested by watched screenshot folders. The local output root belongs to the originating device and cannot be selected by agent output/remote worker. File clipboard requires already downloaded real local files, retained for pasting; write operations execute in the logged-in user session.
+
+See [Result delivery policy](RESULT_DELIVERY.md). M1 retains stable authenticated task ownership; the receiver and channel fan-out are implemented/verified later in M3/M4.
+
+
 - **Capture app:** source configuration, tray UI, image staging, dedupe, pending outbox, batch authoring and profile selection. Capturing screenshots remains Windows' responsibility.
 - **Relay:** role-scoped auth, idempotent upload, durable task state, worker leasing, artifacts and logs, retention, notification outbox and web read endpoints.
 - **Worker:** identity and capability registration, poll/claim, heartbeat, local profile lookup, attachment integrity checks, constrained subprocess adapter, result upload.

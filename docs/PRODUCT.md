@@ -37,6 +37,23 @@ The precedence rule is **constraints before requests**: platform policy and work
 
 ### Results and notifications
 
+**Confirmed V1 result-delivery policy (M3/M4 implementation):** task history remains available and durable regardless of optional delivery settings. The following are **independent, combinable channels**, never a mutually exclusive result-destination enum:
+1. Remote push notification (when a provider is configured).
+2. Automatic save of Markdown and allowed artifacts on the **originating capture device**, in a user-approved local directory.
+3. Origin-device Windows clipboard delivery, with `mode = smart | always | manual` and `payload = text | files`. These modes are alternatives **within the clipboard channel**, not alternatives to notifications or local file saving. Manual mode provides actions but does not auto-overwrite the clipboard. A file clipboard payload references actual verified local downloaded files.
+4. Optional desktop notification may be configured independently of remote push.
+
+All enabled applicable channels operate independently after a successful result; failure in one does not cancel, block, or change status of another, nor change the completed agent task. Report separate channel delivery statuses, for example `pending/sent/failed/skipped` and `blocked_by_clipboard_change`. Successful local clipboard **write** is not evidence of paste.
+
+**All optional channels may be disabled:** this is a deliberate silent/history-only mode, not a validation error, because authenticated web task history remains mandatory. The interface should explain this plainly. Suggested setup default: remote notification if configured + save to a user-approved folder; clipboard auto-write off until opted in.
+
+The capture-device's effective delivery configuration uses **device defaults with optional per-Profile overrides** (and explicit task override if supported later). This is distinct from the worker-owned execution Profile: the worker must not control the receiving PC's filesystem path or clipboard. Avoid selecting a local output directory that is also a watched screenshot directory, and suppress self-generated capture events. An authenticated origin-device association must be retained for secure return delivery.
+
+**Smart clipboard mode:** only auto-copy when clipboard activity since the capture/submit baseline and result-download races indicate that it is safe; if the user copied anything newer, leave it intact and offer a one-click copy action. `always` explicitly permits overwrite. Multiple results must not cause uncontrolled successive clipboard overwrites. When the result includes both text and files, automatic clipboard payload has **one selected type**, while manual copy actions can offer both.
+
+See [Result delivery policy](RESULT_DELIVERY.md) for the proposed configuration shape and acceptance details.
+
+
 - Store the original ordered screenshots, final Markdown content, concise summary, timestamps, attempt history, bounded logs and declared artifacts.
 - User can view task status, preview inputs, copy Markdown, download permitted files, retry as a new attempt and cancel queued tasks. Running cancellation is best-effort and cannot roll back writes already made.
 - Notify on completion/failure through desktop notification and one optional mobile push provider. Never send raw screenshots or full sensitive outputs in push payloads by default.
@@ -82,6 +99,12 @@ The precedence rule is **constraints before requests**: platform policy and work
 | A10 | Unauthorized task references a different workspace | Worker refuses execution; no path or permissions escalation |
 | A11 | User cancels running task | Best-effort stop; report any work already performed and no rollback guarantee |
 | A12 | Service restarts while queued | Persisted tasks and metadata survive a restart |
+| A13 | Remote push + local save + clipboard all enabled | Each applicable channel succeeds independently, with task status unaffected by a channel failure |
+| A14 | All optional delivery channels disabled | Task remains accessible in authenticated history; no push/local write/clipboard mutation |
+| A15 | Clipboard smart mode and newer user copy | No automatic clipboard overwrite; an explicit copy action remains available |
+| A16 | File clipboard enabled | Verified local files can be pasted into Explorer; backing files remain available |
+| A17 | Capture device offline at completion | Pending authorized result can be fetched when back online, without duplicate local files |
+| A18 | Local save directory overlaps screenshot watch | Self-generated results do not re-enter capture as new tasks |
 
 ## Explicit V1 exclusions
 

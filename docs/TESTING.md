@@ -24,6 +24,28 @@ Record OS version, app version, steps, actual task IDs (redact if publishing), o
 
 ## Manual proof B: Codex adapter / local permission boundary (M2)
 
+## Delivery fan-out verification (M3/M4)
+
+Automate with fake worker/results and a stub receiver:
+1. Enable push + local save + clipboard simultaneously; assert **all** applicable channel handlers run and keep independent statuses; force each channel to fail separately and confirm the other two and task success remain unaffected.
+2. Disable all optional delivery switches; assert no side effects while authenticated task history remains readable. Disable one at a time and verify no unintended writes or notifications.
+3. Disconnect the origin capture client while a result completes; reconnect and verify authenticated fetch, durable/idempotent local save and stable delivery receipts.
+4. Reject an unauthorized origin device, corrupted artifact hash, oversized attachment, path traversal and symlink escape; no partial file should be published as successful.
+5. When output lands in or next to a watched screenshot folder, confirm there is no self-trigger feedback loop. Use a separate output root by default.
+6. Simulate multiple near-simultaneous completions and changed clipboard sequence: smart mode must preserve newer user content, offer explicit copy, and not continuously overwrite the clipboard.
+7. Confirm a text-only result can be saved as a file; a file-only result can be downloaded even when clipboard is disabled. A mixed result saves both while clipboard auto-copy uses its configured single payload type.
+
+**Mandatory native Windows proof (logged-in desktop, synthetic data):**
+1. Enable local save, remote notification, and clipboard smart mode concurrently. Capture a synthetic screenshot and verify all independently apply without stealing foreground focus.
+2. Copy another string after submitting the screenshot but before result completion. Confirm smart mode does **not** overwrite it. Trigger explicit Copy text, then paste into Notepad and compare bytes.
+3. Test `always` separately with explicit opt-in. Confirm auto-overwrite is visible and documented.
+4. Produce a test DOCX/PNG file, download it, invoke Copy file(s) and paste into Windows Explorer; confirm the correct file(s), no corruption, and that cache files stay available.
+5. Turn all optional channels off and confirm the result is still available in history without notification, clipboard write or local save.
+6. Exit and relaunch the tray client while offline; reconnect and verify pending result delivery and no duplicate output files.
+
+Record every expected and observed result individually. Do not treat Linux CI as clipboard integration proof.
+
+
 Prerequisites: worker machine with `codex --version` succeeding; an authenticated Codex setup; isolated temporary git workspace; synthetic screenshot only; a read-only profile; relay and worker identities already registered.
 
 1. Run a task requesting transcription of known text in the screenshot. **Expected:** profile ID/version logged, input hash verified, final Markdown available, no modified files in the workspace.

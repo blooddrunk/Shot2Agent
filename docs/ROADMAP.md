@@ -41,6 +41,8 @@ Automated gate: capture event parser, filesystem write-settle logic, image decod
 
 Mandatory Windows manual proof: See `TESTING.md` for precise clipboard, Print Screen, tray and installer interaction steps. A green Linux CI cannot substitute for these steps.
 
+M3 may provide Windows-native clipboard and local-result-writer adapters required by M4; do not activate automatic result delivery until the M4 configuration, authorization and conflict-handling tests pass.
+
 ## M4 - Web history + notification adapter
 
 Deliver: authenticated task history / result detail with Markdown and artifacts, retry/cancel controls; desktop completion notifications plus one mobile push adapter (provider selection remains open).
@@ -49,7 +51,7 @@ Automated gate: permissions on every list/detail/artifact endpoint, pagination, 
 
 Optional provider manual gate: using synthetic content, push to a test device; confirm link opens only after login. No real screenshot content in the push payload.
 
-**Optional reverse-delivery proposal:** The capture Windows tray may retrieve completed results back to the originating device, save Markdown/artifacts to a locally approved directory, and optionally copy text or downloaded real files to the interactive Windows clipboard. This is an opt-in extension, not a confirmed mandatory V1 criterion and not part of M1's development gate. See [Return-to-origin proposal](RETURN_DELIVERY_PROPOSAL.md) for clipboard safety, delivery receipts and Windows validation.
+**Confirmed V1 delivery orchestration (M4 with M3 native integration):** web history is mandatory; remote notifications, local auto-save, and clipboard return are individually configurable and may all be enabled together. Clipboard policy is `smart | always | manual`, orthogonal to the other channels. All optional delivery channels may be off (silent/history-only). Track outcomes and retries per channel so that failure of one cannot fail another or the task itself. Verify multi-channel fan-out, disabled channels, an offline receiving client, file integrity, self-trigger prevention and clipboard conflicts. See [Result delivery policy](RESULT_DELIVERY.md). **M1's goal and gate remain unchanged**; retain authenticated owner/device associations for a later receiver.
 
 ## M5 - Private VPS release hardening
 

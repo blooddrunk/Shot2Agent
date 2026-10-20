@@ -50,6 +50,18 @@ Server authentication, status and error codes, upload streaming/atomicity, artif
 
 ## Recommended result envelope
 
+### Delivery policy vs. task execution (confirmed product contract; API shape deferred)
+
+Execution result/history is always retained under authenticated access. Optional delivery channels are independent switches, **not** a mutually exclusive destination enum:
+`remotePush.enabled`, `localSave.enabled` and `clipboard.enabled`; optional desktop notification may be a separate switch. All false is a supported **history-only** policy. Clipboard alone has one policy `smart | always | manual` and one automatic payload preference `text | files`. The Windows recipient determines local paths and never trusts agent-provided destinations.
+
+Origin ownership/identity is derived from authenticated task submission and must be preserved independently from worker identity. Remote push delivery, local file saving, and clipboard write have **separate delivery receipts/statuses**, distinct from `task.status` and each other. A clipboard receipt proves write or conflict suppression, not paste; a file receipt proves verified atomic save, not user access.
+
+For M4, the capture client may fetch pending results using outbound authenticated requests and perform each enabled destination without waiting for the others. Retries must be idempotent; an offline receiving device retains pending delivery within server retention. Results containing both Markdown and generated files can be saved together, while a **single automatic clipboard action** selects text or downloaded local files. Remote URLs and worker paths must never be published as file-drop clipboard items.
+
+**M1 protocol scope unchanged:** do not implement delivery endpoints or clipboard logic in M1. Keep task owner/origin identity auditable and result blobs private so the M4 receiver can be added without changing core task semantics. See [Result delivery policy](RESULT_DELIVERY.md).
+
+
 - `taskId`, `attemptId`, `status`, `summary`, `contentMarkdown`, `artifacts[]`, `errorCode`, `errorDetail`, `startedAt`, `finishedAt`, `profileId`, `profileVersion`, `workerId`, `adapterName`, `adapterVersion`.
 - Artifact references are relay-generated, access-controlled IDs. Paths on the worker are never trusted as downloadable URLs.
 - Logs and progress are bounded and sanitized. Store enough structured metadata to distinguish transport errors, agent exit code, invalid outputs and interrupted work.
