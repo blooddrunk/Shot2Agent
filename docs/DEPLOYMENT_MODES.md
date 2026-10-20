@@ -2,7 +2,7 @@
 
 > M3-L desktop update: Tauri 2/Vue 3 uses a restricted anonymous-pipe Node child; no network listener or Relay. Windows Job containment owns descendants; EOF/quit aborts and settles work. Versioned capture settings share M2 settings with backup; SQLite tasks are retained. Worker exclusion is transactional and PID-aware. See [desktop operation](M3_WINDOWS_RUN.md) and [evidence](M3_VALIDATION.md).
 
-**Status:** confirmed V1 requirements as of 2026-10-20. M1 core/CLI/Fake paths are implemented; native capture, real Agent and delivery remain planned. See [M1](M1.md).
+**Status:** confirmed V1 requirements as of 2026-10-20. M1 core plus M2-L Local clipboard/Codex/delivery and M3-L Local desktop are implemented. M2 minimum-loop operator acceptance is retained; M3 native acceptance is pending. Remote delivery remains planned. See [M3 evidence](M3_VALIDATION.md).
 
 ## Operating modes
 

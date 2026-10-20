@@ -12,7 +12,7 @@ Portable developer build, Windows 11 x64, logged-in non-elevated session. WebVie
 
 ## Existing approved Codex profile
 
-The UI shows the active adapter, approved read-only workspace and pinned CLI version. It does not accept executable or workspace changes from task/IPC input. Quit the desktop and its CLI watcher before configuring a profile. Existing M2 `settings.json` remains CLI-readable. First desktop use backs up legacy settings to `settings.m2-backup-<uuid>.json`; no database replacement/migration/deletion occurs. Legacy Always becomes manual until fresh desktop overwrite consent.
+The UI shows the active adapter, approved read-only workspace and pinned CLI version. It does not accept executable or workspace changes from task/IPC input. Quit the desktop and its CLI watcher before configuring a profile. Existing M2 `settings.json` remains CLI-readable. First desktop use backs up legacy settings to `settings.m2-backup-<uuid>.json`; existing task/history tables are not rewritten or deleted; Local state adds a compatible Worker-lock table. Legacy Always becomes manual until fresh desktop overwrite consent.
 
 For a new Codex root, initialize once from PowerShell in the extracted `runtime` directory, using your installed Windows Codex `.exe` or npm `.cmd`, authenticated beforehand:
 
@@ -44,4 +44,4 @@ npm run desktop:build
 npm run desktop:package
 ```
 
-Output: `build\Shot2Agent\Shot2Agent.exe` with runtime; CI also archives `Shot2Agent-Windows-x64.zip` and runs the packaged executable `--staging --smoke` through the real Rust-to-Node pipe (snapshot, command refusal, quit). CI smoke is not logged-in user tray/focus/paste acceptance. No installer, launch-on-login, Remote, watched folder, batch editor or file clipboard is included in this slice.
+Output: `build\Shot2Agent\Shot2Agent.exe` with runtime; CI also archives `Shot2Agent-Windows-x64.zip` and runs the packaged executable `--staging --smoke` through the real Rust-to-Node pipe (snapshot, command refusal, natural coordinator exit, unexpected coordinator death and descendant cleanup). CI smoke is not logged-in user tray/focus/paste acceptance. No installer, launch-on-login, Remote, watched folder, batch editor or file clipboard is included in this slice.

@@ -40,3 +40,30 @@ Windows build initial run [39438675876](https://github.com/blooddrunk/Shot2Agent
 Final local `npm run check` after fixture/detail fixes: exit 0, 89 total / 88 passed / 0 failed / 1 native skip, plus lint, TS/Vue, builds and compiled smoke. `cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml` exit 0. Fresh independent UI review scored the detail-selection finding resolved; delayed browser request check passed after rebuilt assets were reloaded. Browser screenshots are synthetic render evidence at 1040x760 and 720x560, not native proof.
 
 Pipe startup review also identified that the parent handshake and first JSON request can arrive in one chunk. The shared handshake parser now preserves trailing bytes; process tests use the same gate and a dedicated coalescing/refusal test. Consent booleans now preserve explicit revocation when switching to confirm/manual; pause settings publish only after durable save. These are covered by the final check/CI rerun.
+
+## Final automated gate
+
+- `corepack pnpm install --frozen-lockfile`: exit 0 after dependency layout recreation, lockfile respected.
+- `npm run check` (final source, including handshake and consent handling): exit 0, **90 total / 89 passed / 0 failed / 1 native Windows skip** in WSL. Lint, TS/Vue typecheck, core/production frontend builds and compiled fresh-cwd Fake smoke all exit 0.
+- `node --experimental-strip-types --test packages/desktop/test/*.test.mjs`: 12 desktop cases in the final full suite; production dispatcher/transport/startup gate reused. Synthetic fixture publication is atomic and delayed Fake completion is explicitly released rather than raced.
+- Browser rendering and delayed detail selection use synthetic IPC at 1040x760 and 720x560. A stale-assets browser assertion initially failed before reload (`DETAIL_SELECTION_NOT_DISABLED`); rebuilding/reloading the new script and repeating passed. This was not counted as native evidence. Temporary browser preview server was stopped after checks.
+- Native executable smoke now checks natural Node exit and kills the Node child deliberately inside its isolated developer path; a Windows Job query must confirm zero active descendants. No fault-injection command exists in product IPC. Transport failure terminates the whole Job immediately; it does not leave an Agent running until the user quits.
+
+Final source commit for Windows build validation: `0c3bc6ac232ac50c2dafe5f521df9d67a4e369bb`. Documentation may be committed after this source hash without changing executable code. Final CI links/results and downloaded package receipt follow after completion.
+
+## Final Windows CI evidence
+
+- [Four-platform/runtime matrix, source 0c3bc6a](https://github.com/blooddrunk/Shot2Agent/actions/runs/39440674547): **PASS**, Windows/Linux × Node 22/24; `npm run check` exit 0 in all four jobs. Windows Node 24 reports **90/90 pass**, no skips, including native clipboard helper. Linux reports 89 pass / 1 native skip. No live Codex credentials needed.
+- [Windows desktop package, source 0c3bc6a](https://github.com/blooddrunk/Shot2Agent/actions/runs/39440674074): `npm run desktop:build` **PASS**, release compile 4m18s; `npm run desktop:package` **PASS**; actual packaged EXE smoke **PASS**, exit 0. Receipt: `PASS packaged IPC, refusal, natural quit, unexpected coordinator death and descendant cleanup`. Artifact upload succeeded.
+- Earlier `df2675f` package compiled and packaged successfully but smoke exited 1; that build is not shipped. Its missing first pipe request was corrected by the coalescing-safe handshake in f24ef43, and the final 0c3bc6a EXE passed the expanded smoke. Obsolete duplicate push/PR runs were cancelled; workflow concurrency now keeps only the latest branch run. Cancelled runs are not passes.
+- Portable artifact `Shot2Agent-Windows-x64.zip` embeds `BUILD.txt` with source SHA and Node version and `SMOKE.txt` with the native smoke receipt. The validated source is preserved even when this evidence-only documentation receives a later commit. Native user observations in the table remain NOT VERIFIED.
+
+## Downloaded runnable package / this Windows machine
+
+- Download: `gh run download 39440674074 --name Shot2Agent-Windows-x64 --dir build/ci-download`, exit 0; ZIP extracted to `build/Shot2Agent` without executing GUI capture.
+- Archive: `build/ci-download/Shot2Agent-Windows-x64.zip`, **47,902,213 bytes**, SHA256 `46120ec65e568806de66664269202d0b7e00499d6ea39cd797784261a03e8619`.
+- EXE: `build/Shot2Agent/Shot2Agent.exe`, SHA256 `8aa467710276ccb5f27964eb624d0b845a25c8dfeba9987ded83c36abc1dcdb6`.
+- `BUILD.txt` reports Node **v24.21.0**, version **0.3.0**, checkout **ef6b07e2887deefb02ddba80547cd16215ae3c91**. This is GitHub's PR merge snapshot, verified parents: main `2e394df4a69336aa0b1b9d568b7466ae2af24dea` and feature source `0c3bc6ac232ac50c2dafe5f521df9d67a4e369bb`; it is not a merged PR/release claim.
+- Local native command (PowerShell): `Start-Process -FilePath 'D:\code\projects\Shot2Agent\build\Shot2Agent\Shot2Agent.exe' -ArgumentList '--staging','--smoke' -PassThru`, followed by bounded 45-second `WaitForExit` and reading `SMOKE.txt`: exit **0**, `PASS packaged IPC, refusal, natural quit, unexpected coordinator death and descendant cleanup`. Observed Windows version **10.0.26300.0**. This does not start/certify GUI capture, focus or paste.
+- Exact operator launch: double-click `D:\code\projects\Shot2Agent\build\Shot2Agent\Start acceptance.cmd`. Keep `runtime` adjacent. Quit through **退出** or tray **Quit Shot2Agent**. Follow the five observations in [current run guide](M3_WINDOWS_RUN.md); no build/debugging/SQLite work is requested.
+- A final `git fetch origin --prune` exit 0 confirmed main still `2e394df`; it is an ancestor of this branch. No user changes were reset or discarded. PR [#3](https://github.com/blooddrunk/Shot2Agent/pull/3) remains open for review/native acceptance, not merged.

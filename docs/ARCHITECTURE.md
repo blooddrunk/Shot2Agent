@@ -2,9 +2,9 @@
 
 > M3-L desktop update: Tauri 2/Vue 3 uses a restricted anonymous-pipe Node child; no network listener or Relay. Windows Job containment owns descendants; EOF/quit aborts and settles work. Versioned capture settings share M2 settings with backup; SQLite tasks are retained. Worker exclusion is transactional and PID-aware. See [desktop operation](M3_WINDOWS_RUN.md) and [evidence](M3_VALIDATION.md).
 
-> M2-L update (2026-10-20): M2-L now adds a direct Local CLI/coordinator (`apps/cli/src/mvp.ts`), Windows clipboard helper, worker-owned Codex registry and independent Local delivery; no HTTP import/service. Core tasks remain in tasks.sqlite; Local baselines/provenance/channel reservations are in local.sqlite. See [Local operation and boundaries](LOCAL_MVP_USAGE.md). Full tray/Remote receivers below remain future V1 work.
+> M2-L update (2026-10-20): M2-L now adds a direct Local CLI/coordinator (`apps/cli/src/mvp.ts`), Windows clipboard helper, worker-owned Codex registry and independent Local delivery; no HTTP import/service. Core tasks remain in tasks.sqlite; Local baselines/provenance/channel reservations are in local.sqlite. See [Local operation and boundaries](LOCAL_MVP_USAGE.md). The M3-L Local tray shell now hosts this pipeline; Remote receivers below remain future V1 work.
 
-**Status:** M1 core/Fake and M2-L Local clipboard/Codex/text save/return are implemented; minimum Local use has [operator acceptance](M2_VALIDATION.md#operator-acceptance-2026-10-20). A full Windows tray/desktop shell and Remote delivery remain planned; detailed unobserved native cases remain unverified.
+**Status:** M1 core/Fake and M2-L Local clipboard/Codex/text save/return are implemented; minimum Local use has [operator acceptance](M2_VALIDATION.md#operator-acceptance-2026-10-20). M3-L now adds the bounded Windows Local tray/desktop shell; Remote delivery remains planned and detailed unobserved native cases remain unverified.
 
 ## Boundaries
 

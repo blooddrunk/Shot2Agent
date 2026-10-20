@@ -18,7 +18,7 @@ Shot2Agent is a screenshot-driven, asynchronous agent task system. **Local mode*
 - Remote push notifications plus authenticated web task history, Markdown results and artifacts.
 - **Local is the default:** capture and Worker run on the same Windows PC, no Relay service or VPS config needed. Remote is opt-in; the VPS does **not** execute agent code.
 
-## Architecture (Local CLI implemented; full tray/Remote delivery deferred)
+## Architecture (Local desktop/CLI implemented; Remote delivery deferred)
 
 ```text
 LOCAL (default, no Relay)                   REMOTE (optional Relay)
@@ -34,7 +34,7 @@ Same-PC Worker -> Codex CLI                 Worker on PC B -> Codex CLI
 Local history + optional delivery           Relay result -> history / PC A receiver
 ```
 
-Local mode never requires a Relay URL, a VPS, or a remote upload/download round trip. The hosted Agent model may still need Internet. See [Deployment modes](docs/DEPLOYMENT_MODES.md) and [Architecture](docs/ARCHITECTURE.md). M2-L adds a Local CLI/coordinator, native clipboard helper, real Codex adapter and independent Local delivery. Full capture UI and Remote delivery remain planned.
+Local mode never requires a Relay URL, a VPS, or a remote upload/download round trip. The hosted Agent model may still need Internet. See [Deployment modes](docs/DEPLOYMENT_MODES.md) and [Architecture](docs/ARCHITECTURE.md). M2-L adds a Local CLI/coordinator, native clipboard helper, real Codex adapter and independent Local delivery. M3-L adds the bounded Local desktop/tray shell; Remote delivery, watched folders and batch authoring remain planned.
 
 ## Read first
 
