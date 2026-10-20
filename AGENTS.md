@@ -26,4 +26,4 @@
 
 ## Next goal
 
-Implement **M1 (shared durable Local task core + optional authenticated Remote Relay adapter, Fake Worker end-to-end in both modes)** from `docs/ROADMAP.md`, not all milestones at once. Keep task state semantics consistent with the currently tested `packages/contracts` prototype and update the contract/tests as required by implementation evidence.
+**M1 was merged as PR #1. Next goal: M2-L Local-first runnable MVP** defined by `docs/M2_LOCAL_MVP.md`. Sync the latest `main` first. Prioritize Windows clipboard image -> Local durable queue -> real Codex -> Markdown/history -> manual clipboard copy, then smart return and independent save. Do not create a Relay/VPS dependency or full Tauri GUI milestone for MVP; preserve Fake CI conformance and real Windows/Codex manual evidence boundaries. Update old 16 MP decoded-image cap to a tested 64 MP provisional guard while preserving byte/memory safety.
