@@ -50,8 +50,9 @@ export class DesktopController {
           requireValue(Object.keys(capture).every(k => ['enabled', 'mode'].includes(k)), 'INVALID_CAPTURE_SETTINGS');
           Object.assign(next.desktop, capture);
         }
-        if (r.autoConsent === true) next.desktop.autoConsent = true;
-        if (r.alwaysConsent === true) next.desktop.alwaysConsent = true;
+        for (const key of ['autoConsent', 'alwaysConsent'] as const) {
+          if (r[key] !== undefined) { requireValue(typeof r[key] === 'boolean', 'INVALID_CONSENT'); next.desktop[key] = r[key]; }
+        }
         if (r.delivery !== undefined) {
           requireValue(r.delivery && typeof r.delivery === 'object' && !Array.isArray(r.delivery) && Object.keys(r.delivery).every(k => ['clipboard', 'saveDirectory'].includes(k)), 'INVALID_DELIVERY_SETTINGS');
           next.delivery = r.delivery as Settings['delivery'];
@@ -65,7 +66,8 @@ export class DesktopController {
       }
       case 'pause':
         requireValue(typeof r.paused === 'boolean', 'INVALID_PAUSE');
-        await this.app.arm(); this.settings.desktop.paused = r.paused; saveSettings(this.root, this.settings); this.armed = true; this.captureError = undefined; break;
+        { const next = structuredClone(this.settings); next.desktop.paused = r.paused;
+          await this.app.arm(); saveSettings(this.root, next); this.settings = next; this.armed = true; this.captureError = undefined; } break;
       case 'submit':
         requireValue(this.app.pending, 'NO_PENDING_IMAGE'); await this.app.capture(); break;
       case 'current': await this.app.capture(false, true); break;

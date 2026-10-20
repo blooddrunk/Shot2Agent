@@ -1,4 +1,6 @@
 import test from 'node:test';
+import { PassThrough } from 'node:stream';
+import { waitForParent } from '../src/protocol.ts';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, readFileSync, readdirSync, mkdirSync, realpathSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -20,6 +22,7 @@ function host(root = temp(), mode) {
   const event = (image, extra = {}) => { const temporary = fixture + '.tmp'; writeFileSync(temporary, JSON.stringify({ sequence: String(seq++), image: image?.toString('base64'), ...extra })); renameSync(temporary,fixture); };
   event(png); // Historical image must never create task on startup.
   const child = spawn(process.execPath, ['--experimental-strip-types', fileURLToPath(new URL('./fixture.mjs', import.meta.url)), root, fixture, ...(mode ? [mode] : [])], { stdio: ['pipe','pipe','pipe'], shell: false });
+  child.stdin.write('SHOT2AGENT/1\n');
   child.stderr.resume(); let receive; let exit;
   const stopped = new Promise(r => { child.once('close', code => { exit = code; receive?.reject(Error(`host exited ${code}`)); r(code); }); });
   const lines = createInterface({ input: child.stdout }); lines.on('line', line => { const current = receive; receive = undefined; current?.resolve(JSON.parse(line)); });
@@ -69,7 +72,9 @@ test('desktop process: Smart conflict preserves newer text, Copy fallback, Alway
   await h.rpc('configure',{delivery:{clipboard:'always'},alwaysConsent:true});
   for (const request of [['exec',{executable:process.execPath}], ['configure',{profile:{command:'bad'}}], ['configure',{capture:{version:2}}], ['detail',{id:'../../secret'}]]) assert.equal((await h.raw(...request)).ok,false);
   h.event(undefined,{error:true}); s = await h.until(s=>s.status==='capture_error'); assert.equal(s.error,'CLIPBOARD_HELPER_STOPPED');
-  h.event(undefined); await h.rpc('recover'); assert.equal((await h.rpc('snapshot')).status,'monitoring'); await h.close();
+  h.event(undefined); await h.rpc('recover'); assert.equal((await h.rpc('snapshot')).status,'monitoring');
+  s = await h.rpc('configure',{capture:{mode:'confirm'},delivery:{clipboard:'manual'},autoConsent:false,alwaysConsent:false});
+  assert.equal(s.settings.autoConsent,false); assert.equal(s.settings.alwaysConsent,false); await h.close();
 });
 
 for (const mode of ['fail','unknown']) test(`desktop process: ${mode} is visible, never replayed after restart`, async t => {
@@ -107,4 +112,11 @@ for (const mode of ['success', 'exit', 'hang']) test(`desktop pipes -> mock Code
   if(mode==='success') assert.match((await h.rpc('detail',{id})).result.contentMarkdown,/# Mock result/);
   else assert.match(s.tasks[0].error,/CODEX_(EXIT|INTERRUPTED)/);
   await sleep(80); assert.equal((await h.rpc('detail',{id})).attempts.length,1); await h.close();
+});
+
+test('parent handshake preserves a coalesced first JSON request and refuses invalid gate', async () => {
+  const input=new PassThrough(); const ready=waitForParent(input);
+  const request=JSON.stringify({v:1,command:'snapshot'})+'\n';
+  input.write('SHOT2AGENT/1\n'+request); await ready; assert.equal(input.read().toString(),request); input.destroy();
+  const invalid=new PassThrough(); const rejected=waitForParent(invalid); invalid.write('INVALID\n'); await assert.rejects(rejected,/PARENT_HANDSHAKE_INVALID/); invalid.destroy();
 });

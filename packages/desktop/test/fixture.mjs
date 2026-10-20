@@ -4,7 +4,7 @@ import net from 'node:net';
 import http from 'node:http';
 import https from 'node:https';
 import { DesktopController } from '../src/controller.ts';
-import { serve } from '../src/protocol.ts';
+import { serve, waitForParent } from '../src/protocol.ts';
 import { FakeAgent, FAKE_PROFILE } from '../../worker/src/fake.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 for (const mod of [net, http, https]) {
@@ -30,6 +30,7 @@ const injected = mode ? { profile: { ...FAKE_PROFILE, timeoutMs: 5000 }, adapter
 } } } : undefined;
 const desktop = new DesktopController(root, clipboard, injected);
 await desktop.start();
+await waitForParent(process.stdin);
 // Return writes only in the test's snapshot extension, never in production API.
 const original = desktop.dispatch.bind(desktop);
 desktop.dispatch = async r => { const value = await original(r); if (r.command === 'snapshot') value.testWrite = written; return value; };

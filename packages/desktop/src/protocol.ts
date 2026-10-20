@@ -27,7 +27,26 @@ export function serve(desktop: DesktopController, input: Readable, output: Writa
       });
     }
   });
-  input.resume();
   input.on('end', () => { void finish(); });
+  input.resume();
   return finish;
+}
+
+/** A parent may coalesce its startup gate and first JSON request into one pipe chunk. */
+export function waitForParent(input: Readable): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let gate = '';
+    const timeout = setTimeout(() => { input.off('data', receive); reject(new Error('PARENT_HANDSHAKE_TIMEOUT')); }, 10000);
+    const receive = (chunk: Buffer | string) => {
+      gate += chunk.toString();
+      const newline = gate.indexOf('\n');
+      if (newline < 0 && gate.length <= 16) return;
+      clearTimeout(timeout); input.off('data', receive); input.pause();
+      if (newline < 0 || gate.slice(0, newline + 1) !== 'SHOT2AGENT/1\n') { reject(new Error('PARENT_HANDSHAKE_INVALID')); return; }
+      const remainder = gate.slice(newline + 1);
+      if (remainder) input.unshift(Buffer.from(remainder));
+      resolve();
+    };
+    input.on('data', receive);
+  });
 }

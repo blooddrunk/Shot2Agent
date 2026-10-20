@@ -1,6 +1,6 @@
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
-import { serve } from './protocol.ts';
+import { serve, waitForParent } from './protocol.ts';
 import { DesktopController, safeError } from './controller.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 import { FakeAgent, FAKE_PROFILE } from '../../worker/src/fake.ts';
@@ -8,18 +8,7 @@ import { WindowsClipboard } from '../../local/src/clipboard.ts';
 const root = resolve(process.argv[2] ?? join(process.env.LOCALAPPDATA ?? homedir(), 'Shot2Agent'));
 // Rust assigns the child to a kill-on-close Windows Job before releasing this gate.
 // No helper/Agent can be launched before containment is active.
-await new Promise<void>((resolve, reject) => {
-  let gate = '';
-  const timeout = setTimeout(() => reject(new Error('PARENT_HANDSHAKE_TIMEOUT')), 10000);
-  const onData = (chunk: Buffer) => {
-    gate += chunk.toString('utf8');
-    if (gate.includes('\n')) {
-      clearTimeout(timeout); process.stdin.off('data', onData); process.stdin.pause();
-      if (gate !== 'SHOT2AGENT/1\n') reject(new Error('PARENT_HANDSHAKE_INVALID')); else resolve();
-    }
-  };
-  process.stdin.on('data', onData);
-});
+await waitForParent(process.stdin);
 let desktop: DesktopController | undefined;
 try {
   const fake = new FakeAgent();
