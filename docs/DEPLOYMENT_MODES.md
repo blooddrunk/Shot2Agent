@@ -1,0 +1,41 @@
+# Deployment modes: Local and Remote
+
+**Status:** confirmed V1 requirements as of 2026-10-20, not implemented.
+
+## Operating modes
+
+**Local (default):** The same Windows PC captures images and runs the authorized Agent/Worker. Capture uses a **local, durable task coordinator** (shared task core with private SQLite/files and same-PC Worker) and returns to local history, saved results and/or clipboard. The user needs **no VPS, Relay URL, Relay service, remote device, or network transfer of task data to a Relay**. A hosted Agent/model may independently need Internet.
+
+**Remote (opt-in):** Capture PC A submits to a personal-VPS Relay via authenticated HTTPS; Worker on PC B (or intentionally the same PC) polls/claims via outbound connection. Relay durably stores the queue and private artifacts. Result is retrieved by PC A, shown in authenticated web history, and optionally pushed.
+
+| Aspect | Local | Remote |
+| --- | --- | --- |
+| Transport | Direct local application-service call or restricted local IPC | Authenticated outbound HTTPS |
+| Task persistence | Private local SQLite / files | Private VPS SQLite / files |
+| Agent | Same-PC approved Worker | Worker on PC B, optionally PC A |
+| Task history | Always available locally | Authenticated web access |
+| Relay | **Not required** | Required |
+| Delivery | Local files/clipboard/desktop; optional direct provider push | Same independent choices + result receiver |
+| Offline behavior | Local queue survives process restart | Queue survives disconnected endpoints / Relay restart |
+
+## Architecture invariants
+
+1. **One task model/state machine and Agent Adapter interface** for both modes, backed by one task domain/service. Use transport and storage adapters rather than copy/paste business logic. Preserve task ID, ordered image hashes, attempts, uncertainty semantics and Profile version.
+2. Local mode calls the task service **without VPS and without starting any Relay HTTP server**. Local queue and artifact history survive tray/worker restarts. No implicit external image upload except what the chosen hosted Agent itself requires.
+3. Remote mode adds auth/device association, upload idempotency, lease/fencing, private artifact URLs and authorized result retrieval.
+4. Default to Local when Relay is not configured. Never silently fall back from a failing Remote session to some other mode or endpoint; explain the configuration error.
+5. Existing queued tasks/history remain attached to their original mode when switching. No implicit migration/synchronization or duplicate execution in V1.
+6. Delivery channels (remote push, local save, clipboard, desktop toast) remain **independent and combinable** in both modes, with per-channel status. All can be disabled; durable history remains on.
+7. Execution Profiles remain Worker-controlled, with sandbox / approved working directory. Local files and IPC honor Windows user OS permissions; Remote mode authenticates every transfer.
+
+## Engineering gates
+
+- **M1 updated:** build one durable task core; prove direct Local-mode CLI + Fake Agent end-to-end with **no Relay process/URL**, plus separate optional Remote HTTP adapter and authenticated fake Worker end-to-end. No real Codex or Tauri during M1.
+- **M2:** Agent Adapter works from local dispatch and Remote claim paths.
+- **M3:** Windows tray chooses Local/Remote; local history remains usable without VPS. Native clipboard result writer can be integrated independently later.
+- **M4:** independent result channels; Local reads local results directly; Remote fetches authorized results through Relay.
+- **M5:** validate standalone Windows Local experience and separate VPS Remote deployment.
+
+Automated tests must verify shared state/result contracts, local process restart persistence, zero Relay network calls in Local mode, remote authentication and lease fencing, and no silent task migration. Native Windows tests must separately verify Local screenshot + clipboard + Codex and cross-device Remote workflows.
+
+See [Product](PRODUCT.md), [Architecture](ARCHITECTURE.md), [Roadmap](ROADMAP.md), [Protocol](PROTOCOL.md), and [Result delivery](RESULT_DELIVERY.md).

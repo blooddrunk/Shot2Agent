@@ -4,7 +4,7 @@
 
 ## Product outcome
 
-Take one or several screenshots on Windows without manually assembling inputs. Submit a durable asynchronous task to an approved agent running on the same or another computer. Deliver a useful result remotely and retain a searchable history.
+Take one or several screenshots on Windows without manually assembling inputs. Submit a durable asynchronous task to an approved agent running on the same or another computer. Deliver a useful result locally or remotely and retain durable task history.
 
 The product is neither a screen capture editor nor a multi-agent chat platform. Windows handles screen capture; Shot2Agent handles intake, reliable task execution and results.
 
@@ -45,7 +45,7 @@ The precedence rule is **constraints before requests**: platform policy and work
 
 All enabled applicable channels operate independently after a successful result; failure in one does not cancel, block, or change status of another, nor change the completed agent task. Report separate channel delivery statuses, for example `pending/sent/failed/skipped` and `blocked_by_clipboard_change`. Successful local clipboard **write** is not evidence of paste.
 
-**All optional channels may be disabled:** this is a deliberate silent/history-only mode, not a validation error, because authenticated web task history remains mandatory. The interface should explain this plainly. Suggested setup default: remote notification if configured + save to a user-approved folder; clipboard auto-write off until opted in.
+**All optional channels may be disabled:** this is a deliberate silent/history-only mode, not a validation error, because durable history always exists (local task UI in Local mode, authenticated Relay web history in Remote mode). The interface should explain this plainly. Suggested setup default: remote notification if configured + save to a user-approved folder; clipboard auto-write off until opted in.
 
 The capture-device's effective delivery configuration uses **device defaults with optional per-Profile overrides** (and explicit task override if supported later). This is distinct from the worker-owned execution Profile: the worker must not control the receiving PC's filesystem path or clipboard. Avoid selecting a local output directory that is also a watched screenshot directory, and suppress self-generated capture events. An authenticated origin-device association must be retained for secure return delivery.
 
@@ -58,23 +58,31 @@ See [Result delivery policy](RESULT_DELIVERY.md) for the proposed configuration 
 - User can view task status, preview inputs, copy Markdown, download permitted files, retry as a new attempt and cancel queued tasks. Running cancellation is best-effort and cannot roll back writes already made.
 - Notify on completion/failure through desktop notification and one optional mobile push provider. Never send raw screenshots or full sensitive outputs in push payloads by default.
 - Delivery of notifications is **independent** of execution status. Failure to push must not mark successful agent execution as failed.
-- A web task history is accessible with authentication from other devices. Native mobile apps are not in scope.
+- Task history is always accessible: local task UI in Local mode, and authenticated cross-device web history in Remote mode. Native mobile apps are not in scope.
 
-## V1 topology
+## V1 topology: Relay is optional
 
-- One Windows capture device and one worker are the target test topology. They may be on the same PC; the relay resides on the personal VPS.
-- Worker maintains an outbound connection/polling cycle to the relay; no worker inbound port is required.
-- The VPS authenticates, stores and transfers tasks; it does not have Codex credentials or execute agent code.
-- In V1, one worker runs at most one task concurrently.
-- Offline capture device: retain pending uploads locally. Offline worker: keep uploaded tasks queued and resumable.
+| Mode | Capture / Agent location | Queue, history and result source | Requires Relay? |
+| --- | --- | --- | --- |
+| **Local (default)** | Same Windows PC | Private local files + durable task core + local Worker | **No**. Neither VPS nor Relay service/URL is required. |
+| **Remote (opt-in)** | PC A captures; PC B runs Agent (or both intentionally on one PC) | Authenticated personal-VPS Relay, private blobs and durable queue | Yes, only in this mode |
+
+- The two modes share task IDs, state machine, Profile authorization, Agent Adapter contract and independent result-delivery options. The local Worker may be hosted by a tray-owned process or restricted IPC coordinator; a Relay HTTP server is **not required locally**.
+- Local mode must not upload screenshots to a Relay, download results back from a Relay or depend on VPS availability. A hosted Codex model may still require Internet for the model itself.
+- Local mode keeps history on the same PC; Remote mode provides authenticated web history from other devices. Remote history is not promised when no Relay is configured.
+- Switching modes never silently migrates/publishes/loses queued tasks or prior history; task ownership stays associated with its original mode. Migration/sync is not in V1.
+- Remote mode: outbound-only Worker connection, separate capture-device authentication and durable offline queue. Local mode: local queue/Worker survives tray/Worker restart. One execution at a time per Worker.
+- Remote notification providers may still be independently configured in Local mode without making Relay mandatory.
+
+See [Deployment modes](DEPLOYMENT_MODES.md).
 
 ## Failure and trust semantics
 
-- Durable submission acknowledgement: only show **uploaded** after the relay persists metadata and image blobs. Resume failed uploads without producing duplicate logical tasks.
-- At-least-once task delivery, guarded by a lease, execution attempt IDs and fencing tokens. Do **not** promise exactly-once agent side effects.
+- Durable submission acknowledgement: Local mode reports **queued locally** only after local persistence; Remote mode reports **uploaded** only after authenticated Relay persists metadata and images. Retry remote uploads without duplication.
+- Both modes use durable attempt records and safe restart recovery; Remote mode additionally uses leases and fencing tokens. Do **not** promise exactly-once Agent side effects.
 - Automatically retry transport; if an agent may already have edited files, enter an `execution_unknown` terminal state and require an explicit retry/review decision.
 - Never interpret image contents as authority to run OS commands outside an approved sandbox.
-- The user has confirmed that intended inputs may leave the capture device, traverse a personal VPS and be processed by the configured cloud agent. Data protection, authentication and access controls are still required.
+- Intended inputs are permitted to transit a personal VPS and approved cloud model **when configured**, but Local mode never requires VPS transfer. Protect secrets, private local files and remote APIs appropriately.
 
 ## Initial operating limits (provisional configuration defaults)
 
@@ -105,6 +113,10 @@ See [Result delivery policy](RESULT_DELIVERY.md) for the proposed configuration 
 | A16 | File clipboard enabled | Verified local files can be pasted into Explorer; backing files remain available |
 | A17 | Capture device offline at completion | Pending authorized result can be fetched when back online, without duplicate local files |
 | A18 | Local save directory overlaps screenshot watch | Self-generated results do not re-enter capture as new tasks |
+| A19 | Local mode with no VPS, Relay process or Relay URL | Screenshot → durable local task → Fake/real Agent → local history and result; no Relay network calls |
+| A20 | Remote mode with separate capture and Worker computers | Authenticated Relay and outbound Worker perform async task/result transfer and recover from disconnection |
+| A21 | Local Worker/tray restarts with queued work | Local queue/history persists, safe retry rules avoid duplicated side effects |
+| A22 | User switches modes with existing tasks | No silent migration, lost history or automatic upload of local files |
 
 ## Explicit V1 exclusions
 
