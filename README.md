@@ -39,12 +39,13 @@ Local mode never requires a Relay URL, a VPS, or a remote upload/download round 
 1. [Product spec and V1 acceptance criteria](docs/PRODUCT.md)
 2. [Deployment modes: Local / Remote](docs/DEPLOYMENT_MODES.md)
 3. [Architecture and trust boundaries](docs/ARCHITECTURE.md)
-3. [Task protocol and lifecycle](docs/PROTOCOL.md)
-4. [Milestone plan and automated test gates](docs/ROADMAP.md)
-5. [Windows Native vs WSL development](docs/WINDOWS_DEV.md)
-6. [Testing strategy and required manual proof](docs/TESTING.md)
-7. [Decisions and assumptions](docs/DECISIONS.md)
-8. [Instructions for coding agents](AGENTS.md)
+4. [Task protocol and lifecycle](docs/PROTOCOL.md)
+5. [Milestone plan and automated test gates](docs/ROADMAP.md)
+6. [Windows Native vs WSL development](docs/WINDOWS_DEV.md)
+7. [Testing strategy and required manual proof](docs/TESTING.md)
+8. [Decisions and assumptions](docs/DECISIONS.md)
+9. [Result delivery policy](docs/RESULT_DELIVERY.md)
+10. [Instructions for coding agents](AGENTS.md)
 
 ## Bootstrap contract checks
 

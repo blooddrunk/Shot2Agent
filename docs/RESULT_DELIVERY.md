@@ -4,7 +4,7 @@
 
 ## Outcome
 
-When a task created on screenshot PC A is completed by the worker on PC B, its authenticated result is always readable in durable web history. Any subset of the following independent destinations may additionally be enabled **at the same time**:
+When a task is completed on the same Windows PC (Local mode) or on another Worker PC (Remote mode), its output remains available in durable **local task history** or **authenticated Relay web history**, respectively. Any subset of the following independent destinations may additionally be enabled **at the same time**:
 
 | Destination | Config switch | Behavior |
 | --- | --- | --- |
@@ -13,7 +13,7 @@ When a task created on screenshot PC A is completed by the worker on PC B, its a
 | Windows clipboard | `clipboard.enabled` | Origin PC writes selected text or locally downloaded file list to the logged-in user's clipboard |
 | Desktop toast (optional separate setting) | `desktopToast.enabled` | Native desktop notification |
 
-The **task history is always available** while retention permits and is not a switchable delivery channel. All optional destinations disabled is valid **history-only / silent mode**; the UI must explain it and never reject the configuration as missing a destination.
+The **task history is always available within the selected mode** while retention permits and is not a switchable delivery channel. All optional destinations disabled is valid **history-only / silent mode**; the UI must explain it and never reject the configuration as missing a destination.
 
 **The channels do not compete**: push may succeed while local saving fails; clipboard copying may be suppressed without failing push or save. Each channel has its own outcome and retry state, independent of agent execution status.
 
@@ -43,37 +43,39 @@ Clipboard `payload` selects the **single automatic payload kind**: `text` or `fi
 
 - Capture-device defaults apply first; the user may override delivery switches/policies per Profile. A future per-task override may be added, but is not required for V1.
 - **Execution Profiles** (agent, prompt, sandbox and working directory) are worker-owned. **Delivery settings** (notification, local output path and clipboard) are user/capture-device owned. Never let worker output force a local destination or change the clipboard policy.
-- The submitted task is bound to authenticated origin-device ownership. The receiver must authenticate to fetch that task's private results. Local filesystem paths are stored exclusively by the receiving client, not sent to the worker as executable instructions.
+- Remote tasks are bound to authenticated origin-device ownership and result fetches are authenticated. Local task history/files remain private to the local Windows user and use no Relay credentials. Receiver-controlled filesystem paths are never executable instructions supplied by a remote Worker.
 - Notify only with bounded summary and authenticated link; do not send raw screenshots or full answers to third-party push platforms by default.
 - Suggested starting policy: authenticated history always on; remote push on when configured; local save on once the user selects a directory; clipboard enabled for explicit Copy actions but no automatic clipboard overwrite until opt-in.
 
 ## Download, saving and clipboard behavior
 
 ```text
-Worker (PC B) -> authenticated relay: result + artifact manifest
-Relay -> durable result and pending notifications/delivery
-Capture tray (PC A) -> authenticated outbound fetch/download
-  +--> optional localSave: validate hash/type/size and atomic save
-  +--> optional clipboard: render text or verified local file list
-Relay notification adapter --> optional remotePush (independent)
-History web UI --> always authorized read
+LOCAL:  same-PC Worker -> private local durable output
+        -> local history + optional local save / clipboard / desktop toast
+        -> optional provider remote push (if separately configured)
+
+REMOTE: Worker PC B -> authenticated Relay result/artifacts
+        -> origin PC A authenticated fetch + verify to local cache
+        -> optional local save / clipboard / desktop toast
+        -> Relay / notification adapter optional remote push
+        -> authenticated web task history
 ```
 
-- PC A can be offline at completion. Deliver later within server retention without duplicating local output. A server receipt confirms receipt of state; a local receipt confirms actual verified save or clipboard write, **not** a user's eventual paste.
-- Clipboard file-drop (e.g. `CF_HDROP`) must reference **already downloaded** real local files; never paste remote URLs or worker paths. If localSave is off, clipboard file mode may still download into a **managed private cache**. Preserve cached files until reasonably safe to remove after paste; do not delete immediately on clipboard write.
-- Clipboard is only available in an interactive logged-in Windows session, not via a headless service. If the tray is unavailable, preserve pending delivery; never claim clipboard success.
-- The local save root and managed download cache must not be within watched screenshot directories by default; filter self-generated files/events to avoid feedback loops.
-- Use safe names, per-task grouping or deterministic collision handling, checksums, atomic writes, storage quotas and retention. Never execute delivered files. Failures in one channel do not block the others.
-- Separate `task.status`, `remotePush.status`, `localSave.status`, `clipboard.status`, optionally `desktopToast.status` (e.g. `pending`, `delivered`, `failed`, `skipped`, `blocked_by_clipboard_change`). A successful task can have unsuccessful deliveries.
+- Local mode uses verified local outputs directly, without first uploading and downloading them through a Relay. Optional push can contact an external provider directly; this does **not** make Relay necessary.
+- Remote mode retains results while PC A is offline within configured retention. On reconnect, fetch/verify/save idempotently. A delivery receipt proves saved bytes or successful clipboard write, **not** that content was actually pasted.
+- Windows file-drop clipboard requires **existing, retained local files**. In Remote mode download them first; in Local mode use safe verified local result files (or managed local cache). Do not place remote URLs or PC B paths on PC A's clipboard.
+- Clipboard operations run in a logged-in Windows interactive session, not a headless service. A tray process restart must not erase local history or claim successful clipboard delivery that never occurred.
+- Local results/cache folders must not recursively trigger watched screenshot input. Use safe names, task folders, checksums, atomic writes, disk quotas and retention; never automatically execute downloaded/generated artifacts.
+- Keep `task.status`, `remotePush.status`, `localSave.status`, `clipboard.status` and `desktopToast.status` separate and independently retryable. All optional channels may be disabled while mode-specific history stays available.
 
 ## Scope and validation
 
-**M1:** retain authenticated task ownership and durable result access; no remote notification, local receiver or clipboard implementation required. The existing M1 coding-agent prompt remains valid.
+**M1:** shared durable Local task core + optional authenticated Remote Relay HTTP adapter, Fake Worker integration in both modes; no clipboard, remote notification or user-facing result receiver required. The older **Relay-only** M1 goal must be updated to include Local-mode automated tests.
 
 **M3:** Windows native result storage and clipboard primitives can be implemented/tested behind interfaces alongside screenshot/tray work.
 
 **M4:** implement multi-select configuration, per-channel delivery orchestration, notification adapter, client pull/retry/receipts and history/Copy actions. No requirement to configure one channel because history always exists.
 
-**M5:** real VPS/cross-device and offline reliability checks.
+**M5:** prove standalone Windows Local operation without Relay, then optional VPS/cross-device and offline reliability.
 
 Acceptance tests must prove (a) all three enabled channels fire independently, (b) each one can fail without blocking others, (c) all optional channels disabled results in history-only mode, (d) newer user clipboard content is preserved in smart mode, (e) copy-files works in Windows Explorer with real downloaded files, and (f) offline origin can resume safely. See [Testing](TESTING.md).

@@ -3,13 +3,13 @@
 ## Before making changes
 
 1. **Sync latest code first**: `git fetch origin --prune`, inspect status/branch, then integrate `origin/main` into your working branch. Do not reset or discard uncommitted user changes. If already on the target branch, inspect merge-base and fast-forward safely.
-2. Read `README.md`, `docs/PRODUCT.md`, `docs/ARCHITECTURE.md`, `docs/PROTOCOL.md`, `docs/ROADMAP.md`, `docs/TESTING.md`, `docs/RESULT_DELIVERY.md` and `docs/DECISIONS.md`.
+2. Read `README.md`, `docs/PRODUCT.md`, `docs/DEPLOYMENT_MODES.md`, `docs/ARCHITECTURE.md`, `docs/PROTOCOL.md`, `docs/ROADMAP.md`, `docs/TESTING.md`, `docs/RESULT_DELIVERY.md` and `docs/DECISIONS.md`.
 3. Identify the smallest roadmap milestone in scope. Separate verified facts from assumptions and propose corrections rather than silently changing product constraints.
 
 ## Development boundaries
 
-- Monorepo with portable TypeScript contracts, intended Windows Native capture/Tauri, Node worker and VPS service. The current repository bootstrap is **not** a deployed/runnable system.
-- V1: one worker, one execution at a time; single image and manual batch; auto/confirm; durable queue; Codex adapter; remote notification/history.
+- Monorepo with portable TypeScript contracts, Windows Native capture/Tauri, **same-PC Local task core/Worker by default** and optional VPS Relay for Remote tasks. The current repository bootstrap is **not** a deployed/runnable system.
+- V1: Local mode requires **no VPS/Relay**, Remote mode optionally uses VPS Relay; one Worker at a time, single/batch images, auto/confirm, durable queue, Codex adapter, mode-appropriate durable history and independent output channels.
 - Profiles are worker-owned. Never allow remote task input to select a command, arbitrary working directory, credentials, or elevated sandbox.
 - Default read-only; use `spawn` with explicit arguments and `shell: false`, and a bounded timeout. Screenshot text is untrusted input.
 - No secrets, personal screenshot contents, production blobs, SQL files, live transcripts or `.env` secrets committed. Use synthetic fixtures.
@@ -26,4 +26,4 @@
 
 ## Next goal
 
-Implement **M1 (durable authenticated relay + fake worker end-to-end)** from `docs/ROADMAP.md`, not all milestones at once. Keep task state semantics consistent with the currently tested `packages/contracts` prototype and update the contract/tests as required by implementation evidence.
+Implement **M1 (shared durable Local task core + optional authenticated Remote Relay adapter, Fake Worker end-to-end in both modes)** from `docs/ROADMAP.md`, not all milestones at once. Keep task state semantics consistent with the currently tested `packages/contracts` prototype and update the contract/tests as required by implementation evidence.
