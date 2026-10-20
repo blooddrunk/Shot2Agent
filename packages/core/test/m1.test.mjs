@@ -231,10 +231,12 @@ test('Remote: simultaneous duplicate uploads are idempotent and pagination is pr
 });
 
 test('SQLite: two independent connections serialize claims and preserve attempt history', async t => {
-  const h = await harness(t, 'local'); const otherCore = openCore(h.root, 'local', () => 1_000_000, 1000); t.after(() => otherCore.close());
-  await h.submit(); await h.submit();
-  const claims = await Promise.all([h.port.claim(capabilities), otherCore.worker(worker).claim(capabilities)]);
-  assert.equal(claims.filter(Boolean).length, 1);
+  const h = await harness(t, 'local'); const otherCore = openCore(h.root, 'local', () => 1_000_000, 1000);
+  try {
+    await h.submit(); await h.submit();
+    const claims = await Promise.all([h.port.claim(capabilities), otherCore.worker(worker).claim(capabilities)]);
+    assert.equal(claims.filter(Boolean).length, 1);
+  } finally { otherCore.close(); }
 });
 
 test('Blob storage: decoded PNG/JPEG/WEBP, corruption, private permissions and symlink refusal', async t => {
@@ -292,7 +294,8 @@ test('Worker: acknowledged Fake timeout vs adapter with unconfirmed stop', async
 });
 
 test('SQLite durability: abrupt subprocess exit preserves accepted task and verified blobs', async t => {
-  const root = mkdtempSync(join(tmpdir(), 's2a-kill-')); t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = mkdtempSync(join(tmpdir(), 's2a-kill-')); let recoveredCore;
+  t.after(() => { recoveredCore?.close(); rmSync(root, { recursive: true, force: true }); });
   const child = spawn(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', `
     import { openCore } from './packages/core/src/core.ts';
     import { syntheticSubmission } from './apps/cli/src/fixture.ts';
@@ -305,7 +308,7 @@ test('SQLite durability: abrupt subprocess exit preserves accepted task and veri
     child.once('error', reject); child.stdout.once('data', () => { clearTimeout(timer); resolve(); });
   });
   const exit = new Promise(resolve => child.once('exit', resolve)); child.kill('SIGKILL'); await exit;
-  const core = openCore(root); t.after(() => core.close()); const tasks = core.list('owner').tasks;
+  const core = recoveredCore = openCore(root); const tasks = core.list('owner').tasks;
   assert.equal(tasks.length, 1); assert.equal(tasks[0].status, 'queued');
   assert.equal(sha256(core.file('owner', tasks[0].submission.taskId, tasks[0].inputs[0].fileId)), tasks[0].inputs[0].sha256);
 });
