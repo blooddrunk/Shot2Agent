@@ -1,5 +1,7 @@
 # V1 logical protocol / task lifecycle
 
+> M2-L update (2026-10-20): M2-L preserves shared task transitions and adds local-only capture/delivery receipts outside task.status. Started Codex interruption/nonzero exit/missing bounded final output is conservatively execution_unknown and never auto-replayed. Input cap is now 64,000,000 pixels and 32,768 per dimension; 20 MiB/image, 60 MiB/task remain. See [Local usage](LOCAL_MVP_USAGE.md).
+
 **Status:** V1 logical contract. M1 serves task upload/history/files and Worker claim/start/heartbeat/complete/fail; cancel/review/retry remain planned. Exact M1 shapes, limits and decisions are documented in [M1](M1.md). **Local mode uses the shared task application service directly, without HTTP Relay/VPS or remote task upload.** See [Deployment modes](DEPLOYMENT_MODES.md).
 
 ## Task identity and immutable input

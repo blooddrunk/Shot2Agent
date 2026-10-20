@@ -1,6 +1,8 @@
 # Architecture and trust boundaries
 
-**Status:** M1 shared durable core and Fake Local/Remote paths are implemented; capture, real Agent and delivery are planned. See [M1 implementation decisions](M1.md).
+> M2-L update (2026-10-20): M2-L now adds a direct Local CLI/coordinator (`apps/cli/src/mvp.ts`), Windows clipboard helper, worker-owned Codex registry and independent Local delivery; no HTTP import/service. Core tasks remain in tasks.sqlite; Local baselines/provenance/channel reservations are in local.sqlite. See [Local operation and boundaries](LOCAL_MVP_USAGE.md). Full tray/Remote receivers below remain future V1 work.
+
+**Status:** M1 core/Fake and M2-L Local clipboard/Codex/text save/return are implemented; minimum Local use has [operator acceptance](M2_VALIDATION.md#operator-acceptance-2026-10-20). A full Windows tray/desktop shell and Remote delivery remain planned; detailed unobserved native cases remain unverified.
 
 ## Boundaries
 
@@ -97,3 +99,5 @@ See [Result delivery policy](RESULT_DELIVERY.md) and [Deployment modes](DEPLOYME
 ## Security note
 
 The owner confirmed images **may** transit a personal VPS and approved cloud Agent, but VPS transit is not mandatory. Local mode requires no Relay; hosted model access is a separate concern. Both modes still require least privilege, retention and protected secrets.
+
+M2-L Windows stabilization: a Worker waits for adapter-owned process/cleanup settlement after persisting an uncertain result. An unconfirmed stop pauses new Local claims; it does not replay or change the terminal task. Capture confirmation holds one pending image in memory, independent of later command-text copies, while Smart keeps the capture-time sequence baseline. See [verification](M2_VALIDATION.md#windows-stabilization-after-operator-feedback).

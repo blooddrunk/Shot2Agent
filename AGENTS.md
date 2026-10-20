@@ -8,7 +8,7 @@
 
 ## Development boundaries
 
-- Monorepo with portable TypeScript contracts, Windows Native capture/Tauri, **same-PC Local task core/Worker by default** and optional VPS Relay for Remote tasks. The current repository bootstrap is **not** a deployed/runnable system.
+- Monorepo with portable TypeScript contracts, Windows Native capture/Tauri, **same-PC Local task core/Worker by default** and optional VPS Relay for Remote tasks. The M2-L Local CLI has scoped operator acceptance; full GUI/installer and production Remote deployment are not delivered.
 - V1: Local mode requires **no VPS/Relay**, Remote mode optionally uses VPS Relay; one Worker at a time, single/batch images, auto/confirm, durable queue, Codex adapter, mode-appropriate durable history and independent output channels.
 - Profiles are worker-owned. Never allow remote task input to select a command, arbitrary working directory, credentials, or elevated sandbox.
 - Default read-only; use `spawn` with explicit arguments and `shell: false`, and a bounded timeout. Screenshot text is untrusted input.
@@ -26,4 +26,4 @@
 
 ## Next goal
 
-**M1 was merged as PR #1. Next goal: M2-L Local-first runnable MVP** defined by `docs/M2_LOCAL_MVP.md`. Sync the latest `main` first. Prioritize Windows clipboard image -> Local durable queue -> real Codex -> Markdown/history -> manual clipboard copy, then smart return and independent save. Do not create a Relay/VPS dependency or full Tauri GUI milestone for MVP; preserve Fake CI conformance and real Windows/Codex manual evidence boundaries. Update old 16 MP decoded-image cap to a tested 64 MP provisional guard while preserving byte/memory safety.
+**M1 was merged as PR #1; M2-L minimum Local functionality has operator acceptance** dated 2026-10-20, scoped by `docs/M2_VALIDATION.md#operator-acceptance-2026-10-20`. Do not describe the minimum loop as wholly unverified or silently mark detailed Smart/focus/interruption observations as passed. The intended product remains a Windows tray/desktop app; a bounded shell reusing the existing core is proposed next when requested, not started by this acceptance record. Follow `docs/WINDOWS_ACCEPTANCE.md`: automate developer checks, prepare the actual runnable build, and ask the operator only for the affected concrete observations. Replace CLI steps with actual GUI actions when that interface exists. Preserve all confirmed V1 capabilities and the Local no-Relay boundary.

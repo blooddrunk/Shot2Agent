@@ -1,5 +1,13 @@
 # Validation policy and explicit manual smoke steps
 
+> M2-L update (2026-10-20): M2-L adds process-backed mock Codex, clipboard abstraction, image pixel/byte/provenance, independent delivery and fresh-cwd compiled smoke coverage. `npm run check` runs all tests/build/smoke; Windows CI also opts into synthetic native clipboard helper testing. Neither CI nor WSL real Codex proves a Windows user workflow/focus. Follow [Windows commands and acceptance table](LOCAL_MVP_USAGE.md) and [executed evidence](M2_VALIDATION.md).
+
+## Human acceptance should be a small observation, not a development task
+
+M2-L minimum acceptance is recorded from operator feedback in [M2 verification](M2_VALIDATION.md#operator-acceptance-2026-10-20). For future relevant changes, use [Windows concrete steps](WINDOWS_ACCEPTANCE.md). Do not hand the entire historical V1 checklist below to a casual user. Those sections are developer coverage requirements for the corresponding implemented milestone, not instructions to test unavailable tray/Remote/file features now.
+
+Before requesting human verification, the agent must prepare a runnable build and test configuration, identify the few affected observations, and supply the exact current window/menu/command, action, expected visible result, failure path and minimal evidence needed. Fault injection, lease/PID inspection and synthetic fixtures belong to the agent. When the GUI replaces the CLI, update the guide to actual UI controls before asking the user to test it. Missing observations remain NOT VERIFIED, with their future trigger recorded; neither CI nor a delivery receipt proves an unreported paste, focus observation or Smart conflict case.
+
 ## Automation first
 
 **Local/Remote conformance gate:** Run the same Fake Agent task fixtures against direct Local-mode task core (no Relay URL, HTTP service or VPS) and Remote-mode authenticated HTTP Relay adapter. Assert task/status/result equivalence, private result access, durable queue after restart, zero Relay calls in Local mode and no mode-switch migration or leak.

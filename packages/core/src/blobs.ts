@@ -2,6 +2,7 @@ import { constants, closeSync, fsyncSync, openSync, readFileSync, unlinkSync, wr
 import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import sharp from 'sharp';
+import { IMAGE_LIMITS } from '../../contracts/src/index.ts';
 import type { FileReference, ImageMetadata } from '../../contracts/src/index.ts';
 import { requireValue } from './model.ts';
 import { privateDirectory } from './store.ts';
@@ -45,12 +46,27 @@ export class PrivateBlobStore implements BlobStore {
   }
   remove(reference: FileReference): void { unlinkSync(this.path(reference.fileId)); }
 }
+// Serialize native decodes across concurrent Local/Remote submissions, not only within a batch.
+sharp.cache({ memory: 32, files: 0, items: 16 });
+sharp.concurrency(1);
+let decoding: Promise<void> = Promise.resolve();
+export async function withImageDecode<T>(operation: () => Promise<T>): Promise<T> {
+  const previous = decoding;
+  let unlock!: () => void;
+  decoding = new Promise<void>(resolve => { unlock = resolve; });
+  await previous;
+  try { return await operation(); } finally { unlock(); }
+}
 export async function verifyImage(bytes: Buffer, metadata: ImageMetadata): Promise<void> {
+  await withImageDecode(() => decodeImage(bytes, metadata));
+}
+async function decodeImage(bytes: Buffer, metadata: ImageMetadata): Promise<void> {
+  requireValue(bytes.length <= IMAGE_LIMITS.maxImageBytes, 'IMAGE_TOO_LARGE');
   requireValue(bytes.length === metadata.byteSize && sha256(bytes) === metadata.sha256, 'IMAGE_INTEGRITY');
   try {
-    const decoder = sharp(bytes, { failOn: 'warning', limitInputPixels: 16_000_000, animated: true });
+    const decoder = sharp(bytes, { failOn: 'warning', limitInputPixels: IMAGE_LIMITS.maxPixels, animated: true });
     const info = await decoder.metadata();
-    requireValue(`image/${info.format}` === metadata.contentType && info.width && info.height && (info.pages ?? 1) === 1, 'IMAGE_FORMAT');
+    requireValue(`image/${info.format}` === metadata.contentType && info.width && info.height && (info.pages ?? 1) === 1 && info.width <= IMAGE_LIMITS.maxDimension && info.height <= IMAGE_LIMITS.maxDimension, 'IMAGE_FORMAT');
     // Header checks alone do not establish a decodable image.
     await decoder.stats();
   } catch { requireValue(false, 'INVALID_IMAGE'); }

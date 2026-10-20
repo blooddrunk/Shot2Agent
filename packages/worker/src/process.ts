@@ -1,0 +1,64 @@
+import { spawn } from 'node:child_process';
+export interface Program { executable: string; args: string[] }
+export interface ProcessResult {
+  code: number | null; output: string; stopped: boolean; launched: boolean; overflow: boolean;
+  /** Actual root and tree-killer handles have closed, independently of the bounded result deadline. */
+  settled: Promise<void>;
+}
+/** Never forwards child logs. A detached POSIX process group / taskkill tree owns descendants. */
+export async function boundedProcess(program: Program, args: string[], options: {
+  cwd: string; input?: string; signal?: AbortSignal; timeoutMs: number; maxBytes?: number;
+}): Promise<ProcessResult> {
+  if (options.signal?.aborted) return { code: null, output: '', stopped: true, launched: false, overflow: false, settled: Promise.resolve() };
+  return new Promise(resolve => {
+    let output = ''; let total = 0; let stopped = false; let launched = false; let overflow = false;
+    let done = false; let rootClosed = false; let treeClosed = true;
+    let exitCode: number | null = null; let reap: ReturnType<typeof setTimeout> | undefined;
+    let onSettled!: () => void;
+    const settled = new Promise<void>(resolve => { onSettled = resolve; });
+    const allowed = new Set(['path', 'home', 'userprofile', 'localappdata', 'appdata', 'temp', 'tmp', 'tmpdir', 'systemroot', 'windir', 'comspec', 'pathext', 'username', 'user', 'codex_home', 'openai_api_key', 'codex_api_key', 'ssl_cert_file', 'ssl_cert_dir', 'https_proxy', 'http_proxy', 'all_proxy', 'no_proxy']);
+    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => allowed.has(key.toLowerCase())));
+    const child = spawn(program.executable, [...program.args, ...args], {
+      cwd: options.cwd, env, shell: false, windowsHide: true, detached: process.platform !== 'win32',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    const finish = (code: number | null) => {
+      if (done) return; done = true; clearTimeout(timer); if (reap) clearTimeout(reap);
+      options.signal?.removeEventListener('abort', stop);
+      // Do not destroy/unref a still-live process and mistake that for reaping it.
+      resolve({ code, output, stopped, launched, overflow, settled });
+    };
+    const closed = () => {
+      if (!rootClosed || !treeClosed) return;
+      onSettled(); finish(exitCode);
+    };
+    const stop = () => {
+      if (stopped || done) return;
+      stopped = true;
+      if (child.pid) {
+        if (process.platform === 'win32') {
+          treeClosed = false;
+          const killer = spawn('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { shell: false, windowsHide: true, stdio: 'ignore' });
+          killer.on('error', () => child.kill());
+          killer.on('close', () => { child.kill(); treeClosed = true; closed(); });
+        } else { try { process.kill(-child.pid, 'SIGKILL'); } catch { child.kill('SIGKILL'); } }
+      }
+      // Result is bounded, but settled remains pending until the real process-close barrier.
+      reap = setTimeout(() => finish(null), 1500);
+    };
+    const timer = setTimeout(stop, options.timeoutMs);
+    child.on('spawn', () => { launched = true; });
+    for (const stream of [child.stdout, child.stderr]) stream.on('data', (bytes: Buffer) => {
+      total += bytes.length;
+      if (total > (options.maxBytes ?? 1024 * 1024)) { overflow = true; stop(); }
+      else if (stream === child.stdout) output += bytes.toString('utf8');
+    });
+    // spawn failures also emit close; the same barrier owns their stdio handles.
+    child.on('error', () => {});
+    child.on('close', code => { exitCode = code; rootClosed = true; closed(); });
+    child.stdin.on('error', () => { /* closed stdin is reported by exit status */ });
+    child.stdin.end(options.input ?? '');
+    options.signal?.addEventListener('abort', stop, { once: true });
+    if (options.signal?.aborted) stop();
+  });
+}

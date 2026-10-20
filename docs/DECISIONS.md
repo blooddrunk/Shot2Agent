@@ -1,5 +1,7 @@
 # Architecture / product decisions
 
+> M2-L update (2026-10-20): M2-L implementation supersedes the old M1 16 MP resource guard: tested 64 MP, bounded bytes, still images and serial native decode. Local CLI + hidden Win32 helper precede full Tauri UI. Smart checks sequence and writes while holding OpenClipboard; baseline from another helper lifecycle is blocked. Worker pins exact Codex version, read-only permissions, no user config/rules and no shell tool; unknown execution is never replayed. See [Local usage](LOCAL_MVP_USAGE.md).
+
 This is a lightweight decision log. 'Proposed' choices may be revised when tests show concrete problems. 'Confirmed' are user-approved product requirements.
 
 | ID | Status | Decision | Rationale |

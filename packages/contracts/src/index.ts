@@ -47,6 +47,8 @@ export function isTerminalTaskState(input: unknown): input is TaskState {
 
 export const IMAGE_LIMITS = Object.freeze({
   maxImages: 20,
+  maxPixels: 64_000_000,
+  maxDimension: 32_768,
   maxImageBytes: 20 * 1024 * 1024,
   maxTotalBytes: 60 * 1024 * 1024,
   maxInstructionsLength: 10_000,
@@ -189,6 +191,8 @@ export interface Profile {
 export interface AgentAdapter {
   readonly name: string;
   readonly version: string;
+  /** Optional lifecycle barrier: false quarantines the Worker after an unconfirmed stop. */
+  settle?(): Promise<boolean>;
   execute(task: SubmissionMetadata, profile: Profile, images: readonly Uint8Array[], signal: AbortSignal): Promise<AgentResult>;
 }
 export interface LeaseProof {

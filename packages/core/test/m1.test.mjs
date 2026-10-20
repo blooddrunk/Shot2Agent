@@ -282,7 +282,9 @@ test('Worker: lost completion response retries only result, never executes Agent
 });
 
 test('Worker: acknowledged Fake timeout vs adapter with unconfirmed stop', async t => {
-  const root = mkdtempSync(join(tmpdir(), 's2a-timeout-')); const core = openCore(root);
+  // This tests Worker stop acknowledgement, not SQLite latency against the coordinator deadline.
+  // Deadline/fencing tests above advance an injected clock independently.
+  const root = mkdtempSync(join(tmpdir(), 's2a-timeout-')); const core = openCore(root, 'local', () => 1_000_000);
   t.after(() => { core.close(); rmSync(root, { recursive: true, force: true }); });
   const profile = { ...FAKE_PROFILE, timeoutMs: 500 }; const port = core.worker(worker);
   for (const acknowledged of [true, false]) {

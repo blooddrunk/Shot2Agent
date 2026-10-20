@@ -1,6 +1,6 @@
 # M2-L: Local-first runnable MVP (2026-10-20)
 
-Status: **implementation goal, not delivered functionality**. M1 is merged as PR #1 (squash commit `2a96212bf15005746f3ee7ef4d170a4c738a88c9`). This document supersedes the *ordering* (not the eventual product scope) of M2–M5 in ROADMAP.md. The target is **one coding-agent development round for an executable Local MVP**, then **one short stabilization/release round if needed**. Remote/VPS/push/full batch editor are deferred.
+Status: **M2-L minimum Local functional loop accepted by the operator on 2026-10-20; dedicated native edge cases remain separately unverified**. See the [scoped operator evidence](M2_VALIDATION.md#operator-acceptance-2026-10-20). See [usage and manual checklist](LOCAL_MVP_USAGE.md) and [executed verification](M2_VALIDATION.md). M1 is merged as PR #1 (squash commit `2a96212bf15005746f3ee7ef4d170a4c738a88c9`). This document supersedes the *ordering* (not the eventual product scope) of M2–M5 in ROADMAP.md. The target is **one coding-agent development round for an executable Local MVP**, then **one short stabilization/release round if needed**. Remote/VPS/push/full batch editor are deferred.
 
 ## User-visible MVP acceptance
 
@@ -35,7 +35,9 @@ Policy: preserve original dimensions and legibility by default. If clipboard enc
 - Image boundary tests: 3840x2160 pass, 7680x2160 pass, 64 MP boundary pass, over cap fail; 20 MiB and 60 MiB enforce; use inexpensive fixtures or synthetic sparse/compressible pixel buffers with explicit resource guard to avoid CI OOM.
 - Independent delivery channel fan-out, history-only mode, clipboard conflict, atomic file save, path escape and re-entrance prevention.
 
-## Mandatory limited manual Windows acceptance (only for native integration and real Codex)
+## Native acceptance specification and later targeted rechecks
+
+The minimum loop below now has scoped operator acceptance. These criteria remain the specification, not a request for the operator to rerun every row. Future rechecks must use [concrete steps and responsibilities](WINDOWS_ACCEPTANCE.md), chosen only when a related change or release requires them. Unreported native edge cases are not silently marked PASS.
 
 Prerequisites: logged-in **Windows 11 interactive desktop**, Node 22.16+ and pnpm 10.19, `codex --version` and authenticated Codex CLI, disposable user-owned workspace, a synthetic image containing known words, temporary output directory **outside watched input directories**, no VPS/Relay config; record actual build SHA and `codex --version`.
 
