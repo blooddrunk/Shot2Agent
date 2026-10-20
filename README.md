@@ -4,7 +4,7 @@
 
 Shot2Agent is a screenshot-driven, asynchronous agent task system. **Local mode** lets one Windows PC capture, process and return screenshots without a Relay/VPS. **Remote mode** optionally uses a personal VPS Relay to coordinate capture PC A and Agent PC B. Both modes use the same task contract, Profile model, Agent adapters and result-delivery settings.
 
-> Status: **early bootstrap**, not a working application. The repository currently contains product/architecture decisions, an implementation roadmap, and an automatically tested protocol-contract starter. Do not expose it as a live service yet.
+> Status: **M1 developer slice**: shared durable SQLite task core, direct Local CLI, optional authenticated loopback Fastify Relay and deterministic Fake Worker. This is not a Windows capture application or production service. See [M1 usage and boundaries](docs/M1.md).
 
 ## Confirmed V1 scope
 
@@ -16,7 +16,7 @@ Shot2Agent is a screenshot-driven, asynchronous agent task system. **Local mode*
 - Remote push notifications plus authenticated web task history, Markdown results and artifacts.
 - **Local is the default:** capture and Worker run on the same Windows PC, no Relay service or VPS config needed. Remote is opt-in; the VPS does **not** execute agent code.
 
-## Proposed architecture (implementation pending)
+## Architecture (M1 core implemented; capture and real Agent pending)
 
 ```text
 LOCAL (default, no Relay)                   REMOTE (optional Relay)
@@ -32,7 +32,7 @@ Same-PC Worker -> Codex CLI                 Worker on PC B -> Codex CLI
 Local history + optional delivery           Relay result -> history / PC A receiver
 ```
 
-Local mode never requires a Relay URL, a VPS, or a remote upload/download round trip. The hosted Agent model may still need Internet. See [Deployment modes](docs/DEPLOYMENT_MODES.md) and [Architecture](docs/ARCHITECTURE.md). This describes planned, **not yet implemented**, functionality.
+Local mode never requires a Relay URL, a VPS, or a remote upload/download round trip. The hosted Agent model may still need Internet. See [Deployment modes](docs/DEPLOYMENT_MODES.md) and [Architecture](docs/ARCHITECTURE.md). M1 implements the durable core and Fake execution; capture UI, Codex and delivery remain planned.
 
 ## Read first
 
@@ -47,19 +47,22 @@ Local mode never requires a Relay URL, a VPS, or a remote upload/download round 
 9. [Result delivery policy](docs/RESULT_DELIVERY.md)
 10. [Instructions for coding agents](AGENTS.md)
 
-## Bootstrap contract checks
+## M1 developer checks and Local demo
 
-The first dependency-free contract prototype lives in `packages/contracts`. From the repository root, use **Node.js 22.16+**:
+Use Node.js **22.16+** and pnpm **10.19.0**:
 
 ```shell
-npm test
+corepack pnpm install --frozen-lockfile
+npm run check
+npm run local -- demo .local/shot2agent 5
+npm run local -- list .local/shot2agent
 ```
 
-The test script currently uses Node's experimental TypeScript stripping for contract-only checks; it is **not** a production bundling strategy. Once actual services are created, use pinned pnpm dependencies, a proper TypeScript build and a committed lockfile.
+Local needs no Relay URL, server or Agent credentials. Tests cover both direct Local and authenticated HTTP Remote Fake execution, including restart, fencing and failure paths. The TypeScript build produces runnable JavaScript under `dist/`. See [M1 commands, wire/storage decisions and verification boundaries](docs/M1.md).
 
 ## Implementation / deployment status
 
-**No runnable capture app, Local-mode orchestrator, Remote Relay server, Codex worker, VPS deployment or notification integration has been shipped yet.** The roadmap is the source of truth for the next engineering slice.
+M1 implements shared task/attempt/result persistence, private verified images, idempotent upload, transactional claims/leases and Fake execution in both modes. **Windows capture/tray, real Codex, clipboard, notifications and production VPS deployment remain unimplemented.** The optional Relay entry binds loopback only; it is an integration harness.
 
 ## Security baseline
 

@@ -1,6 +1,6 @@
 # V1 logical protocol / task lifecycle
 
-**Status:** design contract. The HTTP routes below are planned Remote-mode Relay endpoints and are not yet served. **Local mode uses the shared task application service directly, without HTTP Relay/VPS or remote task upload.** See [Deployment modes](DEPLOYMENT_MODES.md).
+**Status:** V1 logical contract. M1 serves task upload/history/files and Worker claim/start/heartbeat/complete/fail; cancel/review/retry remain planned. Exact M1 shapes, limits and decisions are documented in [M1](M1.md). **Local mode uses the shared task application service directly, without HTTP Relay/VPS or remote task upload.** See [Deployment modes](DEPLOYMENT_MODES.md).
 
 ## Task identity and immutable input
 
@@ -30,7 +30,7 @@ queued -> leased -> running -> succeeded
 
 Capture-side `awaiting_confirmation` and Remote-mode `pending_upload` are local intake/outbox states, not task execution states. Local mode proceeds to durably `queued` once local persistence succeeds. Notification delivery uses separate `pending`, `sent`, `failed` statuses.
 
-## Proposed HTTP endpoints (Remote Relay only)
+## V1 HTTP endpoints (Remote Relay only; cancel/retry deferred beyond M1)
 
 | Audience | Method / route | Behavior |
 | --- | --- | --- |
@@ -72,4 +72,4 @@ For M4, Remote mode fetches pending results using authenticated outbound request
 - Validate request and response at each trust boundary (capture/relay/worker), not only in browser forms.
 - Atomically claim; leases expire using server time rather than trusting worker clocks.
 - Test idempotency same-input replay, key collision, double claim, stale heartbeat/complete, restart persistence, poisoned file names, and crash-before/after-start.
-- See the executable starter in `packages/contracts/src/index.ts`. It currently validates a subset of submission metadata and transition rules, not the full protocol.
+- See the executable starter in `packages/contracts/src/index.ts`. It validates immutable submission metadata, shared lifecycle and bounded Agent results. The shared core and adapters enforce byte integrity, identity and attempt fencing.

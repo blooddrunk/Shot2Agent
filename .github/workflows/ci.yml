@@ -1,4 +1,4 @@
-name: contract-checks
+name: M1 checks
 
 on:
   push:
@@ -8,17 +8,22 @@ permissions:
   contents: read
 
 jobs:
-  contract:
-    name: Node ${{ matrix.node }} contract checks
-    runs-on: ubuntu-latest
+  m1:
+    name: ${{ matrix.os }} / Node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest]
         node: ['22', '24']
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.19.0
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-      - name: Contract checks (no dependencies)
-        run: npm test
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: npm run check

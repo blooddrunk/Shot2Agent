@@ -17,7 +17,9 @@ Deliver: README, product scope, **Local/Remote mode contract**, architecture, pr
 
 Automated gate: `npm test` green locally and in CI on Node 22/24; branch clean; docs links exist. This **does not** prove any end-to-end implementation.
 
-## M1 - Shared durable task core + optional Relay adapter + Fake Worker (next coding-agent goal)
+## M1 - Shared durable task core + optional Relay adapter + Fake Worker
+
+Implementation: [M1 developer slice and acceptance](M1.md). The following scope is implemented with automated Fake tests; native/production acceptance remains separate.
 
 Deliver one TypeScript **task application core**, not two backends: validated immutable tasks and state transitions, attempt tracking, private blob storage abstraction, SQLite migrations, transactional task/attempt persistence and history reads.
 
