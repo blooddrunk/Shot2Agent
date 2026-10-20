@@ -7,7 +7,7 @@ type Snapshot = { root: string; status: string; error?: string; total: number; p
   settings: { enabled: boolean; mode: string; paused: boolean; autoConsent: boolean; alwaysConsent: boolean };
   delivery: { clipboard: string; saveDirectory?: string };
   profile: { adapter: string; id: string; workspace?: string; version?: string; sandbox: string }; tasks: Task[] };
-const data = ref<Snapshot>(); const error = ref(''); const message = ref(''); const busy = ref(false);
+const data = ref<Snapshot>(); const transportError = ref(''); const error = ref(''); const message = ref(''); const busy = ref(false);
 const enabled = ref(false); const mode = ref('confirm'); const clipboard = ref('manual'); const save = ref(false); const directory = ref('');
 const autoConsent = ref(false); const alwaysConsent = ref(false); const dirty = ref(false);
 const selected = ref(''); const detail = ref<{ status: string; result?: { contentMarkdown: string; errorCode?: string } }>();
@@ -25,7 +25,7 @@ async function rpc(command: string, args: Record<string, unknown> = {}) {
 }
 async function refresh() {
   if (polling || busy.value) return; polling = true;
-  try { hydrate(await rpc('snapshot') as Snapshot); } catch (e) { error.value = String(e); }
+  try { hydrate(await rpc('snapshot') as Snapshot); transportError.value = ''; } catch (e) { transportError.value = String(e); }
   finally { polling = false; }
 }
 async function action(command: string, args: Record<string, unknown> = {}) {
@@ -45,7 +45,14 @@ async function apply() {
     delivery: { clipboard: clipboard.value, ...(save.value ? { saveDirectory: directory.value.trim() } : {}) } });
   if (!error.value) { dirty.value = false; message.value = '设置已保存。从下一次剪贴板变化开始监听。'; await refresh(); }
 }
-async function openTask(id: string) { selected.value = id; await action('detail', { id }); }
+async function openTask(id: string) {
+  if (busy.value) return;
+  busy.value = true; error.value = ''; selected.value = ''; detail.value = undefined;
+  try {
+    const result = await rpc('detail', { id }) as NonNullable<typeof detail.value>;
+    detail.value = result; selected.value = id;
+  } catch (e) { error.value = String(e); } finally { busy.value = false; }
+}
 onMounted(() => { void refresh(); timer = setInterval(() => { void refresh(); }, 1000); });
 onUnmounted(() => clearInterval(timer));
 </script>
@@ -53,7 +60,7 @@ onUnmounted(() => clearInterval(timer));
   <header><div class="identity"><svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><path d="M3 12V4h8M21 4h8v8M29 21v8h-8M11 29H3v-8" fill="none" stroke="currentColor" stroke-width="3"/><path d="m11 17 4 4 7-10" fill="none" stroke="currentColor" stroke-width="2"/></svg><div><h1>Shot2Agent</h1><p>Local · 此电脑处理，无需 Relay</p></div></div><div class="header-actions"><button @click="invoke('hide_window')">隐藏到托盘</button><button @click="action('quit')" :disabled="busy">退出</button></div></header>
   <main>
     <div class="statusbar" role="status"><span class="dot" :class="{ active: data?.status === 'monitoring' }"></span><strong>{{ data ? statusText[data.status] : '连接本地服务…' }}</strong><button v-if="data" @click="action('pause', { paused: !data.settings.paused })" :disabled="busy">{{ data.settings.paused ? '恢复捕获' : '暂停捕获' }}</button></div>
-    <p v-if="error || data?.error" class="error" role="alert">{{ error || data?.error }}。设置失败时请检查选项。服务停止时请退出并重新打开应用；不会自动重跑已启动任务。<button v-if="data?.status === 'capture_error'" @click="action('recover')">重新连接剪贴板</button></p>
+    <p v-if="error || transportError || data?.error" class="error" role="alert">{{ error || transportError || data?.error }}。设置失败时请检查选项。服务停止时请退出并重新打开应用；不会自动重跑已启动任务。<button v-if="data?.status === 'capture_error'" @click="action('recover')">重新连接剪贴板</button></p>
     <p v-if="message" class="notice" role="status">{{ message }}</p>
     <div class="columns"><section class="controls" aria-label="捕获及输出设置">
       <h2>捕获</h2>
@@ -76,7 +83,7 @@ onUnmounted(() => clearInterval(timer));
       <div v-else class="empty"><strong>等待下一张截图</strong><p>使用 Win + Shift + S 复制图片。自动模式会直接排队；确认模式会在此预览。</p></div>
       <div class="section-heading history-heading"><h2>本地历史 <span>{{ data?.total ?? 0 }}</span></h2><span class="hint">显示最近 50 项</span></div>
       <p class="hint" v-if="!data?.tasks.length">尚无任务。启用捕获并应用设置，然后复制一张合成截图。</p>
-      <ul class="tasks"><li v-for="task in data?.tasks" :key="task.id"><button class="task-title" @click="openTask(task.id)"><strong>{{ task.summary || task.status }}</strong><span>{{ task.id.slice(0, 8) }} · {{ task.status }}</span></button><p class="hint">剪贴板：{{ task.clipboard?.status || '等待结果' }} · 保存：{{ task.save?.status || '等待结果' }}</p><p class="error" v-if="task.error">{{ task.error }} · 请检查 Agent 配置。此任务不会自动重跑。</p><p v-if="task.clipboard?.status === 'blocked_by_clipboard_change'" class="notice">Smart 已保护较新的剪贴板内容，可手动复制结果。</p><div class="task-actions" v-if="task.status === 'succeeded'"><button @click="action('copy', { id: task.id })" :disabled="busy">复制结果</button><button @click="action('retry-delivery', { id: task.id })" :disabled="busy">重试结果投递</button></div><p class="notice" v-if="task.status === 'execution_unknown'">执行结果不确定。请先检查 Agent；应用不会自动重新执行。</p></li></ul>
+      <ul class="tasks"><li v-for="task in data?.tasks" :key="task.id"><button class="task-title" @click="openTask(task.id)" :disabled="busy"><strong>{{ task.summary || task.status }}</strong><span>{{ task.id.slice(0, 8) }} · {{ task.status }}</span></button><p class="hint">剪贴板：{{ task.clipboard?.status || '等待结果' }} · 保存：{{ task.save?.status || '等待结果' }}</p><p class="error" v-if="task.error">{{ task.error }} · 请检查 Agent 配置。此任务不会自动重跑。</p><p v-if="task.clipboard?.status === 'blocked_by_clipboard_change'" class="notice">Smart 已保护较新的剪贴板内容，可手动复制结果。</p><div class="task-actions" v-if="task.status === 'succeeded'"><button @click="action('copy', { id: task.id })" :disabled="busy">复制结果</button><button @click="action('retry-delivery', { id: task.id })" :disabled="busy">重试结果投递</button></div><p class="notice" v-if="task.status === 'execution_unknown'">执行结果不确定。请先检查 Agent；应用不会自动重新执行。</p></li></ul>
       <article v-if="detail" class="result"><div class="section-heading"><h2>结果详情</h2><button @click="detail = undefined; selected = ''">关闭详情</button></div><p class="hint">{{ selected }} · {{ detail.status }}</p><pre>{{ detail.result?.contentMarkdown || detail.result?.errorCode || '暂无结果；完成后重新打开详情。' }}</pre></article>
     </section></div>
   </main>

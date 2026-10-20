@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, readdirSync, mkdirSync, realpathSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, readdirSync, mkdirSync, realpathSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -17,7 +17,7 @@ const temp = () => mkdtempSync(join(tmpdir(), 'shot-desktop-'));
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 function host(root = temp(), mode) {
   const fixture = join(root, 'synthetic-clipboard.json'); let seq = 1;
-  const event = (image, extra = {}) => writeFileSync(fixture, JSON.stringify({ sequence: String(seq++), image: image?.toString('base64'), ...extra }));
+  const event = (image, extra = {}) => { const temporary = fixture + '.tmp'; writeFileSync(temporary, JSON.stringify({ sequence: String(seq++), image: image?.toString('base64'), ...extra })); renameSync(temporary,fixture); };
   event(png); // Historical image must never create task on startup.
   const child = spawn(process.execPath, ['--experimental-strip-types', fileURLToPath(new URL('./fixture.mjs', import.meta.url)), root, fixture, ...(mode ? [mode] : [])], { stdio: ['pipe','pipe','pipe'], shell: false });
   child.stderr.resume(); let receive; let exit;
@@ -62,7 +62,7 @@ test('desktop process: opt-in auto, independent Smart/save, pause baseline, rest
 
 test('desktop process: Smart conflict preserves newer text, Copy fallback, Always consent, command isolation and errors', async t => {
   const h = host(undefined,'delay'); t.after(()=>h.child.kill()); await configure(h,'smart'); h.event(png2);
-  await h.until(s=>s.tasks[0]?.status==='running'); h.event(undefined);
+  await h.until(s=>s.tasks[0]?.status==='running'); h.event(undefined,{release:true});
   let s = await h.until(s=>s.tasks[0]?.clipboard?.status==='blocked_by_clipboard_change'); assert.equal(s.testWrite,undefined);
   await h.rpc('copy',{id:s.tasks[0].id}); assert.match((await h.rpc('snapshot')).testWrite,/# Fake result/);
   assert.equal((await h.raw('configure',{delivery:{clipboard:'always'}})).error,'ALWAYS_OVERWRITE_CONSENT_REQUIRED');
@@ -95,8 +95,8 @@ test('desktop duplicate worker is refused across coordinators; existing CLI can 
 
 test('desktop EOF gracefully aborts running work and keeps queued work durable', async t => {
   const h=host(undefined,'delay'); t.after(()=>h.child.kill()); await configure(h,'off'); h.event(png2); await h.until(s=>s.tasks[0]?.status==='running');
-  h.child.stdin.end(); assert.equal(await h.stopped,0);
-  const next=host(h.root); t.after(()=>next.child.kill()); const s=await next.rpc('snapshot'); assert.equal(s.total,1); await next.close();
+  h.event(png); await h.until(s=>s.total===2); h.child.stdin.end(); assert.equal(await h.stopped,0);
+  const next=host(h.root); t.after(()=>next.child.kill()); const s=await next.rpc('snapshot'); assert.equal(s.total,2); assert.equal(s.tasks.filter(t=>t.status==='queued').length,1); await next.close();
 });
 
 for (const mode of ['success', 'exit', 'hang']) test(`desktop pipes -> mock Codex ${mode}: failure/timeout remains visible and never replayed`, async t => {

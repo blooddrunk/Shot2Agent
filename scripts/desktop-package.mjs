@@ -1,5 +1,5 @@
 // Portable Windows distribution: fixed relative executable/runtime paths; no PATH Node or WSL.
-import { cpSync, copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, copyFileSync, mkdirSync, readFileSync, writeFileSync, existsSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, resolve, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -14,7 +14,12 @@ cpSync('dist', join(runtime, 'dist'), { recursive: true });
 const copied = new Set();
 function copyDependency(name, from, optional = false) {
   let manifest;
-  try { manifest = createRequire(from).resolve(name + '/package.json'); }
+  try {
+    const search = createRequire(from).resolve.paths(name) ?? [];
+    manifest = search.map(path => join(path, name, 'package.json')).find(path => existsSync(path));
+    if (!manifest) throw new Error('MISSING_RUNTIME_DEPENDENCY');
+    manifest = realpathSync(manifest);
+  }
   catch (error) { if (optional) return; throw error; }
   if (copied.has(name)) return; copied.add(name);
   const meta = JSON.parse(readFileSync(manifest, 'utf8'));

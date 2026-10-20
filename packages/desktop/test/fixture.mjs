@@ -21,10 +21,12 @@ const clipboard = { session: String(process.pid),
   async writeText(text, expected) { if (expected && expected !== state().sequence) return false; written = text; return true; }, close() {} };
 const fake = new FakeAgent();
 const mode = process.argv[4];
-const injected = mode ? { profile: { ...FAKE_PROFILE, timeoutMs: 250 }, adapter: { name: 'fake', version: 'test', async execute(...args) {
+const injected = mode ? { profile: { ...FAKE_PROFILE, timeoutMs: 5000 }, adapter: { name: 'fake', version: 'test', async execute(...args) {
   if (mode === 'fail') return new FakeAgent('fail').execute(...args);
   if (mode === 'unknown') throw Error('synthetic crash');
-  await delay(130); return fake.execute(...args);
+  while (!state().release && !args[3].aborted) await delay(15);
+  if (args[3].aborted) throw Error('synthetic stop');
+  return fake.execute(...args);
 } } } : undefined;
 const desktop = new DesktopController(root, clipboard, injected);
 await desktop.start();
