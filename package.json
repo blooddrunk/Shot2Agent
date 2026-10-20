@@ -1,0 +1,13 @@
+{
+  "name": "shot2agent",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Screenshot-driven asynchronous agent tasks",
+  "engines": { "node": ">=22.16.0" },
+  "packageManager": "pnpm@10.19.0",
+  "scripts": {
+    "test": "node --experimental-strip-types --test packages/contracts/test/*.test.mjs",
+    "check": "npm test"
+  }
+}

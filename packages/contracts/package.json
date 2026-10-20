@@ -1,0 +1,7 @@
+{
+  "name": "@shot2agent/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Prototype shared task shape and lifecycle validators. Not yet a published or bundled runtime package."
+}

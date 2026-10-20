@@ -1,0 +1,34 @@
+# Dependencies and outputs
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.cache/
+.turbo/
+.vite/
+**/target/
+
+# Credentials / runtime state
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+.runtime/
+.local/
+state/
+uploads/
+artifacts/
+secrets/
+*.pem
+*.key
+
+# IDE / OS
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
