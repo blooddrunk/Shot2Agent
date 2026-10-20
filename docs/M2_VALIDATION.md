@@ -1,6 +1,6 @@
 # M2-L executed verification — 2026-10-20
 
-Implementation is reviewable and runnable through the documented CLI. **Full Windows 11 Local MVP acceptance is NOT VERIFIED.** Real Codex image execution below was observed on WSL, not Windows Native. Do not infer Windows authentication, sandbox/termination, actual Snipping Tool format handling or foreground focus from these checks. No production deployment/Remote notification/GUI claims.
+**Current status: M2-L minimum Local functional loop accepted on 2026-10-20, based on operator feedback and delivery receipts.** See [operator acceptance](#operator-acceptance-2026-10-20) for the exact scope. Native Smart conflict/focus/forced-interruption and other detailed edge cases remain individually NOT VERIFIED unless separately evidenced. This is not full V1, installer or Remote release acceptance. Earlier sections retain historical evidence and gaps at the time of each run; they are not the current minimum-loop status.
 
 ## Baseline and automatic evidence
 
@@ -34,14 +34,14 @@ node --experimental-strip-types apps/cli/src/mvp.ts delivery <returned-UUID> --r
 
 All exit **0**. Observed queued -> succeeded, exactly one attempt, Markdown accurately described **SHOT2AGENT 42**, save receipt succeeded, clipboard disabled as configured. Workspace file listing retained only the original synthetic image. Runtime pictures, auth, subprocess logs and full transcripts are not committed. A second synthetic execution after environment filtering also exited 0, reached succeeded, and accurately identified SHOT2AGENT 42; both persisted tasks remained readable. This proves current WSL login/model/image/final-output interoperability; it does not prove that every supported CLI release or Windows sandbox behaves identically.
 
-## Native Windows evidence and remaining gate
+## Native Windows evidence before operator acceptance (historical)
 
 - Windows PowerShell **5.1.26100.9711** detected, exit **0**.
 - `'{"op":"sequence"}'` piped to `powershell.exe -NoProfile -NonInteractive -Sta -File 'D:\code\projects\Shot2Agent\packages\local\src\clipboard.ps1'`: exit **0**, helper compiled, returned a clipboard sequence number. No image read, write, focus activation or private content collection in this check.
 - Windows `Get-Command node` / `Get-Command codex` returned no executable in this environment's PATH; `node --version` returned exit **1** (command not found). This is a missing native prerequisite, **not** proof of a product failure.
 - CI opts into a synthetic native DIB -> PNG/read validation -> Unicode text write -> stale sequence refusal -> text filtering test. Linux skips it explicitly. A runner test remains distinct from a logged-in user's real Windows screenshot/focus/Codex workflow.
 
-| Acceptance layer | Status here | Required remaining observation |
+| Acceptance layer | Status in that earlier session | Observation still missing at that time |
 | --- | --- | --- |
 | Shared durable Core / Fake direct Local E2E | PASS | None for automated layer |
 | Codex argv, version/Profile boundary, stop, logs (mock) | PASS | Windows actual sandbox/process behavior separately |
@@ -62,7 +62,7 @@ The corrected-head push matrix passed all four platforms, but its duplicate PR r
 
 ## Windows stabilization after operator feedback
 
-The operator observed two real failures despite the earlier green matrix: `mock Codex hang` could end with `EPERM` while deleting its still-owned working directory; Fake task submission eventually succeeded but manual `copy` failed. These observations mean the Windows MVP acceptance gate remains **NOT VERIFIED**, not complete.
+The operator observed two real failures despite the earlier green matrix: `mock Codex hang` could end with `EPERM` while deleting its still-owned working directory; Fake task submission eventually succeeded but manual `copy` failed. At that point the Windows minimum-loop gate was **NOT VERIFIED**, not complete. The subsequent correction and operator acceptance are recorded below.
 
 Root causes and bounded corrections:
 
@@ -77,4 +77,32 @@ Executed on Windows Native Node **v24.20.0** (absolute executable path), without
 3. Full `npm run check` in a temporary source-validation bundle with a junction to the existing Windows `node_modules`: exit **0**; lint, typecheck, **77 pass / 0 fail / 1 native clipboard skip (78 total)**, build and compiled fresh-cwd no-network smoke. `SHOT2AGENT_NATIVE_CLIPBOARD_TEST=0` deliberately protected the operator clipboard. No second Git checkout, system PATH edit, reinstall, task deletion or runtime restart was performed.
 4. An initial WSL test invocation could not load Sharp after the user's native Windows dependency installation. It was not treated as product evidence; dependencies were preserved and validation moved to the existing Windows Node. Fresh Linux dependency installation/tests remain covered by CI.
 
-CI's opt-in native test has been expanded beyond Smart: unconditional Unicode Copy/Always writes, a staged native DIB -> Fake Local Core -> manual Copy workflow, receipt success, and exact clipboard text readback. This test would reject the original null-binding behavior. Final-head Windows/Linux Node 22/24 results are recorded in PR #2. Native Codex authentication, actual Snipping Tool/focus behavior and the operator's old-task Copy recheck still require the usage checklist.
+CI's opt-in native test has been expanded beyond Smart: unconditional Unicode Copy/Always writes, a staged native DIB -> Fake Local Core -> manual Copy workflow, receipt success, and exact clipboard text readback. This test would reject the original null-binding behavior. Final-head Windows/Linux Node 22/24 results are recorded in PR #2. At the end of that automated stabilization run, live Windows use and the operator's old-task Copy recheck still awaited feedback. The following acceptance record updates those specific observations without marking unreported edge cases as passed.
+
+## Operator acceptance (2026-10-20)
+
+**Decision: close M2-L minimum Local functional acceptance; keep detailed unobserved cases explicitly open.** Evidence source is the operator's report in the project conversation after stabilization, not an additional agent-run native experiment. No screenshots, result content, raw transcripts, private task IDs, login material or runtime databases are reproduced here.
+
+| Capability | Recorded result | Evidence source / limit |
+| --- | --- | --- |
+| Windows Fake path, manual Copy and paste verification | PASS — operator verified | Operator explicitly reported Fake Copy and verification succeeded after the fix |
+| Real Codex Local path completing with saved/clipboard-delivered result | PASS — operator reported | Operator reported completing the real path and provided the two successful channel receipts below; exact local CLI version/launch command was not supplied and is not invented |
+| Markdown local save | PASS — delivery receipt | save=succeeded, attempts=1; opening the saved file and comparing its content was not separately reported |
+| Clipboard result write on the real path | PASS — delivery receipt | clipboard=succeeded, attempts=2; a separate real-result paste/content-quality comparison was not explicitly reported |
+| Real Windows Smart first automatic return / preserving newer copied text | NOT VERIFIED as a dedicated operator case | A successful clipboard receipt alone does not distinguish automatic Smart from later manual Copy; tests/CI cover the sequence-gate logic |
+| Foreground focus, forced-stop recovery, native memory/large screenshot workload and read-only sentinel comparison | NOT VERIFIED as dedicated operator cases | Do not infer these from a happy-path run; retest when related code changes or a release requires it |
+| GUI/tray, installer, file clipboard, Remote/mobile notification | NOT DELIVERED in M2-L | Deferred V1 scope remains unchanged |
+
+Sanitized channel evidence supplied by the operator:
+
+```json
+{"save":{"status":"succeeded","attempts":1},"clipboard":{"status":"succeeded","attempts":2}}
+```
+
+`delivery` is a read-only receipt query. It neither runs Codex nor repeats clipboard/file delivery. `attempts` counts processing of that particular channel (including explicit manual copy/retry), not Agent executions. Therefore clipboard attempts=2 is neither proof of a duplicate Codex run nor proof that Smart succeeded on its first automatic attempt.
+
+Automated stabilization evidence for code head `92c5ec8a587a7893930d68b57341f6b9cacbdbe9`: [push CI](https://github.com/blooddrunk/Shot2Agent/actions/runs/39428425057) and [PR CI](https://github.com/blooddrunk/Shot2Agent/actions/runs/39428435571), 8/8 successful checks, Windows 78/78 tests, Linux 77 pass plus one explicit native skip, lint/typecheck/build/compiled smoke successful. Operator report and automated proof are separate evidence layers.
+
+No further command-heavy checklist is required merely to close this minimum-loop phase. For later relevant changes, use the [trigger-based Windows guide](WINDOWS_ACCEPTANCE.md): the agent prepares the build/configuration and handles fault injection, while the operator only performs the few observations actually needed. The intended product remains a Windows tray/desktop app; the present CLI is a milestone entry point. This record does not start GUI implementation or merge PR #2.
+
+Documentation handoff verification: Markdown-only acceptance/guide updates; native Windows `npm test` exited 0 with 77 pass, 0 fail and 1 deliberate operator-clipboard skip (78 total). Local link/heading validation checked 57 references; Windows PowerShell parsed 8 documented PowerShell snippets without executing them, all successful. No runtime/configuration/clipboard changes or new product functionality were introduced by this documentation handoff.

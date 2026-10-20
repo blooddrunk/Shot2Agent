@@ -2,7 +2,7 @@
 
 > M2-L update (2026-10-20): M2-L now adds a direct Local CLI/coordinator (`apps/cli/src/mvp.ts`), Windows clipboard helper, worker-owned Codex registry and independent Local delivery; no HTTP import/service. Core tasks remain in tasks.sqlite; Local baselines/provenance/channel reservations are in local.sqlite. See [Local operation and boundaries](LOCAL_MVP_USAGE.md). Full tray/Remote receivers below remain future V1 work.
 
-**Status:** M1 shared durable core and Fake Local/Remote paths are implemented; capture, real Agent and delivery are planned. See [M1 implementation decisions](M1.md).
+**Status:** M1 core/Fake and M2-L Local clipboard/Codex/text save/return are implemented; minimum Local use has [operator acceptance](M2_VALIDATION.md#operator-acceptance-2026-10-20). A full Windows tray/desktop shell and Remote delivery remain planned; detailed unobserved native cases remain unverified.
 
 ## Boundaries
 

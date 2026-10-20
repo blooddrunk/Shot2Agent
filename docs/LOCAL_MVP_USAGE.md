@@ -139,20 +139,16 @@ Adapter 使用参数数组、`shell:false`、隐藏子窗口、只读 sandbox、
 
 ## Windows 人工验收记录表
 
-前置：同一台 Windows 11 登录桌面、上述安装/build 成功、可用 Codex 登录、专用空白 workspace、只含已知文字的合成截图、独立结果目录。先记录 `git rev-parse HEAD`、`node --version`、`codex --version`、`codex login status`（不要记 token）。每一行记录具体命令/动作、时间、预期、观察、退出码、PASS/FAIL/NOT VERIFIED；记录存在 Git 外。不要用完整控制台转录捕获私人结果。
+M2-L 最小闭环已经根据本次操作者反馈验收通过，见 [实机结果记录](M2_VALIDATION.md#operator-acceptance-2026-10-20)。不需要为了补齐旧表再次执行所有命令。
 
-| 项目 | 具体操作 | 期望观察 | 证据与失败排查 |
-| --- | --- | --- | --- |
-| Fake 单次闭环 | 按上文 Fake watch；截图、submit、list、show、copy，粘贴记事本 | 恰好 1 UUID，succeeded，Markdown 一致，UUID.md 存在 | 记录状态/文件存在与哈希，勿提交图片；失败按 helper/save 项排查 |
-| 真图片 + Codex | 真实路径 watch；截图包含 `SHOT2AGENT 42`，submit、show | Markdown 准确读出文字，workspace 无修改 | 比较已知文字、workspace 文件清单及哈希，记录版本和状态；检查认证/只读限制 |
-| Smart 正常 | `--clipboard smart` 初始化，同 watcher 提交后不复制其他内容，完成后粘贴 | delivery clipboard=succeeded，结果文本准确 | 记录收据与文字比较结果 |
-| 新内容保护 | 提交后立刻在记事本复制另一句，等完成再粘贴 | 仍为新句，blocked；copy UUID 后才是结果 | 记录两次比较结果，若覆盖则 FAIL |
-| 焦点 | watcher 已最小化，在记事本截图/编辑并等待任务完成 | 窗口不跳到前台、键盘仍作用记事本 | 观察提交前后前台窗口/光标，不能由 CI 判定 |
-| 保存/独立通道 | save+smart 同开；再把 saveDirectory 指向一个已有普通文件路径并重启 watcher | 正常时两通道独立成功；错误时 save failed，task/clipboard/history 不受影响 | delivery 收据、UUID.md 哈希；修复后 retry-delivery 不增加 attempt |
-| history-only | 退出，设 clipboard=off，删除 saveDirectory；重启、submit | succeeded，两个 disabled，无额外输出，show 可读 | 记录通道、文件清单；手动 copy 仍可测试 |
-| 过滤与去重 | 复制纯文本；随后复制同一图，连续 submit 两次（5 秒内） | 文本不建任务；一次提交、第二次无 ID | list 数量；--force 只用于明确新任务 |
-| 双 4K | 将 7680×2160 合成 PNG 以图像形式复制/截图，再提交 | 不出现 16 MP 拒绝；若 <20 MiB 则正常处理 | 记录尺寸、字节、任务状态、任务管理器峰值内存 |
-| 重启恢复 | submit 后退出再 work；执行中关闭后等租约到期 list，再启动 watch | queued 恢复；started=execution_unknown，无重复 Agent attempt；旧 Smart 不回写 | 记录 list/status 与次数；未知后先检查旧 Codex 进程再人工建新任务 |
-| 剪切板占用 | 用测试工具暂时占用剪切板再释放；新图 submit | 有界重试/下一轮恢复，不清空原图、无重复任务 | 记录失败与释放后状态；超过上限明确失败 |
+未来改动相关功能时，使用 [Windows 分步验收指南](WINDOWS_ACCEPTANCE.md)。它明确列出：何时需要复验、代理先做什么、应该在哪个窗口输入、每一步具体操作、预期看到的文字/状态/文件、失败后如何反馈，以及哪些危险或繁琐故障测试应由代理完成。将来 GUI 实现后，必须先换成真实按钮和窗口操作，不能继续让普通用户照搬 CLI 清单。
 
-若某项环境不具备，标记 **NOT VERIFIED**，不能写 PASS。只需在这一轮代码上做一轮针对实际失败的最小稳定性修复；Remote、完整 UI、托盘、安装包仍单独延期。
+最常用的三项是：
+
+1. **截图和粘贴：** 截一张已知文字的图，确认提交；结果完成后复制，在记事本粘贴。
+2. **真实图片分析：** 检查结果是否正确包含已知文字；Fake 结果不负责识字。
+3. **保存文件：** 打开代理提供的实际保存目录，确认该任务的 Markdown 文件存在并对应本次结果。
+
+`delivery` 只查询结果通道回执，不重新执行 Agent。`save` 是保存、`clipboard` 是复制，`attempts` 是该通道的处理次数，不是 Codex 执行次数；详见 [回执解释](WINDOWS_ACCEPTANCE.md#delivery-到底是什么)。成功写入回执与用户实际粘贴/打开文件是不同层次的证据。
+
+Smart 新内容保护、焦点、强制中断等没有单独验证的项继续明确保留为 `NOT VERIFIED`。它们不是每次都交给用户完成的任务；开发代理按 [触发条件和职责](WINDOWS_ACCEPTANCE.md#谁来做何时做) 选择复验，并负责整理脱敏记录。

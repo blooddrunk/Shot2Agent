@@ -1,6 +1,6 @@
 # Implementation roadmap: thin vertical slices and gates
 
-> M2-L update (2026-10-20): M2-L Local CLI implementation is present; final Windows interactive acceptance remains a release gate. See [usage](LOCAL_MVP_USAGE.md) and [executed verification](M2_VALIDATION.md). Keep deferred V1 capabilities below; a single bounded stabilization pass should address observed Windows failures, not restart sequential infrastructure milestones.
+> M2-L update (2026-10-20): M2-L minimum Local functional acceptance was closed on operator feedback dated 2026-10-20; full V1 and dedicated unobserved native cases remain outside that conclusion. See [usage](LOCAL_MVP_USAGE.md) and [executed verification](M2_VALIDATION.md). Keep deferred V1 capabilities below; a single bounded stabilization pass should address observed Windows failures, not restart sequential infrastructure milestones.
 
 **Status:** implementation plan. This is not a completion report. Prioritize automated tests and reproducible evidence. Do not use GitHub issues as a prerequisite for this personal project.
 
@@ -85,4 +85,4 @@ Mandatory limited manual proof: real VPS DNS/TLS, full cross-device upload, unpl
 
 ## Suggested next engineering handoff
 
-**M1 completed and merged in PR #1.** Next implement **M2-L runnable Local MVP** per [M2_LOCAL_MVP.md](M2_LOCAL_MVP.md): Windows clipboard screenshot -> durable Local core -> real Codex -> Markdown/history -> clipboard copy and optional local save; Fake adapter for CI. Target one coding round plus at most one stabilization round. The numbered M2-M5 sections above describe deferred full V1 work, **not mandatory sequential prerequisites** for this Local MVP. Keep Relay/VPS, remote push, full tray UI and installer outside M2-L. Begin by syncing latest `main`; do not discard local changes. M2-L revises the M1 16-million-pixel decoder guard (4K dual monitor requires >16 MP).
+**M1 completed and merged in PR #1. M2-L minimum Local loop is implemented and operator-accepted**, as recorded in [M2 validation](M2_VALIDATION.md#operator-acceptance-2026-10-20): Windows clipboard screenshot -> durable Local core -> real Codex -> Markdown/history -> clipboard copy and local save, plus Fake CI. The intended user-facing form remains a Windows tray/desktop app. A bounded desktop shell reusing this core is the proposed next slice when requested; this acceptance record does not itself start that implementation. The numbered M2-M5 sections above describe deferred full V1 work, **not mandatory sequential prerequisites** for this Local MVP. Keep Relay/VPS, remote push, full tray UI and installer outside M2-L. Begin by syncing latest `main`; do not discard local changes. M2-L revises the M1 16-million-pixel decoder guard (4K dual monitor requires >16 MP).

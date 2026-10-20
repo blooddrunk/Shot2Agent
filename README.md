@@ -4,7 +4,7 @@
 
 Shot2Agent is a screenshot-driven, asynchronous agent task system. **Local mode** lets one Windows PC capture, process and return screenshots without a Relay/VPS. **Remote mode** optionally uses a personal VPS Relay to coordinate capture PC A and Agent PC B. Both modes use the same task contract, Profile model, Agent adapters and result-delivery settings.
 
-> Status: **M2-L Local CLI implemented**: Windows clipboard image → SQLite → Fake/real Codex → Markdown/history → manual/Smart clipboard and independent Markdown save. No Relay/VPS/local HTTP needed. Real Codex image analysis passed on WSL; Windows interactive acceptance is still required. Start with [Windows commands, configuration and acceptance](docs/LOCAL_MVP_USAGE.md); see [verification evidence](docs/M2_VALIDATION.md).
+> Status: **M2-L Local CLI implemented**: Windows clipboard image → SQLite → Fake/real Codex → Markdown/history → manual/Smart clipboard and independent Markdown save. No Relay/VPS/local HTTP needed. The operator accepted the minimum Windows Local loop after stabilization; detailed native edge cases remain separately unverified. Start with [Windows commands, configuration and acceptance](docs/LOCAL_MVP_USAGE.md); see [verification evidence](docs/M2_VALIDATION.md) and the [plain-language Windows acceptance guide](docs/WINDOWS_ACCEPTANCE.md).
 
 ## Confirmed V1 scope
 
@@ -83,7 +83,7 @@ Local needs no Relay URL, server or Agent credentials. Tests cover both direct L
 
 ## Implementation / deployment status
 
-M1 provides shared task/attempt/result persistence, private verified images, idempotent upload, transactional claims/leases and Fake execution in both modes. M2-L provides clipboard PNG/DIB intake, confirmation/default or opt-in auto submission, version-pinned read-only Codex execution, persistent history, manual/Smart/explicit Always text return, independent atomic Markdown save and delivery retries. **Windows interactive end-to-end acceptance remains unverified; tray/UI, folder watch, batch editor, file clipboard, remote notifications and production VPS deployment remain deferred.** The optional Relay is unchanged and not imported by Local MVP.
+M1 provides shared task/attempt/result persistence, private verified images, idempotent upload, transactional claims/leases and Fake execution in both modes. M2-L provides clipboard PNG/DIB intake, confirmation/default or opt-in auto submission, version-pinned read-only Codex execution, persistent history, manual/Smart/explicit Always text return, independent atomic Markdown save and delivery retries. **The minimum Local loop has operator acceptance; detailed Smart/focus/interruption cases remain separately unverified. Tray/UI, folder watch, batch editor, file clipboard, remote notifications and production VPS deployment remain deferred.** The optional Relay is unchanged and not imported by Local MVP.
 
 ## Security baseline
 

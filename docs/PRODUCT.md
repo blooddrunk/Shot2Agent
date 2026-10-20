@@ -1,6 +1,6 @@
 # Product specification - V1 baseline
 
-**Status:** confirmed V1 scope; M1 core/Fake developer slice implemented. Native capture, real Agent and delivery remain pending. Updated 2026-10-20. See [M1](M1.md).
+**Status:** confirmed V1 scope. M1 core/Fake and M2-L Local clipboard/Codex/text delivery are implemented; the minimum Windows Local loop has [operator acceptance](M2_VALIDATION.md#operator-acceptance-2026-10-20). Dedicated native edge cases remain separately unverified. Full tray/UI, folder/batch editor and Remote delivery are still planned. Updated 2026-10-20.
 
 ## Product outcome
 
