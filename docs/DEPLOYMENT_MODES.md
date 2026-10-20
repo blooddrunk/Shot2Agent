@@ -1,6 +1,6 @@
 # Deployment modes: Local and Remote
 
-**Status:** confirmed V1 requirements as of 2026-10-20, not implemented.
+**Status:** confirmed V1 requirements as of 2026-10-20. M1 core/CLI/Fake paths are implemented; native capture, real Agent and delivery remain planned. See [M1](M1.md).
 
 ## Operating modes
 

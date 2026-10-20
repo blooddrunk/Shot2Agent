@@ -4,10 +4,30 @@
   "version": "0.0.0",
   "type": "module",
   "description": "Screenshot-driven asynchronous agent tasks",
-  "engines": { "node": ">=22.16.0" },
+  "engines": {
+    "node": ">=22.16.0"
+  },
   "packageManager": "pnpm@10.19.0",
   "scripts": {
-    "test": "node --experimental-strip-types --test packages/contracts/test/*.test.mjs",
-    "check": "npm test"
+    "test": "node --experimental-strip-types --test packages/contracts/test/*.test.mjs packages/core/test/*.test.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "build": "tsc -p tsconfig.build.json",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build",
+    "local": "node --experimental-strip-types apps/cli/src/local.ts",
+    "remote": "node --experimental-strip-types apps/cli/src/remote.ts",
+    "relay": "node --experimental-strip-types services/relay/src/main.ts"
+  },
+  "dependencies": {
+    "@fastify/multipart": "10.1.4",
+    "fastify": "5.12.7",
+    "sharp": "0.35.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "26.6.5",
+    "eslint": "10.13.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.0"
   }
 }

@@ -1,6 +1,6 @@
 # Product specification - V1 baseline
 
-**Status:** confirmed scope / implementation pending. Updated 2026-10-20.
+**Status:** confirmed V1 scope; M1 core/Fake developer slice implemented. Native capture, real Agent and delivery remain pending. Updated 2026-10-20. See [M1](M1.md).
 
 ## Product outcome
 

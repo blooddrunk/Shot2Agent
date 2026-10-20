@@ -1,6 +1,6 @@
 # Architecture and trust boundaries
 
-**Status:** proposed architecture, not yet implemented.
+**Status:** M1 shared durable core and Fake Local/Remote paths are implemented; capture, real Agent and delivery are planned. See [M1 implementation decisions](M1.md).
 
 ## Boundaries
 

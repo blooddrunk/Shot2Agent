@@ -4,8 +4,8 @@
 
 **Local/Remote conformance gate:** Run the same Fake Agent task fixtures against direct Local-mode task core (no Relay URL, HTTP service or VPS) and Remote-mode authenticated HTTP Relay adapter. Assert task/status/result equivalence, private result access, durable queue after restart, zero Relay calls in Local mode and no mode-switch migration or leak.
 
-- `npm test`: currently covers the prototype task metadata and lifecycle only. It is not a complete application verification.
-- Future M1-M5 must add isolated integration tests with fake clients/workers, synthetic PNG/JPEG/WEBP fixtures and reproducible failure injection.
+- `npm test`: runs contracts and M1 Local/Remote integration tests. `npm run check` adds lint, strict type checking and the JavaScript build. See [M1](M1.md) for reproducible commands, exact coverage and remaining environment gates.
+- M2-M5 must extend isolated integration tests with fake clients/workers, synthetic PNG/JPEG/WEBP fixtures and reproducible failure injection.
 - Every release should attach command, version, exit status, test count and a summary of coverage gaps. Do not present an unexecuted test checklist as proof.
 - For Windows-specific behavior, use Windows CI/build tests plus actual interactive desktop tests; hosted CI runners typically cannot prove a real user's clipboard/tray integration.
 

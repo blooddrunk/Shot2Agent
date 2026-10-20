@@ -1,5 +1,5 @@
 /**
- * Prototype protocol contracts. There is no relay/worker implementation yet.
+ * Shared protocol contracts for the M1 durable core and transport adapters.
  * Runtime validation of upload bytes, identity, auth and worker leases must be
  * implemented separately at their respective trust boundaries.
  */
@@ -88,6 +88,7 @@ function isCleanFileName(input: unknown): input is string {
     && input.length <= 255
     && input !== '.'
     && input !== '..'
+    // eslint-disable-next-line no-control-regex -- Reject control characters in untrusted filenames.
     && !/[\\/\x00-\x1f\x7f]/u.test(input);
 }
 
@@ -160,5 +161,67 @@ export function validateSubmissionMetadata(input: unknown): ValidationResult {
       })),
       ...(input.taskInstructions === undefined ? {} : { taskInstructions: input.taskInstructions as string }),
     },
+  };
+}
+
+export type ExecutionStatus = 'succeeded' | 'failed' | 'timed_out' | 'execution_unknown';
+export interface ArtifactInput {
+  fileName: string;
+  contentType: 'text/plain';
+  dataBase64: string;
+  sha256: string;
+}
+export interface AgentResult {
+  status: ExecutionStatus;
+  summary: string;
+  contentMarkdown: string;
+  artifacts: ArtifactInput[];
+  errorCode?: string;
+  errorDetail?: string;
+}
+export interface Profile {
+  id: string;
+  version: string;
+  fingerprint: string;
+  sandbox: 'read-only';
+  timeoutMs: number;
+}
+export interface AgentAdapter {
+  readonly name: string;
+  readonly version: string;
+  execute(task: SubmissionMetadata, profile: Profile, images: readonly Uint8Array[], signal: AbortSignal): Promise<AgentResult>;
+}
+export interface LeaseProof {
+  attemptId: string;
+  token: string;
+}
+export interface FileReference {
+  fileId: string;
+  fileName: string;
+  contentType: string;
+  byteSize: number;
+  sha256: string;
+}
+
+/** Strictly bounded result wire format. Blob bytes are verified by the core. */
+export function validateAgentResult(value: unknown): AgentResult {
+  if (!isRecord(value) || !['succeeded', 'failed', 'timed_out', 'execution_unknown'].includes(String(value.status)) ||
+    typeof value.summary !== 'string' || value.summary.length > 1024 ||
+    typeof value.contentMarkdown !== 'string' || value.contentMarkdown.length > 100_000 ||
+    !Array.isArray(value.artifacts) || value.artifacts.length > 5) throw new Error('INVALID_RESULT');
+  for (const field of ['errorCode', 'errorDetail']) {
+    if (value[field] !== undefined && (typeof value[field] !== 'string' || (value[field] as string).length > (field === 'errorCode' ? 64 : 2048))) throw new Error('INVALID_RESULT');
+  }
+  const artifacts = value.artifacts.map((artifact: unknown) => {
+    if (!isRecord(artifact) || !isCleanFileName(artifact.fileName) || artifact.contentType !== 'text/plain' ||
+      typeof artifact.dataBase64 !== 'string' || artifact.dataBase64.length > 1_398_104 ||
+      !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(artifact.dataBase64) ||
+      typeof artifact.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(artifact.sha256)) throw new Error('INVALID_ARTIFACT');
+    return { fileName: artifact.fileName, contentType: 'text/plain' as const, dataBase64: artifact.dataBase64, sha256: artifact.sha256 };
+  });
+  return {
+    status: value.status as ExecutionStatus, summary: value.summary, contentMarkdown: value.contentMarkdown, artifacts,
+    ...(value.errorCode === undefined ? {} : { errorCode: value.errorCode as string }),
+    ...(value.errorDetail === undefined ? {} : { errorDetail: value.errorDetail as string }),
   };
 }
