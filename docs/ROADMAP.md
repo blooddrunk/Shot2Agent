@@ -83,4 +83,4 @@ Mandatory limited manual proof: real VPS DNS/TLS, full cross-device upload, unpl
 
 ## Suggested next engineering handoff
 
-Implement **M1 shared durable Local task core + optional authenticated Remote Relay adapter** first. Keep M2-M5 out of scope except interface stubs and contracts required for M1. Agent should begin by syncing the latest `main`, then inspect this roadmap and `AGENTS.md`; do not rewrite agreed product requirements without evidence.
+**M1 completed and merged in PR #1.** Next implement **M2-L runnable Local MVP** per [M2_LOCAL_MVP.md](M2_LOCAL_MVP.md): Windows clipboard screenshot -> durable Local core -> real Codex -> Markdown/history -> clipboard copy and optional local save; Fake adapter for CI. Target one coding round plus at most one stabilization round. The numbered M2-M5 sections above describe deferred full V1 work, **not mandatory sequential prerequisites** for this Local MVP. Keep Relay/VPS, remote push, full tray UI and installer outside M2-L. Begin by syncing latest `main`; do not discard local changes. M2-L revises the M1 16-million-pixel decoder guard (4K dual monitor requires >16 MP).
