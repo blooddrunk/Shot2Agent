@@ -4,6 +4,17 @@ import { requireValue } from '../../core/src/model.ts';
 import { verifyImage } from '../../core/src/blobs.ts';
 /** No shell, credentials or paths can be selected by task input. Profiles are resolved locally before execution. */
 export async function runOnce(port: WorkerPort, adapter: AgentAdapter, profiles: readonly Profile[], heartbeatMs = 5000, signal?: AbortSignal): Promise<boolean> {
+  const outcome = await runTask(port, adapter, profiles, heartbeatMs, signal)
+    .then(worked => ({ ok: true as const, worked }), error => ({ ok: false as const, error }));
+  // Persist uncertainty first, then keep this Worker occupied until process and cleanup settle.
+  if (adapter.settle) {
+    const confirmed = await adapter.settle().catch(() => false);
+    requireValue(confirmed, 'AGENT_STOP_UNCONFIRMED');
+  }
+  if (!outcome.ok) throw outcome.error;
+  return outcome.worked;
+}
+async function runTask(port: WorkerPort, adapter: AgentAdapter, profiles: readonly Profile[], heartbeatMs: number, signal?: AbortSignal): Promise<boolean> {
   if (signal?.aborted) return false;
   const claim = await port.claim(profiles.map(p => ({ id: p.id, version: p.version })));
   if (!claim) return false;

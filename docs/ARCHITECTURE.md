@@ -99,3 +99,5 @@ See [Result delivery policy](RESULT_DELIVERY.md) and [Deployment modes](DEPLOYME
 ## Security note
 
 The owner confirmed images **may** transit a personal VPS and approved cloud Agent, but VPS transit is not mandatory. Local mode requires no Relay; hosted model access is a separate concern. Both modes still require least privilege, retention and protected secrets.
+
+M2-L Windows stabilization: a Worker waits for adapter-owned process/cleanup settlement after persisting an uncertain result. An unconfirmed stop pauses new Local claims; it does not replay or change the terminal task. Capture confirmation holds one pending image in memory, independent of later command-text copies, while Smart keeps the capture-time sequence baseline. See [verification](M2_VALIDATION.md#windows-stabilization-after-operator-feedback).

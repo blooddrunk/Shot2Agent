@@ -31,7 +31,7 @@ function program(path: string, script?: string) {
 }
 async function main() {
   if (command === 'help') {
-    log('Shot2Agent Local: init | doctor | submit | file <image> | work | watch | list | show <id> | copy <id> | delivery <id> | retry-delivery <id>\nOptions: --root <private-dir> (all commands); init: --adapter fake|codex --workspace <dir> --codex <exe-or-npm-cmd> [--codex-script <js>] --clipboard off|manual|smart|always --save <directory>; watch: --auto (explicit cloud upload opt-in); submit/file: --force (intentional duplicate).\nwatch commands: submit, list, show <id>, copy <id>, delivery <id>, quit. Defaults: confirmation required, manual clipboard, history always on.'); return;
+    log('Shot2Agent Local: init | doctor | submit | file <image> | work | watch | list | show <id> | copy <id> | delivery <id> | retry-delivery <id>\nOptions: --root <private-dir> (all commands); init: --adapter fake|codex --workspace <dir> --codex <exe-or-npm-cmd> [--codex-script <js>] --clipboard off|manual|smart|always --save <directory>; watch: --auto (explicit cloud upload opt-in); submit/file: --force (intentional duplicate).\nwatch commands: submit, current, list, show <id>, copy <id>, delivery <id>, quit. Defaults: confirmation required, manual clipboard, history always on.'); return;
   }
   privateDirectory(root); const configPath = join(root, 'settings.json');
   if (command === 'init') {
@@ -79,30 +79,35 @@ async function main() {
     if (command === 'submit' || command === 'file') {
       if (command === 'file') requireValue(argument, 'IMAGE_PATH_REQUIRED');
       const id = command === 'submit' ? await app.capture(values.force) : await app.submit(readImageFile(resolve(argument!)), undefined, values.force);
-      log({ taskId: id ?? null, status: id ? 'queued' : 'no image or duplicate within 5 seconds', next: 'work or watch' });
+      log({ taskId: id ?? null, status: app.lastCaptureStatus, next: 'work or watch' });
     } else if (command === 'work') log({ worked: await app.work(controller.signal) });
     else if (command === 'watch') {
-      log(`Ready (${settings.adapter}, ${values.auto ? 'AUTO submission enabled' : 'confirm: type submit after screenshot'}). Commands: submit, list, show ID, copy ID, delivery ID, quit. No Relay/HTTP. Minimize this console; it will not activate windows.`);
+      log(`Ready (${settings.adapter}, ${values.auto ? 'AUTO submission enabled' : 'confirm: type submit after screenshot'}). Commands: submit, current, list, show ID, copy ID, delivery ID, quit. No Relay/HTTP. Minimize this console; it will not activate windows.`);
       const input = createInterface({ input: process.stdin, output: process.stdout });
       let commands = Promise.resolve(); let worker: Promise<unknown> | undefined;
       input.on('line', line => { commands = commands.then(async () => {
         const [action, id] = line.trim().split(/\s+/);
         try {
           if (action === 'quit') { stop(); input.close(); }
-          else if (action === 'submit') log({ taskId: await app.capture(values.force) ?? null });
+          else if (action === 'submit' || action === 'current') { const taskId = await app.capture(values.force, action === 'current'); log({ taskId: taskId ?? null, status: app.lastCaptureStatus }); }
           else await actions(action, id);
-        } catch { log('Action failed. Check ID, clipboard availability and delivery status.'); }
+        } catch (error) {
+          const code = error instanceof Error && /^[A-Z0-9_]+$/.test(error.message) ? error.message : 'LOCAL_OPERATION_FAILED';
+          log(`Action failed: ${code}. Use list / delivery ID to inspect status.`);
+        }
       }); });
       input.on('close', stop);
       try {
         while (!controller.signal.aborted) {
           try {
             const event = await app.observe(values.auto);
-            if (event.image) log(event.id ? { queued: event.id } : 'Image detected; type submit to confirm (duplicates suppressed for 5 seconds).');
+            if (event.image) log(event.id ? { queued: event.id } : (values.auto ? 'Image ignored: duplicate within 5 seconds.' : 'Image staged in memory; type submit to confirm, or current to read the clipboard again.'));
           } catch { log('Clipboard unavailable/busy/oversized; will retry. Use submit as fallback.'); }
           if (!worker) {
             worker = app.work(controller.signal).then(worked => { if (worked) log('Task processed. Type list for status; show ID / copy ID / delivery ID.'); })
-              .catch(() => log('Worker/storage error; inspect list before resubmitting. Started tasks may become execution_unknown.'))
+              .catch(error => log(error instanceof Error && error.message === 'AGENT_STOP_UNCONFIRMED'
+                ? 'AGENT_STOP_UNCONFIRMED: processing paused. Inspect/stop the old Agent before restarting; history/copy remain available.'
+                : 'Worker/storage error; inspect list before resubmitting. Started tasks may become execution_unknown.'))
               .finally(() => { worker = undefined; });
           }
           await new Promise<void>(resolve => { const timer = setTimeout(done, 1000); function done() { clearTimeout(timer); controller.signal.removeEventListener('abort', done); resolve(); } controller.signal.addEventListener('abort', done, { once: true }); });

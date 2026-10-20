@@ -1,9 +1,10 @@
-import { mkdtempSync, writeFileSync, readFileSync, lstatSync, rmSync, realpathSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, lstatSync, realpathSync } from 'node:fs';
 import { join, isAbsolute } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { AgentAdapter, AgentResult, Profile, SubmissionMetadata } from '../../contracts/src/index.ts';
 import { sha256, verifyImage } from '../../core/src/blobs.ts';
 import { requireValue } from '../../core/src/model.ts';
+import { removeOwnedDirectory } from './cleanup.ts';
 import { boundedProcess } from './process.ts';
 import type { Program } from './process.ts';
 export interface CodexPolicy {
@@ -23,14 +24,17 @@ const failure = (code: string, unknown = false): AgentResult => ({ status: unkno
   contentMarkdown: '', artifacts: [], errorCode: code });
 export async function inspectCodex(program: Program, workspace: string): Promise<string> {
   const version = await boundedProcess(program, ['--version'], { cwd: workspace, timeoutMs: 5000, maxBytes: 16_384 });
+  await version.settled;
   requireValue(version.code === 0 && !version.stopped && /^codex-cli [a-zA-Z0-9.+-]+$/.test(version.output.trim()), 'CODEX_VERSION_UNAVAILABLE');
   const help = await boundedProcess(program, ['exec', '--help'], { cwd: workspace, timeoutMs: 5000, maxBytes: 65_536 });
+  await help.settled;
   requireValue(help.code === 0 && !help.stopped && ['--image', '--output-last-message', '--sandbox', '--ignore-user-config', '--ignore-rules', '--ephemeral'].every(flag => help.output.includes(flag)), 'CODEX_FLAGS_UNSUPPORTED');
   return version.output.trim();
 }
 /** Registry is constructed by the Worker from local operator config, never from task data. */
 export class CodexAgent implements AgentAdapter {
-  readonly name = 'codex'; readonly version = 'm2-1';
+  readonly name = 'codex'; readonly version = 'm2-2';
+  private active = new Set<Promise<unknown>>();
   private policies: ReadonlyMap<string, { policy: CodexPolicy; profile: Profile }>;
   constructor(policies: readonly CodexPolicy[]) {
     this.policies = new Map(policies.map(original => {
@@ -39,7 +43,22 @@ export class CodexAgent implements AgentAdapter {
     }));
     requireValue(this.policies.size === policies.length, 'DUPLICATE_PROFILE');
   }
-  async execute(task: SubmissionMetadata, profile: Profile, images: readonly Uint8Array[], signal: AbortSignal): Promise<AgentResult> {
+  execute(task: SubmissionMetadata, profile: Profile, images: readonly Uint8Array[], signal: AbortSignal): Promise<AgentResult> {
+    const operation = this.run(task, profile, images, signal);
+    this.active.add(operation);
+    operation.then(() => this.active.delete(operation), () => this.active.delete(operation));
+    return operation;
+  }
+  async settle(): Promise<boolean> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        Promise.allSettled([...this.active]).then(() => true),
+        new Promise<boolean>(resolve => { timer = setTimeout(() => resolve(false), 10_000); }),
+      ]);
+    } finally { if (timer) clearTimeout(timer); }
+  }
+  private async run(task: SubmissionMetadata, profile: Profile, images: readonly Uint8Array[], signal: AbortSignal): Promise<AgentResult> {
     const approved = this.policies.get(`${task.profileId}:${task.profileVersion}`);
     if (!approved || profile.fingerprint !== approved.profile.fingerprint || profile.sandbox !== 'read-only') return failure('UNAPPROVED_PROFILE');
     const { policy } = approved;
@@ -68,6 +87,8 @@ export class CodexAgent implements AgentAdapter {
       const result = await boundedProcess(policy.program, args, { cwd: policy.workspace, input: prompt, signal,
         timeoutMs: Math.floor(profile.timeoutMs * 0.7), maxBytes: 1024 * 1024 });
       launched = result.launched;
+      // A bounded result deadline is not permission to delete files still owned by a live process.
+      await result.settled;
       // Killing a process is not proof that all Agent activity completed; never auto-replay.
       if (result.stopped) return failure(result.overflow ? 'CODEX_LOG_LIMIT' : 'CODEX_INTERRUPTED', launched);
       if (result.code !== 0) return failure('CODEX_EXIT', launched);
@@ -77,6 +98,6 @@ export class CodexAgent implements AgentAdapter {
       requireValue(contentMarkdown.trim().length > 0 && !contentMarkdown.includes('\0'), 'CODEX_OUTPUT_INVALID');
       return { status: 'succeeded', summary: 'Codex analysis completed', contentMarkdown, artifacts: [] };
     } catch { return failure('CODEX_OUTPUT_INVALID', launched); }
-    finally { rmSync(root, { recursive: true, force: true }); }
+    finally { await removeOwnedDirectory(root); }
   }
 }

@@ -191,6 +191,8 @@ export interface Profile {
 export interface AgentAdapter {
   readonly name: string;
   readonly version: string;
+  /** Optional lifecycle barrier: false quarantines the Worker after an unconfirmed stop. */
+  settle?(): Promise<boolean>;
   execute(task: SubmissionMetadata, profile: Profile, images: readonly Uint8Array[], signal: AbortSignal): Promise<AgentResult>;
 }
 export interface LeaseProof {

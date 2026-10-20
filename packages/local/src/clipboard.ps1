@@ -75,7 +75,8 @@ public static class ShotClipboard {
       try { Marshal.Copy(bytes, 0, ptr, bytes.Length); } finally { GlobalUnlock(handle); }
       Lock();
       try {
-        if (expected != null && GetClipboardSequenceNumber().ToString() != expected) return false;
+        // PowerShell coerces $null to an empty string for a C# string parameter.
+        if (!String.IsNullOrEmpty(expected) && GetClipboardSequenceNumber().ToString() != expected) return false;
         if (!EmptyClipboard() || SetClipboardData(13, handle) == IntPtr.Zero) throw new Exception("CLIPBOARD_WRITE");
         owned = false; return true;
       } finally { CloseClipboard(); }

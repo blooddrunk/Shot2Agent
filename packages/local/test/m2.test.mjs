@@ -7,9 +7,12 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { setInterval, clearInterval } from 'node:timers';
 import sharp from 'sharp';
+import { openCore } from '../../core/src/core.ts';
+import { runOnce } from '../../worker/src/worker.ts';
 import { LocalApp, readImageFile } from '../src/app.ts';
 import { atomicSave, deliver } from '../src/delivery.ts';
 import { FakeAgent, FAKE_PROFILE } from '../../worker/src/fake.ts';
+import { removeOwnedDirectory } from '../../worker/src/cleanup.ts';
 import { CodexAgent, codexProfile, inspectCodex } from '../../worker/src/codex.ts';
 import { sha256, verifyImage } from '../../core/src/blobs.ts';
 import { IMAGE_LIMITS } from '../../contracts/src/index.ts';
@@ -150,7 +153,7 @@ for (const mode of ['success', 'exit', 'huge', 'invalid', 'missing', 'hang', 'tr
     }
     assert.equal(invocation.args.at(-1), '-'); assert.ok(invocation.prompt.includes('untrusted evidence'));
     assert.equal(JSON.stringify(task).includes('PRIVATE_SECRET'), false);
-  } finally { app.close(); rmSync(dir, { recursive: true, force: true }); }
+  } finally { app.close(); await removeOwnedDirectory(dir); }
 });
 test('Codex refuses task-selected policy, changed version, unavailable binary and pre-aborted execution', async () => {
   const dir = root(); writeFileSync(join(dir, 'mode'), 'success'); const approved = policy(dir);
@@ -227,13 +230,24 @@ test('Windows native helper synthetic DIB capture, Unicode copy and atomic seque
   const { WindowsClipboard } = await import('../src/clipboard.ts');
   const seed = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Sta', '-Command', "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $b=New-Object System.Drawing.Bitmap(32,32); $g=[System.Drawing.Graphics]::FromImage($b); $g.Clear([System.Drawing.Color]::CornflowerBlue); [System.Windows.Forms.Clipboard]::SetImage($b); $g.Dispose(); $b.Dispose()"], { encoding: 'utf8', windowsHide: true, timeout: 15000 });
   assert.equal(seed.status, 0, seed.stderr);
-  const clipboard = new WindowsClipboard();
+  const clipboard = new WindowsClipboard(); const dir = root();
+  const app = new LocalApp(dir, new FakeAgent(), FAKE_PROFILE, { clipboard: 'manual' }, clipboard);
   try {
+    await app.observe(false);
     const image = await clipboard.readImage(); assert.ok(image); await verifyImage(image.bytes, metadata(image.bytes));
     assert.equal(await clipboard.writeText('Synthetic Markdown 中文', image.sequence), true);
     assert.equal(await clipboard.writeText('must not overwrite', image.sequence), false);
+    // The null/empty PowerShell binding bug only affects unconditional writes, not Smart writes.
+    assert.equal(await clipboard.writeText('Manual Copy text 中文'), true);
+    assert.equal(await clipboard.writeText('Always mode text'), true);
     assert.equal(await clipboard.readImage(), undefined);
-  } finally { clipboard.close(); }
+    // Confirm the staged native screenshot after clipboard command text has replaced it.
+    const id = await app.capture(); assert.ok(id); await app.work(); await app.copy(id);
+    assert.equal(app.state.get(id, 'clipboard').status, 'succeeded');
+    const readback = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Sta', '-Command',
+      "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false); Add-Type -AssemblyName System.Windows.Forms; [Console]::Write([System.Windows.Forms.Clipboard]::GetText())"], { encoding: 'utf8', windowsHide: true, timeout: 15000 });
+    assert.equal(readback.status, 0, readback.stderr); assert.equal(readback.stdout, app.get(id).result.contentMarkdown);
+  } finally { app.close(); await removeOwnedDirectory(dir); }
 });
 
 test('animated WEBP and excessive dimensions are refused before task publication', async () => {
@@ -273,4 +287,60 @@ test('metadata byte limits accept exact 20 MiB/image and 60 MiB/task, reject one
   assert.equal(validateSubmissionMetadata(input).ok, true);
   assert.equal(validateSubmissionMetadata({ ...input, images: [{ ...image, byteSize: image.byteSize + 1 }] }).ok, false);
   assert.equal(validateSubmissionMetadata({ ...input, images: [...input.images, { ...image, byteSize: 1 }] }).ok, false);
+});
+test('confirmation retains the observed screenshot after command text replaces the clipboard', async () => {
+  const dir = root(); const clipboard = new Clipboard(); clipboard.image = await fixture();
+  const app = new LocalApp(dir, new FakeAgent(), FAKE_PROFILE, { clipboard: 'smart' }, clipboard);
+  try {
+    await app.observe(false); assert.equal(app.list().length, 0);
+    clipboard.userText('submit'); await app.observe(false);
+    const id = await app.capture(); assert.ok(id); assert.equal(app.lastCaptureStatus, 'queued');
+    await app.work(); assert.equal(app.get(id).status, 'succeeded');
+    assert.equal(clipboard.text, 'submit'); assert.equal(app.state.get(id, 'clipboard').status, 'blocked_by_clipboard_change');
+    assert.equal(await app.capture(), undefined); assert.equal(app.lastCaptureStatus, 'no_image');
+    clipboard.image = await fixture(); clipboard.seq++;
+    assert.equal(await app.capture(), undefined); assert.equal(app.lastCaptureStatus, 'duplicate');
+  } finally { app.close(); await removeOwnedDirectory(dir); }
+});
+test('current clipboard fallback does not silently submit a pending image; newest screenshot replaces pending', async () => {
+  const dir = root(); const clipboard = new Clipboard(); const first = await fixture(); clipboard.image = first;
+  const app = new LocalApp(dir, new FakeAgent(), FAKE_PROFILE, { clipboard: 'off' }, clipboard);
+  try {
+    await app.observe(false); clipboard.userText('new text');
+    assert.equal(await app.capture(false, true), undefined); assert.equal(app.lastCaptureStatus, 'no_image');
+    const second = await sharp(first).negate().png().toBuffer(); clipboard.image = second; clipboard.seq++;
+    await app.observe(false); const id = await app.capture();
+    assert.equal(app.get(id).submission.images[0].sha256, sha256(second)); assert.equal(app.list().length, 1);
+  } finally { app.close(); await removeOwnedDirectory(dir); }
+});
+test('unconfirmed adapter cleanup leaves execution unknown and quarantines further Local claims', async () => {
+  const dir = root(); let executions = 0;
+  const adapter = { name: 'fake', version: '1', execute: async () => {
+    executions++; return { status: 'execution_unknown', summary: 'stop unconfirmed', contentMarkdown: '', artifacts: [] };
+  }, settle: async () => false };
+  const app = new LocalApp(dir, adapter, FAKE_PROFILE, { clipboard: 'off' });
+  try {
+    const first = await app.submit(await fixture()); const second = await app.submit(await fixture(), undefined, true);
+    await assert.rejects(app.work(), /AGENT_STOP_UNCONFIRMED/);
+    assert.equal(app.get(first).status, 'execution_unknown'); assert.equal(app.get(second).status, 'queued');
+    assert.equal(await app.work(), false); assert.equal(executions, 1);
+  } finally { app.close(); await removeOwnedDirectory(dir); }
+});
+test('Worker deadline records unknown but awaits adapter cleanup before releasing its workspace', async () => {
+  const dir = root(); let cleanupFinished = false;
+  let active;
+  const adapter = { name: 'fake', version: '1', execute: () => {
+    active = new Promise(resolve => setTimeout(() => { cleanupFinished = true; resolve({ status: 'succeeded', summary: 'late', contentMarkdown: '', artifacts: [] }); }, 400));
+    return active;
+  }, settle: async () => { await active; return true; } };
+  // Coordinator expiry has independent coverage; isolate Worker deadline/cleanup ordering from disk speed.
+  const core = openCore(dir, 'local', () => 1_000_000);
+  const identity = { ownerId: 'owner', deviceId: 'local-pc' }; const id = '12345678-1234-4234-8234-123456789012';
+  try {
+    const bytes = await fixture();
+    await core.submit(identity, id, { taskId: id, profileId: FAKE_PROFILE.id, profileVersion: FAKE_PROFILE.version, images: [metadata(bytes)] }, [bytes]);
+    await runOnce(core.worker(identity), adapter, [{ ...FAKE_PROFILE, timeoutMs: 100 }]);
+    assert.equal(cleanupFinished, true); assert.equal(core.get(identity.ownerId, id).status, 'execution_unknown');
+    assert.equal(core.get(identity.ownerId, id).attempts.length, 1);
+  } finally { core.close(); await removeOwnedDirectory(dir); }
 });

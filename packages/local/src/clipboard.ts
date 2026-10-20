@@ -57,6 +57,7 @@ export class WindowsClipboard implements ClipboardPort {
     return { sequence: result.sequence, bytes: Buffer.from(result.data, 'base64') };
   }
   async writeText(text: string, expected?: string): Promise<boolean> {
+    requireValue(expected === undefined || /^\d{1,10}$/.test(expected), 'INVALID_CLIPBOARD_SEQUENCE');
     requireValue(Buffer.byteLength(text) <= 400_000, 'CLIPBOARD_TEXT_LIMIT');
     return (await this.request({ op: 'write', text, expected: expected ?? null })).written === true;
   }

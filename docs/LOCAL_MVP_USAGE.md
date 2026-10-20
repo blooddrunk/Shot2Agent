@@ -24,7 +24,7 @@ node .\dist\apps\cli\src\mvp.js init --root $fakeRoot --adapter fake --clipboard
 node .\dist\apps\cli\src\mvp.js watch --root $fakeRoot
 ```
 
-用 `Win+Shift+S` 截取一张**合成测试文字**图片。回到控制台输入 `submit` 回车，这是确认操作；`Image detected` 本身不会上传或创建任务。记下返回的 UUID。Worker 自动处理，输入：
+用 `Win+Shift+S` 截取一张**合成测试文字**图片。回到控制台输入 `submit` 回车，这是确认操作；`Image staged` 只将最近一张图暂存在内存，不上传或创建任务。之后复制命令文本不会丢失这张待确认图。`current` 明确重新读取当前剪切板；新截图会替换上一张未提交图。退出后未提交的暂存图不保留。记下返回的 UUID。Worker 自动处理，输入：
 
 ```text
 list
@@ -58,9 +58,30 @@ node .\dist\apps\cli\src\mvp.js watch --root $localRoot
 
 独立原生安装用 `--codex 'C:\实际路径\codex.exe'`；非标准 npm 布局可用 `--codex 'C:\实际路径\node.exe' --codex-script 'C:\实际路径\codex.js'`。禁止 `.bat/.ps1` 包装或 shell 命令。配置只由本机用户控制，不能让任务或截图选择可执行程序/工作目录。
 
-真实路径同样截图后输入 `submit`。返回的 Markdown 应包含合成截图文字。Smart 成功后可直接在记事本粘贴；如果提交后复制了新内容，Smart 必须保留新内容，并在 `delivery UUID` 显示 `blocked_by_clipboard_change`，仍可输入 `copy UUID` 手动复制结果。
+真实路径同样截图后输入 `submit` 确认最近暂存的图片。返回的 Markdown 应包含合成截图文字。Smart 成功后可直接在记事本粘贴；如果提交后复制了新内容，Smart 必须保留新内容，并在 `delivery UUID` 显示 `blocked_by_clipboard_change`，仍可输入 `copy UUID` 手动复制结果。
 
-`watch --auto` 是**显式开启新图片自动提交/上传云端 Codex**；默认未开启。此时可最小化控制台，在其他程序截图等待结果后粘贴。保持 watcher 的标准输入打开；关闭控制台会停止 watcher。没有后台常驻 Windows 服务。自动模式会检查启动时当前剪切板的图片一次。相同编码图片 5 秒内去重，之后新的剪切板事件可以再次提交；`submit --force` 用于明确重做，watch 中固定采用启动时的 `--force` 选项。失败/未知任务绝不自动重做。
+`watch --auto` 是**显式开启新图片自动提交/上传云端 Codex**；默认未开启。此时可最小化控制台，在其他程序截图等待结果后粘贴。保持 watcher 的标准输入打开；关闭控制台会停止 watcher。没有后台常驻 Windows 服务。`submit` 输出 `queued | no_image | duplicate | capture_in_progress` 区分结果，不再只给出空 UUID。自动模式会检查启动时当前剪切板的图片一次。相同编码图片 5 秒内去重，之后新的剪切板事件可以再次提交；`submit --force` 用于明确重做，watch 中固定采用启动时的 `--force` 选项。失败/未知任务绝不自动重做。
+
+## Codex App、Windows CLI 与 WSL
+
+**不用把 Codex App 从 WSL 改成 Native。** 本项目当前适配器在 Windows Node 下直接启动 Windows Codex CLI；App 可以继续在 WSL 执行其他项目。安装 App 或在 WSL 中已有 `codex`，不等于 PowerShell 能解析到 Windows `codex`。本轮不增加 `wsl.exe` 转发和路径映射。
+
+在普通 Windows PowerShell 中单独安装/检查 CLI（使用 `.cmd` 可避开同名 `.ps1` 包装的执行策略问题）：
+
+```powershell
+npm.cmd install -g @openai/codex
+# 如当前窗口仍找不到命令，可直接使用实际 npm 全局前缀，不必切换 App 或修改系统 PATH：
+$npmPrefix = (npm.cmd prefix -g).Trim()
+$codexPath = Join-Path $npmPrefix 'codex.cmd'
+Test-Path $codexPath
+& $codexPath --version
+& $codexPath login status
+# 仅在尚未登录时执行：
+& $codexPath login
+& $codexPath exec --help
+```
+
+随后把 `$codexPath` 传给上文 `init --codex`。如果使用原生 exe 安装则传该 exe 的绝对路径。先运行 `login status` 判断登录状态，不假设 WSL 的认证自动共享，也不要复制 token 文件。App 的 Agent 环境与终端类型可独立选择；默认 Windows Codex home 为 `%USERPROFILE%\.codex`，WSL CLI 默认使用 Linux home。[官方 Windows/App 说明](https://developers.openai.com/codex/app/windows)、[CLI 安装入口](https://developers.openai.com/codex/cli)。
 
 ## 单次命令与配置
 
@@ -95,7 +116,7 @@ Smart 基线绑定当前 helper 生命周期，**重启或另一个 CLI 进程�
 
 Adapter 使用参数数组、`shell:false`、隐藏子窗口、只读 sandbox、`approval_policy=never`、关闭 shell tool、忽略用户配置和 rules、ephemeral 会话；不提供任何权限升级或失败后宽松重试。Windows 固定请求 `windows.sandbox="unelevated"` 的受限令牌沙箱，避免自动管理员配置；若组织策略/CLI 不支持则任务拒绝或未知，绝不退回无沙箱。[OpenAI Windows 沙箱说明](https://developers.openai.com/codex/windows) 说明其限制；这里不承诺文件读取隔离或模型完全服从截图防注入提示。请使用专用空白 workspace，无额外项目配置/MCP、账号材料或敏感文件。[CLI 参数](https://developers.openai.com/codex/cli/reference) 与 [非交互执行](https://developers.openai.com/codex/noninteractive) 用于核对图片和最终输出选项。
 
-主程序不打印 child stdout/stderr、凭据、图片或结果作诊断；`show`/`copy` 是用户主动读取内容。子进程只继承运行、Codex 登录、代理和证书所需的环境变量；不继承任意应用令牌。Codex 模型会收到图片，仍可能需要网络。进程日志总量上限 1 MiB，最终 UTF-8 Markdown 上限 100,000 字节，非零退出/超时/日志溢出/无有效最终文件均保守记未知（未启动则 failed）。POSIX 杀进程组，Windows taskkill `/T /F`；未能确认完整活动结束时不宣称安全重试。
+主程序不打印 child stdout/stderr、凭据、图片或结果作诊断；`show`/`copy` 是用户主动读取内容。子进程只继承运行、Codex 登录、代理和证书所需的环境变量；不继承任意应用令牌。Codex 模型会收到图片，仍可能需要网络。进程日志总量上限 1 MiB，最终 UTF-8 Markdown 上限 100,000 字节，非零退出/超时/日志溢出/无有效最终文件均保守记未知（未启动则 failed）。POSIX 杀进程组，Windows taskkill `/T /F`；结果期限到达不代表进程已退出：Core 先保留 unknown，Worker 继续等待实际进程关闭/清理，最多额外 10 秒，无法确认则暂停后续任务。Windows 私有临时目录在所属进程关闭后进行有限锁重试清理；未能确认完整活动结束时不宣称安全重试。
 
 支持仍图 PNG/JPEG/WEBP（Windows 图像剪切板转换为 PNG），64,000,000 像素、每边 32,768；Core 仍为每图 20 MiB、每任务 60 MiB/20 图。CLI 当前每次提交单图，不提供批量编辑器。全局串行 Core 解码、Sharp 单线程与 32 MiB 缓存限制降低峰值；64 MP 的解码仍可能消耗数百 MiB，请预留内存，非操作系统硬内存隔离。
 
@@ -109,6 +130,8 @@ Adapter 使用参数数组、`shell:false`、隐藏子窗口、只读 sandbox、
 | `CODEX_FLAGS_UNSUPPORTED` / `CODEX_VERSION_CHANGED` / `CODEX_PREFLIGHT` | `codex --version`、`codex exec --help`、`codex login status`、`doctor`；修复路径/兼容版本/认证 | 不加入 bypass/full-access 参数 |
 | `CODEX_EXIT` / `execution_unknown` | 先检查认证、workspace、进程是否还活着；不要自动再次提交 | 原任务保留，确认停机后才人工建新任务 |
 | `CLIPBOARD_UNAVAILABLE_OR_OVERSIZED` | 在登录桌面重试 `submit`，关闭占用剪切板的软件；检查图像大小 | helper 有 6 次短退避，序列监听失败下次再试；不会清空图像 |
+| `COPY_FAILED` / Copy text 失败 | 更新至本次修复并重新 build，退出旧 watcher 再启动；用旧 UUID 的 show / copy 验证，无需重新截图 | 修复了 PowerShell 把空期望序列号转换为字符串导致手动 Copy/Always 拒绝的缺陷 |
+| `AGENT_STOP_UNCONFIRMED` | 检查并停止上一个 Agent 后再重启 Worker；不要自动重放未知任务 | 当前接收进程暂停后续领取，history/copy 仍可操作 |
 | helper 无法启动 | 运行 Windows PowerShell 5.1；检查组织执行策略、Add-Type、System.Drawing；按本机政策允许此受审脚本 | 不自动绕过执行策略；`file` 仍可验证 Agent |
 | Smart 无自动结果 | `delivery UUID` 检查新复制/重启/文件任务导致的 blocked | 用 `copy UUID`；不要改为 always 规避冲突保护 |
 | save failed | 检查磁盘空间、目录 ACL、已有文件内容、路径符号链接；修复配置后 `retry-delivery UUID` | 不重复执行 Agent；clipboard 与历史继续可用 |

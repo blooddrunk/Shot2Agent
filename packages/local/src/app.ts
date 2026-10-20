@@ -7,7 +7,7 @@ import { requireValue } from '../../core/src/model.ts';
 import type { AgentAdapter, ImageContentType, Profile } from '../../contracts/src/index.ts';
 import { IMAGE_LIMITS } from '../../contracts/src/index.ts';
 import { runOnce } from '../../worker/src/worker.ts';
-import type { ClipboardPort } from './clipboard.ts';
+import type { ClipboardImage, ClipboardPort } from './clipboard.ts';
 import { LocalState } from './state.ts';
 import type { Baseline } from './state.ts';
 import { deliver } from './delivery.ts';
@@ -15,6 +15,9 @@ import type { DeliveryConfig } from './delivery.ts';
 export const LOCAL_IDENTITY = { ownerId: 'local-user', deviceId: 'local-pc' };
 export class LocalApp {
   readonly core; readonly state;
+  private pendingImage?: ClipboardImage;
+  lastCaptureStatus: 'queued' | 'no_image' | 'duplicate' | 'capture_in_progress' = 'no_image';
+  private cleanupBlocked = false;
   private working = false; private capturing = false; private lastSequence?: string;
   readonly adapter: AgentAdapter; readonly profile: Profile; readonly config: DeliveryConfig; readonly clipboard?: ClipboardPort;
   constructor(root: string, adapter: AgentAdapter, profile: Profile,
@@ -26,23 +29,29 @@ export class LocalApp {
     const originalHash = sha256(bytes);
     const prepared = await prepareImage(bytes); bytes = prepared.bytes;
     const hash = sha256(bytes);
-    if (!force && this.state.duplicate(hash)) return undefined;
+    if (!force && this.state.duplicate(hash)) { this.lastCaptureStatus = 'duplicate'; return undefined; }
     const info = await sharp(bytes, { limitInputPixels: IMAGE_LIMITS.maxPixels, failOn: 'warning', animated: true }).metadata();
     const contentType = `image/${info.format}` as ImageContentType;
     const taskId = randomUUID();
     // Persist baseline first. A crash cannot publish a task with an unsafe guessed baseline.
-    if (!this.state.capture(taskId, hash, baseline, { originalHash, sentHash: hash, transformation: prepared.transformation, width: info.width, height: info.height }, force)) return undefined;
+    if (!this.state.capture(taskId, hash, baseline, { originalHash, sentHash: hash, transformation: prepared.transformation, width: info.width, height: info.height }, force)) { this.lastCaptureStatus = 'duplicate'; return undefined; }
     try { await this.core.submit(LOCAL_IDENTITY, taskId, { taskId, profileId: this.profile.id, profileVersion: this.profile.version,
       images: [{ fileName: `screenshot.${info.format}`, contentType, byteSize: bytes.length, sha256: hash }] }, [bytes]); } catch (error) { this.state.forgetCapture(taskId); throw error; }
-    return taskId;
+    this.lastCaptureStatus = 'queued'; return taskId;
   }
-  async capture(force = false): Promise<string | undefined> {
+  async capture(force = false, current = false): Promise<string | undefined> {
     requireValue(this.clipboard, 'WINDOWS_CLIPBOARD_REQUIRED');
-    if (this.capturing) return undefined;
+    if (this.capturing) { this.lastCaptureStatus = 'capture_in_progress'; return undefined; }
     this.capturing = true;
     try {
-      const image = await this.clipboard.readImage(); if (!image) return undefined;
-      return await this.submit(image.bytes, { session: this.clipboard.session, sequence: image.sequence }, force);
+      // Confirmation uses the last observed image even if the user has since copied command text.
+      const pendingAtStart = this.pendingImage;
+      const staged = current ? undefined : pendingAtStart;
+      const image = staged ?? await this.clipboard.readImage();
+      if (!image) { this.lastCaptureStatus = 'no_image'; return undefined; }
+      const id = await this.submit(image.bytes, { session: this.clipboard.session, sequence: image.sequence }, force);
+      if (this.pendingImage === pendingAtStart) this.pendingImage = undefined;
+      return id;
     } finally { this.capturing = false; }
   }
   /** Poll only sequence; full image read happens once per change. Text/own writes never submit. */
@@ -52,16 +61,20 @@ export class LocalApp {
     if (sequence === this.lastSequence) return { changed: false, image: false };
     const image = await this.clipboard.readImage();
     // A failed/busy read leaves the sequence unconsumed so a later poll retries.
-    this.lastSequence = sequence;
+    this.lastSequence = image?.sequence ?? sequence;
     if (!image) return { changed: true, image: false };
+    if (!auto) this.pendingImage = image;
     return { changed: true, image: true, ...(auto ? { id: await this.submit(image.bytes, { session: this.clipboard.session, sequence: image.sequence }) } : {}) };
   }
   async work(signal?: AbortSignal): Promise<boolean> {
-    if (this.working) return false; this.working = true;
+    if (this.working || this.cleanupBlocked) return false; this.working = true;
     try {
       const worked = await runOnce(this.core.worker(LOCAL_IDENTITY), this.adapter, [this.profile], 5000, signal);
       for (const task of this.list()) await deliver(task, this.config, this.state, this.clipboard);
       return worked;
+    } catch (error) {
+      if (error instanceof Error && error.message === 'AGENT_STOP_UNCONFIRMED') this.cleanupBlocked = true;
+      throw error;
     } finally { this.working = false; }
   }
   list() {
@@ -83,7 +96,7 @@ export class LocalApp {
     }
   }
   async retryDelivery(id: string): Promise<void> { await deliver(this.get(id), this.config, this.state, this.clipboard, true); }
-  close(): void { this.core.close(); this.state.close(); this.clipboard?.close(); }
+  close(): void { this.pendingImage = undefined; this.core.close(); this.state.close(); this.clipboard?.close(); }
 }
 export function readImageFile(path: string): Buffer {
   const info = lstatSync(path);
