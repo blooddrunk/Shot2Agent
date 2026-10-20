@@ -49,6 +49,8 @@ Automated gate: permissions on every list/detail/artifact endpoint, pagination, 
 
 Optional provider manual gate: using synthetic content, push to a test device; confirm link opens only after login. No real screenshot content in the push payload.
 
+**Optional reverse-delivery proposal:** The capture Windows tray may retrieve completed results back to the originating device, save Markdown/artifacts to a locally approved directory, and optionally copy text or downloaded real files to the interactive Windows clipboard. This is an opt-in extension, not a confirmed mandatory V1 criterion and not part of M1's development gate. See [Return-to-origin proposal](RETURN_DELIVERY_PROPOSAL.md) for clipboard safety, delivery receipts and Windows validation.
+
 ## M5 - Private VPS release hardening
 
 Deliver: repeatable documented deployment, TLS termination, secrets configuration, backups/restore, retention, log sanitization, health checks, resource limits, upgrade/rollback and recovery instructions.
