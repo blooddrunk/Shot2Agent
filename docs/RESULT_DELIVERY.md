@@ -1,5 +1,7 @@
 # Result delivery policy — confirmed V1 behavior
 
+> M2-L update (2026-10-20): M2-L implements Local text clipboard (manual/Smart/explicit Always), independent atomic Markdown save, persistent per-channel reservations/outcomes and explicit delivery-only retry. Local history is always retained. Remote push, CF_HDROP/files, toast and Remote receiver remain planned. See [Local operation](LOCAL_MVP_USAGE.md). The older M3/M4 ordering below is superseded only for this Local slice.
+
 **Status:** confirmed product behavior as of 2026-10-20. Planned implementation during M3 (Windows-native primitives), M4 (delivery orchestration and UI), M5 (real-device reliability). **Not implemented yet.** M1 handoff is unchanged.
 
 ## Outcome

@@ -1,6 +1,6 @@
 # M2-L: Local-first runnable MVP (2026-10-20)
 
-Status: **implementation goal, not delivered functionality**. M1 is merged as PR #1 (squash commit `2a96212bf15005746f3ee7ef4d170a4c738a88c9`). This document supersedes the *ordering* (not the eventual product scope) of M2–M5 in ROADMAP.md. The target is **one coding-agent development round for an executable Local MVP**, then **one short stabilization/release round if needed**. Remote/VPS/push/full batch editor are deferred.
+Status: **Local CLI implementation delivered for review; Windows interactive MVP acceptance pending**. See [usage and manual checklist](LOCAL_MVP_USAGE.md) and [executed verification](M2_VALIDATION.md). M1 is merged as PR #1 (squash commit `2a96212bf15005746f3ee7ef4d170a4c738a88c9`). This document supersedes the *ordering* (not the eventual product scope) of M2–M5 in ROADMAP.md. The target is **one coding-agent development round for an executable Local MVP**, then **one short stabilization/release round if needed**. Remote/VPS/push/full batch editor are deferred.
 
 ## User-visible MVP acceptance
 

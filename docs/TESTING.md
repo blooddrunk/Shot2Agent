@@ -1,5 +1,7 @@
 # Validation policy and explicit manual smoke steps
 
+> M2-L update (2026-10-20): M2-L adds process-backed mock Codex, clipboard abstraction, image pixel/byte/provenance, independent delivery and fresh-cwd compiled smoke coverage. `npm run check` runs all tests/build/smoke; Windows CI also opts into synthetic native clipboard helper testing. Neither CI nor WSL real Codex proves a Windows user workflow/focus. Follow [Windows commands and acceptance table](LOCAL_MVP_USAGE.md) and [executed evidence](M2_VALIDATION.md).
+
 ## Automation first
 
 **Local/Remote conformance gate:** Run the same Fake Agent task fixtures against direct Local-mode task core (no Relay URL, HTTP service or VPS) and Remote-mode authenticated HTTP Relay adapter. Assert task/status/result equivalence, private result access, durable queue after restart, zero Relay calls in Local mode and no mode-switch migration or leak.

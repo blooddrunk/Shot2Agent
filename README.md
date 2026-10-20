@@ -4,7 +4,7 @@
 
 Shot2Agent is a screenshot-driven, asynchronous agent task system. **Local mode** lets one Windows PC capture, process and return screenshots without a Relay/VPS. **Remote mode** optionally uses a personal VPS Relay to coordinate capture PC A and Agent PC B. Both modes use the same task contract, Profile model, Agent adapters and result-delivery settings.
 
-> Status: **M1 developer slice**: shared durable SQLite task core, direct Local CLI, optional authenticated loopback Fastify Relay and deterministic Fake Worker. This is not a Windows capture application or production service. See [M1 usage and boundaries](docs/M1.md).
+> Status: **M2-L Local CLI implemented**: Windows clipboard image → SQLite → Fake/real Codex → Markdown/history → manual/Smart clipboard and independent Markdown save. No Relay/VPS/local HTTP needed. Real Codex image analysis passed on WSL; Windows interactive acceptance is still required. Start with [Windows commands, configuration and acceptance](docs/LOCAL_MVP_USAGE.md); see [verification evidence](docs/M2_VALIDATION.md).
 
 ## Confirmed V1 scope
 
@@ -16,7 +16,7 @@ Shot2Agent is a screenshot-driven, asynchronous agent task system. **Local mode*
 - Remote push notifications plus authenticated web task history, Markdown results and artifacts.
 - **Local is the default:** capture and Worker run on the same Windows PC, no Relay service or VPS config needed. Remote is opt-in; the VPS does **not** execute agent code.
 
-## Architecture (M1 core implemented; capture and real Agent pending)
+## Architecture (Local CLI implemented; full tray/Remote delivery deferred)
 
 ```text
 LOCAL (default, no Relay)                   REMOTE (optional Relay)
@@ -32,7 +32,7 @@ Same-PC Worker -> Codex CLI                 Worker on PC B -> Codex CLI
 Local history + optional delivery           Relay result -> history / PC A receiver
 ```
 
-Local mode never requires a Relay URL, a VPS, or a remote upload/download round trip. The hosted Agent model may still need Internet. See [Deployment modes](docs/DEPLOYMENT_MODES.md) and [Architecture](docs/ARCHITECTURE.md). M1 implements the durable core and Fake execution; capture UI, Codex and delivery remain planned.
+Local mode never requires a Relay URL, a VPS, or a remote upload/download round trip. The hosted Agent model may still need Internet. See [Deployment modes](docs/DEPLOYMENT_MODES.md) and [Architecture](docs/ARCHITECTURE.md). M2-L adds a Local CLI/coordinator, native clipboard helper, real Codex adapter and independent Local delivery. Full capture UI and Remote delivery remain planned.
 
 ## Read first
 
@@ -46,6 +46,27 @@ Local mode never requires a Relay URL, a VPS, or a remote upload/download round 
 8. [Decisions and assumptions](docs/DECISIONS.md)
 9. [Result delivery policy](docs/RESULT_DELIVERY.md)
 10. [Instructions for coding agents](AGENTS.md)
+
+## Windows 11 Local MVP quick start
+
+普通用户在 **Windows PowerShell** 运行，先安装 Node 22.16+、Git、pnpm 10.19.0 和已登录的 Codex CLI。完整安装、Fake 离线验证及错误处理见 [Windows 使用指南](docs/LOCAL_MVP_USAGE.md)。在仓库根目录执行：
+
+```powershell
+corepack pnpm install --frozen-lockfile
+npm run check
+codex --version
+codex login status
+$localRoot = Join-Path $env:LOCALAPPDATA 'Shot2Agent-Codex'
+$workspace = Join-Path $env:LOCALAPPDATA 'Shot2Agent-ReadonlyWorkspace'
+$output = Join-Path $env:LOCALAPPDATA 'Shot2Agent-Results'
+New-Item -ItemType Directory -Force $workspace | Out-Null
+$codexPath = (Get-Command codex.cmd -ErrorAction Stop).Source
+node .\dist\apps\cli\src\mvp.js init --root $localRoot --adapter codex --workspace $workspace --codex $codexPath --clipboard smart --save $output
+node .\dist\apps\cli\src\mvp.js doctor --root $localRoot
+node .\dist\apps\cli\src\mvp.js watch --root $localRoot
+```
+
+用 `Win+Shift+S` 截图后在控制台输入 `submit` 确认；输入 `list` 查任务、`show UUID` 读取 Markdown、`copy UUID` 手动复制、`delivery UUID` 查两个通道状态、`quit` 退出。Smart 只在提交后没有新的剪切板操作时自动返回。明确希望自动提交时，在启动 `watch` 命令后加 `--auto`，可最小化控制台继续使用；这会将新图片发给配置的 Agent。`init` 不覆盖已有配置；同一个 watcher 内提交才能保留 Smart 生命周期基线。所有可选通道关闭时仍保留历史。
 
 ## M1 developer checks and Local demo
 
@@ -62,7 +83,7 @@ Local needs no Relay URL, server or Agent credentials. Tests cover both direct L
 
 ## Implementation / deployment status
 
-M1 implements shared task/attempt/result persistence, private verified images, idempotent upload, transactional claims/leases and Fake execution in both modes. **Windows capture/tray, real Codex, clipboard, notifications and production VPS deployment remain unimplemented.** The optional Relay entry binds loopback only; it is an integration harness.
+M1 provides shared task/attempt/result persistence, private verified images, idempotent upload, transactional claims/leases and Fake execution in both modes. M2-L provides clipboard PNG/DIB intake, confirmation/default or opt-in auto submission, version-pinned read-only Codex execution, persistent history, manual/Smart/explicit Always text return, independent atomic Markdown save and delivery retries. **Windows interactive end-to-end acceptance remains unverified; tray/UI, folder watch, batch editor, file clipboard, remote notifications and production VPS deployment remain deferred.** The optional Relay is unchanged and not imported by Local MVP.
 
 ## Security baseline
 

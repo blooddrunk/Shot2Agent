@@ -9,14 +9,16 @@
   },
   "packageManager": "pnpm@10.19.0",
   "scripts": {
-    "test": "node --experimental-strip-types --test packages/contracts/test/*.test.mjs packages/core/test/*.test.mjs",
+    "test": "node --experimental-strip-types --test packages/contracts/test/*.test.mjs packages/core/test/*.test.mjs packages/local/test/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "build": "tsc -p tsconfig.build.json",
-    "check": "npm run lint && npm run typecheck && npm test && npm run build",
+    "build": "tsc -p tsconfig.build.json && node scripts/build.mjs",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build && npm run smoke",
     "local": "node --experimental-strip-types apps/cli/src/local.ts",
     "remote": "node --experimental-strip-types apps/cli/src/remote.ts",
-    "relay": "node --experimental-strip-types services/relay/src/main.ts"
+    "relay": "node --experimental-strip-types services/relay/src/main.ts",
+    "mvp": "node --experimental-strip-types apps/cli/src/mvp.ts",
+    "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
     "@fastify/multipart": "10.1.4",

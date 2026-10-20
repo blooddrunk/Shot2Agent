@@ -1,4 +1,4 @@
-name: M1 checks
+name: Local and Remote checks
 
 on:
   push:
@@ -27,3 +27,5 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: npm run check
+        env:
+          SHOT2AGENT_NATIVE_CLIPBOARD_TEST: ${{ runner.os == 'Windows' && '1' || '0' }}

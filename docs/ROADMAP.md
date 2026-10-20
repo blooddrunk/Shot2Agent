@@ -1,5 +1,7 @@
 # Implementation roadmap: thin vertical slices and gates
 
+> M2-L update (2026-10-20): M2-L Local CLI implementation is present; final Windows interactive acceptance remains a release gate. See [usage](LOCAL_MVP_USAGE.md) and [executed verification](M2_VALIDATION.md). Keep deferred V1 capabilities below; a single bounded stabilization pass should address observed Windows failures, not restart sequential infrastructure milestones.
+
 **Status:** implementation plan. This is not a completion report. Prioritize automated tests and reproducible evidence. Do not use GitHub issues as a prerequisite for this personal project.
 
 ## Guiding constraints
