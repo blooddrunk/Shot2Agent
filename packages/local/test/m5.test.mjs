@@ -122,6 +122,7 @@ for (const mode of ['success', 'error', 'exit', 'invalid', 'missing', 'huge', 'd
   finally { clearInterval(timer); }
   assert.equal(await agent.settle(), true);
   assert.equal(result.status, mode === 'success' ? 'succeeded' : mode === 'auth' ? 'failed' : 'execution_unknown', result.errorCode);
+  if (mode === 'auth') assert.equal(result.errorCode, 'CLAUDE_AUTH_ISOLATION_UNVERIFIED');
   assert.equal(JSON.stringify(result).includes('PRIVATE_SECRET'), false);
   if (mode !== 'auth') {
     const invocation = JSON.parse(readFileSync(join(workspace, 'invocation.json'), 'utf8'));

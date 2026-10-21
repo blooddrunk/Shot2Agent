@@ -1,4 +1,5 @@
 import { lstatSync, realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import type { AgentAdapter, AgentResult, Profile, SubmissionMetadata } from '../../contracts/src/index.ts';
@@ -35,9 +36,12 @@ export async function assertClaudeIsolation(program: Program, cwd: string): Prom
   }
   assertAbsent(join(homedir(), '.claude', 'remote-settings.json'));
   const powershell = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-  const script = "$ErrorActionPreference='Stop'; try { foreach ($h in @([Microsoft.Win32.RegistryHive]::LocalMachine,[Microsoft.Win32.RegistryHive]::CurrentUser)) { $b=[Microsoft.Win32.RegistryKey]::OpenBaseKey($h,[Microsoft.Win32.RegistryView]::Registry64); try { $k=$b.OpenSubKey('SOFTWARE\\Policies\\ClaudeCode'); if ($null -ne $k) { $k.Dispose(); exit 1 } } finally { $b.Dispose() } }; Write-Output 'absent' } catch { exit 2 }";
-  const policy = await boundedProcess({ executable: powershell, args: [] }, ['-NoProfile', '-NonInteractive', '-Command', script], { cwd: process.env.SystemRoot ?? 'C:\\Windows', timeoutMs: 5000, maxBytes: 16384 }); await policy.settled;
-  requireValue(!policy.stopped && policy.code === 0 && policy.output.trim() === 'absent', 'CLAUDE_MANAGED_POLICY_REFUSED');
+  // Match the existing native helper's finite startup budget. A fixed file avoids
+  // inline-command startup differences; no shell or user-supplied code is involved.
+  const script = fileURLToPath(new URL('./claude-policy.ps1', import.meta.url));
+  const policy = await boundedProcess({ executable: powershell, args: [] }, ['-NoProfile', '-NonInteractive', '-File', script], { cwd: process.env.SystemRoot ?? 'C:\\Windows', timeoutMs: 10000, maxBytes: 16384, provider: 'claude' }); await policy.settled;
+  requireValue(!policy.stopped, 'CLAUDE_POLICY_CHECK_TIMEOUT');
+  requireValue(policy.code === 0 && policy.output.trim() === 'absent', policy.code === 1 ? 'CLAUDE_MANAGED_POLICY_REFUSED' : 'CLAUDE_POLICY_CHECK_UNAVAILABLE');
   const auth = await boundedProcess(program, ['--restricted', '--safe-mode', 'auth', 'status', '--json'], { cwd, timeoutMs: 5000, maxBytes: 16384, provider: 'claude' }); await auth.settled;
   requireValue(auth.code === 0 && !auth.stopped, 'CLAUDE_AUTH_UNVERIFIED');
   const status = JSON.parse(auth.output);

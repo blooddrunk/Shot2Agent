@@ -49,3 +49,9 @@ Final source SHA, CI run links and Windows artifact receipt are recorded in the 
 - **Native Agent selection + foreground focus + actual Smart paste:** NOT VERIFIED. Browser/stub tests and EXE smoke do not prove these. Execute the short affected desktop observations in the same guide. M3 accepted observations and input-method caveat are retained.
 - **Team/Enterprise/API-key Claude, unqualified CLI versions, Linux Claude:** intentionally REFUSED, not supported or silently degraded. No unsupported promise based on finding an executable.
 - **Merged main:** requires the feature PR to be merged and independent main workflows; a successful PR merge-snapshot build is not post-merge main proof.
+
+## Evidence-driven short Windows stabilization
+
+PR-head `18a7aeb` [matrix 39557098173](https://github.com/blooddrunk/Shot2Agent/actions/runs/39557098173) passed Linux Node 22/24 but failed both Windows jobs: 138 PASS / 11 FAIL / 1 POSIX SKIP. Eleven Claude Mock scenarios were refused before launch, each around the 5-second registry-check budget; the earlier single error code did not distinguish timeout from present policy. [Windows package 39557098128](https://github.com/blooddrunk/Shot2Agent/actions/runs/39557098128) independently passed build, Rust tests, packaging and actual EXE smoke at that original source; it does not prove the later correction.
+
+The correction uses a packaged fixed read-only PowerShell file, matching the existing helper's finite 10-second startup budget and system-directory environment. Timeout, unreadable/error and actual policy presence now have distinct safe codes. No policy override, permissive fallback, task replay or broader IPC is added. The timings support a preflight-budget failure; the hosted runner's underlying startup latency is not established by the original logs. A fresh final-head matrix and package are required; old runs are not relabeled PASS.

@@ -22,5 +22,6 @@ try {
   assert.match(run(['list']), /succeeded/); assert.match(run(['show', id]), /Fake result/);
   assert.ok(existsSync(join(dir, 'out', `${id}.md`)));
   assert.ok(existsSync(fileURLToPath(new URL('../dist/packages/local/src/clipboard.ps1', import.meta.url))));
+  assert.ok(existsSync(fileURLToPath(new URL('../dist/packages/worker/src/claude-policy.ps1', import.meta.url))));
   process.stdout.write('PASS compiled fresh-cwd Fake Local smoke: queue, history, atomic Markdown, no network/listener/Relay, helper packaged\n');
 } finally { rmSync(dir, { recursive: true, force: true }); }
