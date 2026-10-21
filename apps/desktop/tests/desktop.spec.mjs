@@ -329,3 +329,27 @@ test("first-run, preview, GLM form and errors have visible states; optional test
   await expect(page.getByText("已丢弃预览，没有创建任务。")).toBeVisible();
   expect(desktop.app.list()).toHaveLength(0);
 });
+
+test("history pages and searches older than the newest 50 tasks", async ({
+  page,
+}) => {
+  await add(page, "codex", "old-assistant");
+  await seedTasks(1);
+  await add(page, "codex", "recent-assistant");
+  await seedTasks(50);
+  await nav(page, "历史记录");
+  await expect(page.locator(".tasks li")).toHaveCount(50);
+  await page.getByRole("button", { name: "下一页", exact: true }).click();
+  await expect(page.locator(".tasks li")).toHaveCount(1);
+  await expect(page.locator(".task-title")).toContainText("old-assistant");
+  await page.getByLabel("搜索历史").fill("old-assistant");
+  await expect(
+    page.getByRole("button", { name: "上一页", exact: true }),
+  ).toBeDisabled();
+  await expect(page.locator(".tasks li")).toHaveCount(1);
+  await page.getByRole("button", { name: "复制结果", exact: true }).click();
+  await expect(page.getByText("已复制结果，可以粘贴。")).toBeVisible();
+  await page.getByRole("button", { name: "删除", exact: true }).click();
+  await expect(page.locator(".tasks li")).toHaveCount(0);
+  expect(desktop.app.list()).toHaveLength(50);
+});

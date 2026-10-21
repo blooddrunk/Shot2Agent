@@ -277,3 +277,19 @@ test('M7 UX editing another assistant preserves default and a running task keeps
     assert.equal(desktop.app.get(id).submission.profileVersion, original.version);
   } finally { release?.(); await work; await desktop.close(); rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('history pagination refuses malformed requests and duplicate assistant names cannot shadow the selected profile', async () => {
+  const dir = root(); const workspace = join(dir, 'workspace'); mkdirSync(workspace); const executable = makeCli(dir, 'codex'); const desktop = makeDesktop(dir);
+  try {
+    await desktop.start();
+    await assert.rejects(desktop.dispatch({ v: 1, command: 'snapshot', offset: -1 }), /INVALID_HISTORY_PAGE/);
+    await assert.rejects(desktop.dispatch({ v: 1, command: 'snapshot', offset: 1.5 }), /INVALID_HISTORY_PAGE/);
+    await assert.rejects(desktop.dispatch({ v: 1, command: 'snapshot', query: 'a'.repeat(201) }), /INVALID_HISTORY_QUERY/);
+    const fields = { provider: 'codex', id: 'my-codex', path: executable, workspace: realpathSync(workspace), prompt: 'Explain image.' };
+    const before = await desktop.dispatch({ v: 1, command: 'create-profile', ...fields });
+    await assert.rejects(desktop.dispatch({ v: 1, command: 'create-profile', ...fields }), /PROFILE_NAME_EXISTS/);
+    const after = await desktop.dispatch({ v: 1, command: 'snapshot', offset: 500, query: 'nothing' });
+    assert.equal(after.profile.profileVersion, before.profile.profileVersion); assert.equal(after.agents.length, 1);
+    assert.equal(after.historyOffset, 0); assert.equal(after.historyTotal, 0);
+  } finally { await desktop.close(); rmSync(dir, { recursive: true, force: true }); }
+});

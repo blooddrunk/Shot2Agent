@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import AppNavigation from "./components/AppNavigation.vue";
@@ -67,6 +67,8 @@ type Snapshot = {
   workspaceSuggestion: string;
   error?: string;
   total: number;
+  historyTotal: number;
+  historyOffset: number;
   pending: string | null;
   captureStatus: string;
   canReviewUnknownHistory: boolean;
@@ -125,6 +127,8 @@ const statusText: Record<string, string> = {
   capture_error: "剪贴板读取暂停 · 可重新连接",
 };
 const errorText: Record<string, string> = {
+  PROFILE_NAME_EXISTS:
+    "这个名称已经存在，请编辑或恢复原助手，或使用另一个名称。",
   CLI_NOT_USABLE: "本机程序暂不可用，请重新检测或选择 Codex / Claude Code。",
   GATEWAY_VISION_NOT_VERIFIED: "图片能力尚未验证，请在 AI 助手中测试连接。",
   INVALID_PROFILE_ID: "名称请使用小写英文字母开头，只包含英文、数字和短横线。",
@@ -204,6 +208,22 @@ const detail = ref<{
 }>();
 const page = ref("home");
 const search = ref("");
+const historyOffset = ref(0);
+function snapshotArgs() {
+  return page.value === "history"
+    ? { offset: historyOffset.value, query: search.value }
+    : {};
+}
+watch([page, search], () => {
+  historyOffset.value = 0;
+  selectedTasks.value = [];
+  void refresh();
+});
+async function historyPage(offset: number) {
+  historyOffset.value = offset;
+  selectedTasks.value = [];
+  await refresh();
+}
 const resultDialog = ref<HTMLDialogElement>();
 const resultTitle = ref<HTMLElement>();
 const resultReturnFocus = ref<HTMLElement>();
@@ -211,15 +231,7 @@ const editor = ref<HTMLDialogElement>();
 const editorTitle = ref<HTMLElement>();
 const returnFocus = ref<HTMLElement>();
 const visibleTasks = computed(() =>
-  (data.value?.tasks ?? [])
-    .filter(
-      (t) =>
-        !search.value ||
-        `${t.summary} ${t.provider} ${t.profileId} ${t.status}`
-          .toLowerCase()
-          .includes(search.value.toLowerCase()),
-    )
-    .slice(0, page.value === "home" ? 3 : undefined),
+  (data.value?.tasks ?? []).slice(0, page.value === "home" ? 3 : undefined),
 );
 const receiptText: Record<string, string> = {
   succeeded: "已完成",
@@ -310,6 +322,8 @@ function chooseDetectedPath() {
 }
 function hydrate(snapshot: Snapshot) {
   data.value = snapshot;
+  if (page.value === "history")
+    historyOffset.value = snapshot.historyOffset ?? 0;
   if (!hotkeyDirty.value) hotkeys.value = { ...snapshot.hotkeys };
   if (!dirty.value) {
     enabled.value = snapshot.settings.enabled;
@@ -343,7 +357,7 @@ async function refresh() {
   if (polling || busy.value) return;
   polling = true;
   try {
-    hydrate((await rpc("snapshot")) as Snapshot);
+    hydrate((await rpc("snapshot", snapshotArgs())) as Snapshot);
     transportError.value = "";
   } catch (e) {
     if (!transportError.value) transportError.value = String(e);
@@ -359,7 +373,12 @@ async function action(command: string, args: Record<string, unknown> = {}) {
   try {
     const result = await rpc(command, args);
     if (command === "detail") detail.value = result as typeof detail.value;
-    else if (command !== "quit") hydrate(result as Snapshot);
+    else if (command !== "quit")
+      hydrate(
+        page.value === "history"
+          ? ((await rpc("snapshot", snapshotArgs())) as Snapshot)
+          : (result as Snapshot),
+      );
     if (command === "create-profile") {
       token.value = "";
       editId.value = "";
@@ -1129,8 +1148,9 @@ onUnmounted(() => clearInterval(timer));
         <label v-if="page === 'history'"
           >搜索历史<input
             type="search"
+            maxlength="200"
             v-model="search"
-            placeholder="搜索摘要、助手或状态"
+            placeholder="搜索全部历史：摘要、助手或状态"
         /></label>
         <div class="section-heading history-heading">
           <h2>
@@ -1172,7 +1192,7 @@ onUnmounted(() => clearInterval(timer));
             {{ data.lastHistoryCleanup.preservedActive }} 个活动任务和
             {{ data.lastHistoryCleanup.preservedUnknown }} 个结果不确定任务。
           </p>
-          <p class="hint" v-if="!data?.tasks.length">
+          <p class="hint" v-if="!data?.total">
             尚无任务。配置 Agent 后开启捕获并应用设置。
           </p>
         </template>
@@ -1294,14 +1314,36 @@ onUnmounted(() => clearInterval(timer));
           查看全部历史 →
         </button>
         <p
-          v-if="
-            page === 'history' && data?.tasks.length && !visibleTasks.length
-          "
+          v-if="page === 'history' && data?.total && !visibleTasks.length"
           class="empty"
         >
           没有匹配的任务，试试其他关键词。
         </p>
       </section>
+      <div
+        v-if="page === 'history' && (data?.historyTotal ?? 0) > 0"
+        class="capture-toolbar"
+        aria-label="历史分页"
+      >
+        <span class="hint"
+          >{{ historyOffset + 1 }}–{{
+            Math.min(historyOffset + 50, data?.historyTotal ?? 0)
+          }}
+          / {{ data?.historyTotal }} 项</span
+        >
+        <button
+          :disabled="busy || historyOffset === 0"
+          @click="historyPage(Math.max(0, historyOffset - 50))"
+        >
+          上一页
+        </button>
+        <button
+          :disabled="busy || historyOffset + 50 >= (data?.historyTotal ?? 0)"
+          @click="historyPage(historyOffset + 50)"
+        >
+          下一页
+        </button>
+      </div>
       <dialog
         ref="resultDialog"
         class="result-dialog"
