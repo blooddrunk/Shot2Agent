@@ -91,6 +91,8 @@ Local needs no Relay URL, server or Agent credentials. Tests cover both direct L
 
 M1 provides shared task/attempt/result persistence, private verified images, idempotent upload, transactional claims/leases and Fake execution in both modes. M2-L provides clipboard PNG/DIB intake, confirmation/default or opt-in auto submission, version-pinned read-only Codex execution, persistent history, manual/Smart/explicit Always text return, independent atomic Markdown save and delivery retries. **The minimum Local loop and six M3 desktop observations have scoped operator acceptance. Smart/input-method interactions and unobserved interruption cases retain explicit limits. The Local tray/UI is implemented; folder watch, batch editor, file clipboard, remote notifications and production VPS deployment remain deferred.** The optional Relay is unchanged and not imported by Local MVP.
 
+**Proposed next slice (not implemented):** [M5-L Local Codex/Claude Code selection and safe executable discovery](docs/M5_LOCAL_AGENT_CHOICE.md). This planning note does not change the current 0.4.1 single-Codex desktop behavior or guarantee Claude Code model execution. It preserves Local-without-Relay and the existing M4 reliability gates.
+
 ## Security baseline
 
 Screenshots in the intended usage may transit the user's optional VPS and reach an approved cloud agent. Local mode does not transfer tasks to Relay, although hosted models may still receive image content. Nonetheless, all task and artifact APIs must be authenticated; screenshot content is treated as untrusted data; worker paths and permissions cannot be chosen by arbitrary remote task input. Secrets, screenshots, output artifacts, and local environment files must not be committed.
