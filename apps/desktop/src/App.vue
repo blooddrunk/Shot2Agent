@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import AppNavigation from "./components/AppNavigation.vue";
+import { loadTheme, saveTheme, type Theme } from "./theme";
 
 type Receipt = {
   status: string;
@@ -52,6 +53,7 @@ type Discovery = {
   status: string;
 };
 type Snapshot = {
+  activity: { running: number; queued: number };
   hotkeys: Hotkeys;
   hotkeyStatus?: string;
   lastAction?: { action: string; status: string };
@@ -162,6 +164,8 @@ const errorText: Record<string, string> = {
     "无法完成 GLM 请求。若刚确认测试，请先不要连续重试；服务端可能已经收到请求。",
   GATEWAY_SYNTHETIC_VISION_FAILED:
     "GLM 未能识别测试图片中的标记；请检查模型是否支持图片输入。",
+  GATEWAY_SYNTHETIC_IMAGE_UNAVAILABLE:
+    "程序包缺少或无法读取测试图片，未发送模型请求。请更新完整 ZIP；现有助手配置保持不变。",
   GATEWAY_SYNTHETIC_TEST_FAILED:
     "GLM 合成图片测试未完成。若刚确认测试，请先不要重复提交；服务端可能已经收到请求。",
   PROFILE_SETTINGS_SAVE_FAILED:
@@ -206,6 +210,22 @@ const detail = ref<{
   gateway?: { endpoint: string; model: string; vision: string };
   result?: { contentMarkdown: string; errorCode?: string };
 }>();
+const theme = ref<Theme>(loadTheme());
+function changeTheme(value: Theme) {
+  theme.value = value;
+  message.value = saveTheme(value)
+    ? `已切换为${value === "dark" ? "深色" : "浅色"}主题。`
+    : "主题已切换，但无法保存外观偏好；下次启动可能恢复默认主题。";
+}
+const workerText = computed(() => {
+  if (!data.value) return "正在连接处理服务";
+  if (data.value.status === "worker_error") return "处理服务已停止";
+  if (data.value.setupRequired) return "等待配置 AI 助手";
+  const activity = data.value.activity;
+  if (activity.running)
+    return `正在处理 ${activity.running} 项${activity.queued ? ` · 排队 ${activity.queued} 项` : ""}`;
+  return activity.queued ? `等待处理 ${activity.queued} 项` : "处理服务空闲";
+});
 const page = ref("home");
 const search = ref("");
 const historyOffset = ref(0);
@@ -752,8 +772,20 @@ onUnmounted(() => clearInterval(timer));
         "
       />
       <div class="sidebar-bottom">
-        <span class="dot active"></span> 本地运行
-        <p class="hint">截图处理 · 结果随手可用</p>
+        <div class="runtime-status" role="status" aria-label="运行状态">
+          <span
+            class="dot"
+            :class="{ active: data?.status === 'monitoring' }"
+          ></span>
+          本地运行
+          <p>
+            {{ data ? statusText[data.status] || data.status : "正在连接…" }}
+          </p>
+          <p>{{ workerText }}</p>
+        </div>
+        <button @click="changeTheme(theme === 'dark' ? 'light' : 'dark')">
+          {{ theme === "dark" ? "切换为浅色主题" : "切换为深色主题" }}
+        </button>
         <button @click="nativeHide">隐藏到托盘</button
         ><button @click="action('quit')" :disabled="busy">退出应用</button>
       </div>
@@ -962,10 +994,16 @@ onUnmounted(() => clearInterval(timer));
             </button>
           </article>
         </details>
-        <details>
+        <details class="cleanup-panel">
           <summary>高级清理</summary>
           <p class="hint">
-            永久删除未被任务引用的旧版本与凭据。已有任务所需的版本会保留。
+            每次编辑助手都会保留一份旧配置，供原有任务使用。这里可以清理不再需要的旧配置和凭据，当前助手和任务仍需使用的配置会保留。
+          </p>
+          <p
+            v-if="!historicalProfiles.length && !removedProfiles.length"
+            class="hint"
+          >
+            没有可列出的旧配置。
           </p>
           <div
             v-for="agent in [...historicalProfiles, ...removedProfiles]"
@@ -973,6 +1011,15 @@ onUnmounted(() => clearInterval(timer));
             class="profile-entry"
           >
             <p>{{ agent.id }} · {{ agent.version }}</p>
+            <p class="hint">
+              {{
+                agent.referenced
+                  ? "已有任务仍需使用，暂时保留。"
+                  : agent.deletable
+                    ? "旧配置已不再使用，可以清理。"
+                    : "此配置仍需保留。"
+              }}
+            </p>
             <button
               v-if="agent.deletable"
               @click="permanentlyDelete(agent)"
@@ -981,9 +1028,19 @@ onUnmounted(() => clearInterval(timer));
               永久删除未引用版本
             </button>
           </div>
-          <button @click="action('cleanup-unused-agents')" :disabled="busy">
-            清理未引用旧版本
-          </button>
+          <div class="cleanup-actions">
+            <button
+              @click="action('cleanup-unused-agents')"
+              :disabled="
+                busy ||
+                ![...historicalProfiles, ...removedProfiles].some(
+                  (agent) => agent.deletable,
+                )
+              "
+            >
+              清理不再使用的旧配置
+            </button>
+          </div>
         </details>
         <button @click="action('discover-agents')" :disabled="busy">
           重新检测本机程序
@@ -994,6 +1051,23 @@ onUnmounted(() => clearInterval(timer));
         class="settings-page"
         aria-label="应用设置"
       >
+        <fieldset class="theme-picker">
+          <legend>外观</legend>
+          <p class="hint">主题立即生效，并在下次打开时保留。</p>
+          <div role="group" aria-label="主题">
+            <button
+              :aria-pressed="theme === 'dark'"
+              @click="changeTheme('dark')"
+            >
+              深色</button
+            ><button
+              :aria-pressed="theme === 'light'"
+              @click="changeTheme('light')"
+            >
+              浅色
+            </button>
+          </div>
+        </fieldset>
         <h2>捕获</h2>
         <form
           @submit.prevent="apply"
@@ -1078,8 +1152,11 @@ onUnmounted(() => clearInterval(timer));
             原生状态：{{ data?.hotkeyStatus || "尚未连接" }}
             <span v-if="hotkeyDirty">· 尚未保存</span>
           </p>
-          <div v-for="item in globalActions" :key="item.id">
+          <p class="hint">立即操作（无需配置快捷键）</p>
+          <div class="quick-actions" role="group" aria-label="立即操作">
             <button
+              v-for="item in globalActions"
+              :key="item.id"
               :disabled="busy || !data"
               @click="action('action', { action: item.id })"
             >
@@ -1202,6 +1279,7 @@ onUnmounted(() => clearInterval(timer));
               <label v-if="page === 'history'" class="check task-check"
                 ><input
                   type="checkbox"
+                  :aria-label="'选择任务 ' + task.id.slice(0, 8)"
                   :checked="selectedTasks.includes(task.id)"
                   :disabled="busy || !isDeletable(task)"
                   @change="
@@ -1209,8 +1287,7 @@ onUnmounted(() => clearInterval(timer));
                       task.id,
                       ($event.target as HTMLInputElement).checked,
                     )
-                  "
-                /><span>选择删除</span></label
+                  " /></label
               ><button
                 class="task-title"
                 @click="openTask(task.id)"

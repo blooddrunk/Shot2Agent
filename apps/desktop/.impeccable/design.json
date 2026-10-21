@@ -11,7 +11,17 @@
         "name": "narrow",
         "value": "560px"
       }
-    ]
+    ],
+    "appearance": {
+      "default": "dark",
+      "variants": [
+        "dark",
+        "light"
+      ],
+      "selector": "html[data-theme]",
+      "storage": "shot2agent.appearance",
+      "behavior": "Shared semantic variables, native color-scheme, immediate switching and local persistence; no Worker reconfiguration."
+    }
   },
   "generatedAt": "2026-10-22T00:00:00+08:00",
   "components": [

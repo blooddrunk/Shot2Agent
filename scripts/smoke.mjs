@@ -25,3 +25,7 @@ try {
   assert.ok(existsSync(fileURLToPath(new URL('../dist/packages/worker/src/claude-policy.ps1', import.meta.url))));
   process.stdout.write('PASS compiled fresh-cwd Fake Local smoke: queue, history, atomic Markdown, no network/listener/Relay, helper packaged\n');
 } finally { rmSync(dir, { recursive: true, force: true }); }
+
+const gatewaySmoke = spawnSync(process.execPath, [fileURLToPath(new URL('./gateway-test-smoke.mjs', import.meta.url))], { encoding: 'utf8', timeout: 15000 });
+assert.equal(gatewaySmoke.status, 0, gatewaySmoke.stderr);
+process.stdout.write(gatewaySmoke.stdout);
