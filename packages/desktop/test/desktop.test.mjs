@@ -2,7 +2,7 @@ import test from 'node:test';
 import { PassThrough } from 'node:stream';
 import { waitForParent } from '../src/protocol.ts';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, readdirSync, mkdirSync, realpathSync, renameSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, readdirSync, mkdirSync, realpathSync, appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -19,7 +19,8 @@ const temp = () => mkdtempSync(join(tmpdir(), 'shot-desktop-'));
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 function host(root = temp(), mode) {
   const fixture = join(root, 'synthetic-clipboard.json'); let seq = 1;
-  const event = (image, extra = {}) => { const temporary = fixture + '.tmp'; writeFileSync(temporary, JSON.stringify({ sequence: String(seq++), image: image?.toString('base64'), ...extra })); renameSync(temporary,fixture); };
+  // Append-only publication avoids replacing a file held by the Windows reader.
+  const event = (image, extra = {}) => appendFileSync(fixture, JSON.stringify({ sequence: String(seq++), image: image?.toString('base64'), ...extra }) + '\n');
   event(png); // Historical image must never create task on startup.
   const child = spawn(process.execPath, ['--experimental-strip-types', fileURLToPath(new URL('./fixture.mjs', import.meta.url)), root, fixture, ...(mode ? [mode] : [])], { stdio: ['pipe','pipe','pipe'], shell: false });
   child.stdin.write('SHOT2AGENT/1\n');
@@ -132,4 +133,16 @@ test('desktop retry settings validated, persisted and shown without exposing exe
   assert.deepEqual((await h.rpc('snapshot')).delivery.retry, retry); await h.close();
   const next = host(h.root); t.after(() => next.child.kill()); s = await next.rpc('snapshot');
   assert.deepEqual(s.delivery.retry, retry); assert.equal(s.total, 0); await next.close();
+});
+
+test('desktop fixture ignores an incomplete appended event until its newline is published', async t => {
+  const h = host(); t.after(() => h.child.kill());
+  await h.rpc('configure', { capture: { enabled: true, mode: 'confirm' } });
+  const event = JSON.stringify({ sequence: '99', image: png2.toString('base64') });
+  const fixture = join(h.root, 'synthetic-clipboard.json'); const middle = Math.floor(event.length / 2);
+  appendFileSync(fixture, event.slice(0, middle));
+  await h.rpc('recover'); // Force a clipboard state read while the final record is incomplete.
+  assert.equal((await h.rpc('snapshot')).pending, null);
+  appendFileSync(fixture, event.slice(middle) + '\n');
+  await h.until(s => !!s.pending); assert.equal((await h.rpc('snapshot')).total, 0); await h.close();
 });
