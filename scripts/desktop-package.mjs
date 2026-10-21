@@ -29,6 +29,6 @@ function copyDependency(name, from, optional = false) {
 }
 copyDependency('sharp', resolve('package.json'));
 writeFileSync(join(out, 'Start acceptance.cmd'), '@echo off\r\nstart "" "%~dp0Shot2Agent.exe" --staging\r\n');
-writeFileSync(join(out, 'BUILD.txt'), `Shot2Agent M3-L 0.3.0\nCommit: ${execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()}\nNode: ${process.version}\nWindows x64 portable developer build. WebView2 required.\nDouble click Shot2Agent.exe (existing Local root) or Start acceptance.cmd (isolated root, Fake delayed 8s).\nClose hides to tray. Tray > Quit Shot2Agent stops coordinator and Agent.\n`);
+writeFileSync(join(out, 'BUILD.txt'), `Shot2Agent M4-L 0.4.0\nCommit: ${execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()}\nNode: ${process.version}\nWindows x64 portable developer build. WebView2 required.\nDouble click Shot2Agent.exe (existing Local root) or Start acceptance.cmd (isolated root, Fake delayed 8s).\nClose hides to tray. Tray > Quit Shot2Agent stops coordinator and Agent.\n`);
 cpSync('docs/M3_WINDOWS_RUN.md', join(out, 'Windows instructions.md'));
 process.stdout.write(`PASS portable layout: ${out}\n`);

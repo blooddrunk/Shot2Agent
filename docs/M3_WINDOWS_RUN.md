@@ -1,4 +1,4 @@
-# Windows Local desktop 0.3.0
+# Windows Local desktop 0.4.0
 
 Portable developer build, Windows 11 x64, logged-in non-elevated session. WebView2 must be installed (included with normal Windows 11). No WSL, Node install, VPS or Relay needed. Keep the whole extracted folder together; the executable needs its adjacent `runtime` directory.
 
@@ -9,6 +9,10 @@ Portable developer build, Windows 11 x64, logged-in non-elevated session. WebVie
 - Closing the window or clicking **隐藏到托盘** hides it. Tray menu **Show Shot2Agent** opens it; **Pause capture / Resume capture** change capture only; **Quit Shot2Agent** stops the coordinator and active Agent. UI **退出** also quits. Pausing leaves queued work running.
 - First run defaults: source off, confirmation, manual clipboard, no file save. Enable **监听剪贴板中的新图片**, choose settings and click **应用设置**. Automatic capture needs **自动提交** plus explicit cloud consent. Settings survive intentional restart; startup only arms against *future* changes, never submits the existing clipboard.
 - **Smart** automatically writes text only if no later clipboard action occurred. Conflict receipt is `blocked_by_clipboard_change`; **复制结果** explicitly copies it. **Always** requires overwrite consent. Markdown saving is independent; enter an absolute local directory. History remains even with all optional channels off.
+
+## Bounded delivery reliability
+
+Open **投递失败重试** to set extra attempts (0 disables), initial backoff and per-channel time budget; click **应用设置**. Defaults preserve zero extra attempts. Each channel shows its own failure code/classification/attempt count/stop reason. `CLIPBOARD_BUSY` may retry; changed session/sequence, ambiguous write, permission and file conflict stop. Smart never resets its original baseline. A helper timeout stops the helper: quit/relaunch if reconnect cannot re-arm. Delivery retry never reruns Codex. Use a normal local NTFS directory; unsupported atomic hard-link publication fails safely. See [M4 reliability](M4_LOCAL_RELIABILITY.md) and [current validation](M4_VALIDATION.md).
 
 ## Existing approved Codex profile
 

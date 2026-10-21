@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, readdirSy
 import { tmpdir } from 'node:os';
 import { join, resolve, isAbsolute } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { setInterval, clearInterval } from 'node:timers';
 import sharp from 'sharp';
 import { openCore } from '../../core/src/core.ts';
@@ -247,6 +247,24 @@ test('Windows native helper synthetic DIB capture, Unicode copy and atomic seque
     const readback = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Sta', '-Command',
       "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false); Add-Type -AssemblyName System.Windows.Forms; [Console]::Write([System.Windows.Forms.Clipboard]::GetText())"], { encoding: 'utf8', windowsHide: true, timeout: 15000 });
     assert.equal(readback.status, 0, readback.stderr); assert.equal(readback.stdout, app.get(id).result.contentMarkdown);
+    // Hold the native clipboard lock in a separate bounded process. The write must
+    // report known pre-write contention, then recover without hidden helper replay.
+    const holder = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `
+      Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class LockClipboard { [DllImport("user32.dll")] public static extern bool OpenClipboard(IntPtr owner); [DllImport("user32.dll")] public static extern bool CloseClipboard(); }';
+      if (-not [LockClipboard]::OpenClipboard([IntPtr]::Zero)) { exit 2 };
+      try { [Console]::WriteLine('LOCKED'); Start-Sleep -Seconds 2 } finally { [LockClipboard]::CloseClipboard() | Out-Null }
+    `], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'], timeout: 15000 });
+    const exited = new Promise(resolve => holder.once('close', resolve));
+    try {
+      await new Promise((resolve, reject) => {
+        holder.stdout.once('data', data => data.toString().includes('LOCKED') ? resolve() : reject(Error('LOCK_NOT_READY')));
+        holder.once('error', reject); holder.once('exit', code => { if (code) reject(Error('LOCK_FAILED')); });
+      });
+      await assert.rejects(clipboard.writeText('synthetic contention probe'), /CLIPBOARD_BUSY/);
+      assert.equal(await exited, 0);
+      assert.equal(await clipboard.writeText('synthetic contention recovered'), true);
+    } finally { holder.kill(); }
+
   } finally { app.close(); await removeOwnedDirectory(dir); }
 });
 
@@ -343,4 +361,18 @@ test('Worker deadline records unknown but awaits adapter cleanup before releasin
     assert.equal(cleanupFinished, true); assert.equal(core.get(identity.ownerId, id).status, 'execution_unknown');
     assert.equal(core.get(identity.ownerId, id).attempts.length, 1);
   } finally { core.close(); await removeOwnedDirectory(dir); }
+});
+
+test('manual Copy refuses a pending delivery without replacing its receipt', async () => {
+  const dir = root(); const clipboard = new Clipboard();
+  const app = new LocalApp(dir, new FakeAgent(), FAKE_PROFILE, { clipboard: 'manual' }, clipboard);
+  try {
+    const id = await app.submit(await fixture()); await app.work();
+    app.state.put(id, 'clipboard', { status: 'pending', attempts: 4 });
+    await assert.rejects(app.copy(id), /DELIVERY_IN_PROGRESS/);
+    assert.equal(clipboard.writes, 0); assert.deepEqual(app.state.get(id, 'clipboard'), { status: 'pending', attempts: 4 });
+    const history = [{ attempt: 4, at: 1, elapsedMs: 2, code: 'CLIPBOARD_BUSY', classification: 'transient' }];
+    app.state.put(id, 'clipboard', { status: 'failed', attempts: 4, history });
+    await app.copy(id); assert.equal(clipboard.writes, 1); assert.deepEqual(app.state.get(id, 'clipboard').history, history);
+  } finally { app.close(); rmSync(dir, { recursive: true, force: true }); }
 });

@@ -8,7 +8,9 @@ import { WindowsClipboard } from '../../local/src/clipboard.ts';
 const root = resolve(process.argv[2] ?? join(process.env.LOCALAPPDATA ?? homedir(), 'Shot2Agent'));
 // Rust assigns the child to a kill-on-close Windows Job before releasing this gate.
 // No helper/Agent can be launched before containment is active.
+process.stderr.write('PHASE_PARENT_GATE\n');
 await waitForParent(process.stdin);
+process.stderr.write('PHASE_COORDINATOR_INIT\n');
 let desktop: DesktopController | undefined;
 try {
   const fake = new FakeAgent();
@@ -21,7 +23,9 @@ try {
       return fake.execute(task, profile, images, signal);
     } },
   } : undefined);
+  process.stderr.write('PHASE_CLIPBOARD_START\n');
   await desktop.start();
+  process.stderr.write('PHASE_SERVING\n');
   const finish = serve(desktop, process.stdin, process.stdout);
   process.on('SIGTERM', () => { void finish(); }); process.on('SIGINT', () => { void finish(); });
 } catch (error) {

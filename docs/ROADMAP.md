@@ -92,3 +92,7 @@ Mandatory limited manual proof: real VPS DNS/TLS, full cross-device upload, unpl
 ## Proposed bounded Local reliability follow-up
 
 The operator's 2026-10-21 feedback requests discussion of configurable retries for delivery and Agent generation. Existing fixed native retries and explicit delivery-only retry remain implemented; configurable limits/backoff and explicit Agent rerun controls remain proposed. See [classification and boundaries](RESULT_DELIVERY.md#local-retry-policy-current-behavior-and-proposal). Preserve Smart conflict protection, durable independent channels and `execution_unknown` no-auto-replay. This is a bounded reliability proposal, not a new Remote/infrastructure milestone or an implemented feature.
+
+## M4-L Local reliability / Windows release gate
+
+The bounded 0.4.0 slice implements no-clobber Markdown publication, independent bounded delivery retries, safe clipboard/IPC diagnostics and restart receipts. Agent rerun UI is deferred; no possibly launched execution replays automatically. No installer/Remote expansion. See [scope](M4_LOCAL_RELIABILITY.md) and [executed validation](M4_VALIDATION.md); CI/native observations remain separate.

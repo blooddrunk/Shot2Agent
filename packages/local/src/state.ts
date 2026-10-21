@@ -6,7 +6,10 @@ import { requireValue } from '../../core/src/model.ts';
 import { privateDirectory } from '../../core/src/store.ts';
 export interface Baseline { session: string; sequence: string }
 export type DeliveryStatus = 'pending' | 'succeeded' | 'failed' | 'disabled' | 'manual' | 'blocked_by_clipboard_change' | 'interrupted';
-export interface Receipt { status: DeliveryStatus; attempts: number; code?: string }
+export interface Receipt { status: DeliveryStatus; attempts: number; code?: string;
+  smartGuard?: boolean;
+  classification?: 'transient' | 'permanent' | 'conflict' | 'ambiguous'; stopReason?: string;
+  history?: { attempt: number; at: number; elapsedMs: number; code: string; classification: string }[] }
 export class LocalState {
   private db: DatabaseSync;
   private workerToken = randomUUID();
@@ -51,8 +54,9 @@ export class LocalState {
     this.db.exec('BEGIN IMMEDIATE');
     try {
       const previous = this.get(task, channel);
-      if (previous && (!retry || previous.status === 'succeeded')) { this.db.exec('COMMIT'); return undefined; }
-      const receipt: Receipt = { status: 'pending', attempts: (previous?.attempts ?? 0) + 1 };
+      if (previous && (!retry || previous.status === 'succeeded' || previous.status === 'pending')) { this.db.exec('COMMIT'); return undefined; }
+      const receipt: Receipt = { status: 'pending', attempts: (previous?.attempts ?? 0) + 1, history: previous?.history,
+        smartGuard: channel === 'clipboard' && previous ? previous.smartGuard ?? !!this.baseline(task) : undefined };
       this.put(task, channel, receipt); this.db.exec('COMMIT'); return receipt;
     } catch (e) { this.db.exec('ROLLBACK'); throw e; }
   }
@@ -64,6 +68,13 @@ export class LocalState {
         let alive = true;
         try { process.kill(Number(old.pid), 0); } catch (e) { alive = (e as NodeJS.ErrnoException).code !== 'ESRCH'; }
         requireValue(!alive, 'LOCAL_WORKER_ALREADY_RUNNING');
+      }
+      if (!old || old.token !== this.workerToken) {
+        for (const row of this.db.prepare('SELECT task,channel,record FROM delivery').all()) {
+          const record = JSON.parse(row.record as string) as Receipt;
+          if (record.status === 'pending') this.put(row.task as string, row.channel as string,
+            { ...record, status: 'interrupted', code: 'DELIVERY_INTERRUPTED', classification: 'ambiguous', stopReason: 'restart_no_replay' });
+        }
       }
       this.db.prepare('INSERT INTO local_worker VALUES (1,?,?) ON CONFLICT(slot) DO UPDATE SET pid=excluded.pid,token=excluded.token').run(process.pid, this.workerToken);
       this.db.exec('COMMIT');

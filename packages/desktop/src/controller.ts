@@ -54,7 +54,7 @@ export class DesktopController {
           if (r[key] !== undefined) { requireValue(typeof r[key] === 'boolean', 'INVALID_CONSENT'); next.desktop[key] = r[key]; }
         }
         if (r.delivery !== undefined) {
-          requireValue(r.delivery && typeof r.delivery === 'object' && !Array.isArray(r.delivery) && Object.keys(r.delivery).every(k => ['clipboard', 'saveDirectory'].includes(k)), 'INVALID_DELIVERY_SETTINGS');
+          requireValue(r.delivery && typeof r.delivery === 'object' && !Array.isArray(r.delivery) && Object.keys(r.delivery).every(k => ['clipboard', 'saveDirectory', 'retry'].includes(k)), 'INVALID_DELIVERY_SETTINGS');
           next.delivery = r.delivery as Settings['delivery'];
         }
         validate(next);

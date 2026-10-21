@@ -1,3 +1,5 @@
+> Historical M3 evidence below is retained at its original scope. M3 PR #3 merged at `077f90a`; M4-L 0.4.0 reliability and current automated Windows gate are recorded in [M4 validation](M4_VALIDATION.md). No new M4 interactive/real-Codex acceptance is inferred.
+
 # M3-L verification — 2026-10-20
 
 Implementation: Windows Local Tauri 2/Vue 3 shell over the existing LocalApp, SQLite, Windows helper and Codex adapter. No HTTP server/Relay. See [Windows run guide](M3_WINDOWS_RUN.md). M2 operator acceptance is preserved. M3 desktop operator acceptance is recorded on 2026-10-21 below; historical sections retain the verification status at their execution time.

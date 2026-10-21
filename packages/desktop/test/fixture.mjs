@@ -14,7 +14,13 @@ for (const mod of [net, http, https]) {
 }
 globalThis.fetch = () => { throw Error('NETWORK_DENIED'); };
 const [root, fixture] = process.argv.slice(2); let written;
-const state = () => JSON.parse(readFileSync(fixture, 'utf8'));
+const state = () => {
+  const events = readFileSync(fixture, 'utf8');
+  // A concurrent append may expose a partial final record. Keep the last complete
+  // event until publication of its newline; never rename over an open Windows file.
+  const complete = events.slice(0, events.lastIndexOf('\n'));
+  return JSON.parse(complete.slice(complete.lastIndexOf('\n') + 1));
+};
 const clipboard = { session: String(process.pid),
   async sequence() { return state().sequence; },
   async readImage() { const s = state(); if (s.error) throw Error('CLIPBOARD_HELPER_STOPPED'); return s.image ? { sequence: s.sequence, bytes: Buffer.from(s.image, 'base64') } : undefined; },

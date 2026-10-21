@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use std::{
     io::{BufRead, BufReader, Read, Write},
     process::{Child, ChildStdin, Command, Stdio},
-    sync::{mpsc, Mutex},
+    sync::{mpsc, Arc, Mutex},
     time::Duration,
 };
 use tauri::{
@@ -17,6 +17,7 @@ struct Bridge {
     input: ChildStdin,
     output: mpsc::Receiver<String>,
     broken: bool,
+    phase: Arc<Mutex<String>>,
     #[cfg(windows)]
     _job: Job,
 }
@@ -56,17 +57,63 @@ fn contain(child: &Child) -> std::io::Result<Job> {
         Ok(job)
     }
 }
+fn diagnostic_phase(line: &str) -> Option<&'static str> {
+    match line {
+        "PHASE_PARENT_GATE" => Some("PHASE_PARENT_GATE"),
+        "PHASE_COORDINATOR_INIT" => Some("PHASE_COORDINATOR_INIT"),
+        "PHASE_CLIPBOARD_START" => Some("PHASE_CLIPBOARD_START"),
+        "PHASE_SERVING" => Some("PHASE_SERVING"),
+        _ => None,
+    }
+}
+#[cfg(test)]
+mod diagnostic_tests {
+    use super::diagnostic_phase;
+    #[test]
+    fn untrusted_stderr_is_never_a_diagnostic() {
+        for line in [
+            "private clipboard text",
+            "PHASE_SERVING secret",
+            "PHASE_SERVING\nprivate",
+            "Error: token=synthetic",
+            "",
+        ] {
+            assert_eq!(diagnostic_phase(line), None);
+        }
+        assert_eq!(
+            diagnostic_phase("PHASE_CLIPBOARD_START"),
+            Some("PHASE_CLIPBOARD_START")
+        );
+    }
+}
+fn smoke_root() -> &'static std::path::PathBuf {
+    static ROOT: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+    ROOT.get_or_init(|| {
+        std::env::temp_dir().join(format!(
+            "shot2agent-smoke-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ))
+    })
+}
 impl Bridge {
     fn start() -> Result<Self, String> {
         let exe = std::env::current_exe().map_err(|_| "APP_PATH")?;
         let runtime = exe.parent().ok_or("APP_PATH")?.join("runtime");
         let staging = std::env::args().any(|a| a == "--staging");
         let root = std::env::var_os("LOCALAPPDATA").ok_or("WINDOWS_USER_SESSION_REQUIRED")?;
-        let root = std::path::PathBuf::from(root).join(if staging {
-            "Shot2Agent-M3-Acceptance"
+        let root = if std::env::args().any(|a| a == "--smoke") {
+            smoke_root().clone()
         } else {
-            "Shot2Agent"
-        });
+            std::path::PathBuf::from(root).join(if staging {
+                "Shot2Agent-M3-Acceptance"
+            } else {
+                "Shot2Agent"
+            })
+        };
         let mut command = Command::new(runtime.join("node.exe"));
         command
             .arg(runtime.join("dist/packages/desktop/src/main.js"))
@@ -78,7 +125,7 @@ impl Bridge {
             .current_dir(&runtime)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null());
+            .stderr(Stdio::piped());
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
@@ -95,6 +142,28 @@ impl Bridge {
                 return Err("PROCESS_CONTAINMENT_FAILED".into());
             }
         };
+        // Keep only bounded, known phase codes; never expose arbitrary child stderr.
+        let phase = Arc::new(Mutex::new("NODE_START".to_string()));
+        let observed = phase.clone();
+        let stderr = child.stderr.take().ok_or("COORDINATOR_PIPE")?;
+        std::thread::spawn(move || {
+            let mut reader = BufReader::new(stderr);
+            loop {
+                let mut line = String::new();
+                if reader.by_ref().take(129).read_line(&mut line).is_err() || line.is_empty() {
+                    break;
+                }
+                if !line.ends_with('\n') {
+                    break;
+                }
+                let code = line.trim();
+                if let Some(code) = diagnostic_phase(code) {
+                    if let Ok(mut value) = observed.lock() {
+                        *value = code.to_string();
+                    }
+                }
+            }
+        });
         let mut input = child.stdin.take().ok_or("COORDINATOR_PIPE")?;
         input
             .write_all(b"SHOT2AGENT/1\n")
@@ -126,6 +195,7 @@ impl Bridge {
             input,
             output,
             broken: false,
+            phase,
             #[cfg(windows)]
             _job: job,
         })
@@ -154,7 +224,26 @@ impl Bridge {
             let line = self
                 .output
                 .recv_timeout(Duration::from_secs(20))
-                .map_err(|_| "COORDINATOR_TIMEOUT_RESTART_APP")?;
+                .map_err(|error| {
+                    let stage = self
+                        .phase
+                        .lock()
+                        .map(|p| p.clone())
+                        .unwrap_or("UNKNOWN".into());
+                    let operation = request
+                        .get("command")
+                        .and_then(Value::as_str)
+                        .filter(|s| ["snapshot", "quit", "exec"].contains(s))
+                        .unwrap_or("request");
+                    match error {
+                        mpsc::RecvTimeoutError::Timeout => {
+                            format!("COORDINATOR_TIMEOUT_{stage}_{operation}")
+                        }
+                        mpsc::RecvTimeoutError::Disconnected => {
+                            format!("COORDINATOR_EXIT_{stage}_{operation}")
+                        }
+                    }
+                })?;
             serde_json::from_str(&line).map_err(|_| "COORDINATOR_PROTOCOL".to_string())
         })();
         if result.is_err() {
@@ -285,6 +374,7 @@ fn main() {
                 let _ = std::fs::write(dir.join("SMOKE.txt"), match &result { Ok(()) => "PASS packaged IPC, refusal, natural quit, unexpected coordinator death and descendant cleanup".to_string(), Err(error) => format!("FAIL {error}") });
             }
         }
+        let _ = std::fs::remove_dir_all(smoke_root());
         std::process::exit(if result.is_ok() { 0 } else { 1 });
     }
     tauri::Builder::default()
