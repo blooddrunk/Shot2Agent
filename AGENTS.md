@@ -33,3 +33,7 @@
 ## M3-L implementation handoff
 
 M3-L now provides `apps/desktop` (Tauri 2/Vue 3), `packages/desktop` (restricted pipe coordinator), persistent capture consent/settings, new-image-only arming, history/status and independent existing delivery. See `docs/M3_WINDOWS_RUN.md` for actual controls/build and `docs/M3_VALIDATION.md` for executed checks. Preserve M2 operator acceptance; never convert M3 CI/build evidence into tray/focus/paste acceptance. No installer/Remote/folder watch/batch editor is added. Configuration status is visible read-only; changing a Worker profile is an operator-owned stopped-app operation.
+
+## Operator acceptance update — 2026-10-21
+
+The operator reported PASS for automatic submit, Notepad focus, actual Smart paste, conflict protection/manual Copy, save/restart persistence and pause/resume. Record the environment caveat: intermittent empty/blocked Smart behavior correlated with WeChat Input Method synchronization; root cause remains unverified. Do not claim universal input-method compatibility, separately unreported confirmation/discard GUI checks, or new real-Codex desktop proof. Configurable retry limits/Agent rerun are discussed proposals, not implemented or a waiver of Smart/no-auto-replay constraints. See `docs/M3_VALIDATION.md` and `docs/RESULT_DELIVERY.md`.

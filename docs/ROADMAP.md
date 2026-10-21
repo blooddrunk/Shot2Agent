@@ -1,6 +1,6 @@
 # Implementation roadmap: thin vertical slices and gates
 
-M3-L bounded Windows Local desktop is implemented; see [run guide](M3_WINDOWS_RUN.md) and [evidence](M3_VALIDATION.md). Native acceptance remains individually NOT VERIFIED. The broader M3–M5 lists below remain deferred V1 scope.
+M3-L bounded Windows Local desktop is implemented; see [run guide](M3_WINDOWS_RUN.md) and [evidence](M3_VALIDATION.md). The six requested desktop observations are operator-reported PASS on 2026-10-21, with a Smart/input-method caveat; other native claims remain separately scoped. The broader M3–M5 lists below remain deferred V1 scope.
 
 > M2-L update (2026-10-20): M2-L minimum Local functional acceptance was closed on operator feedback dated 2026-10-20; full V1 and dedicated unobserved native cases remain outside that conclusion. See [usage](LOCAL_MVP_USAGE.md) and [executed verification](M2_VALIDATION.md). Keep deferred V1 capabilities below; a single bounded stabilization pass should address observed Windows failures, not restart sequential infrastructure milestones.
 
@@ -88,3 +88,7 @@ Mandatory limited manual proof: real VPS DNS/TLS, full cross-device upload, unpl
 ## Suggested next engineering handoff
 
 **M1 completed and merged in PR #1. M2-L minimum Local loop is implemented and operator-accepted**, as recorded in [M2 validation](M2_VALIDATION.md#operator-acceptance-2026-10-20): Windows clipboard screenshot -> durable Local core -> real Codex -> Markdown/history -> clipboard copy and local save, plus Fake CI. The intended user-facing form remains a Windows tray/desktop app. M3-L now implements the requested bounded desktop shell over this core; its native acceptance is tracked separately in [M3 evidence](M3_VALIDATION.md). The numbered M2-M5 sections above describe deferred full V1 work, **not mandatory sequential prerequisites** for this Local MVP. Keep Relay/VPS, remote push, full tray UI and installer outside M2-L. Begin by syncing latest `main`; do not discard local changes. M2-L revises the M1 16-million-pixel decoder guard (4K dual monitor requires >16 MP).
+
+## Proposed bounded Local reliability follow-up
+
+The operator's 2026-10-21 feedback requests discussion of configurable retries for delivery and Agent generation. Existing fixed native retries and explicit delivery-only retry remain implemented; configurable limits/backoff and explicit Agent rerun controls remain proposed. See [classification and boundaries](RESULT_DELIVERY.md#local-retry-policy-current-behavior-and-proposal). Preserve Smart conflict protection, durable independent channels and `execution_unknown` no-auto-replay. This is a bounded reliability proposal, not a new Remote/infrastructure milestone or an implemented feature.

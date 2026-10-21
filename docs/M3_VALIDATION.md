@@ -1,6 +1,6 @@
 # M3-L verification — 2026-10-20
 
-Implementation: Windows Local Tauri 2/Vue 3 shell over the existing LocalApp, SQLite, Windows helper and Codex adapter. No HTTP server/Relay. See [Windows run guide](M3_WINDOWS_RUN.md). This record does not supersede M2 operator acceptance or claim M3 native acceptance.
+Implementation: Windows Local Tauri 2/Vue 3 shell over the existing LocalApp, SQLite, Windows helper and Codex adapter. No HTTP server/Relay. See [Windows run guide](M3_WINDOWS_RUN.md). M2 operator acceptance is preserved. M3 desktop operator acceptance is recorded on 2026-10-21 below; historical sections retain the verification status at their execution time.
 
 ## Executed and pending evidence
 
@@ -12,16 +12,28 @@ Implementation: Windows Local Tauri 2/Vue 3 shell over the existing LocalApp, SQ
 - `node --experimental-strip-types --test packages/desktop/test/*.test.mjs`: exit 0, 11 passed after adding mock Codex success/nonzero exit/timeout through the pipe. Same production pipe transport and dispatcher, separate synthetic host, no production event injection endpoints. Tests include startup/opt-in/confirm/discard/new-image capture, duplicate/text, Smart/write/conflict/manual fallback, independent Markdown, settings backup/restart, error recovery, failure/unknown no replay, worker exclusion and EOF shutdown. Network/listener APIs throw inside this fixture.
 - Windows packaging workflow builds Rust/MSVC and runs actual packaged EXE `--staging --smoke`: Rust-to-Node snapshot, rejected arbitrary command, clean quit; archive includes Node/native dependency runtime. Build evidence is recorded after execution; GUI tray/focus/paste are not inferred from smoke.
 
-## Native operator observations
+## Operator acceptance — 2026-10-21
 
-| Observation | Status | Evidence / next action |
+**M3-L's six requested desktop observations are operator-reported PASS**, with the Smart/input-method caveat below. This is user observation, not an independently repeated GUI run by the agent. The user followed the preceding desktop guide and did not separately re-report the exact executable hash or active adapter; do not infer a new authenticated real-Codex desktop test from this feedback. Previously delivered build identity is recorded later in this document.
+
+| Observation | Status | Operator evidence |
 | --- | --- | --- |
-| New screenshot automatically queues and completes, confirmation/discard | NOT VERIFIED | Run isolated acceptance shortcut and guide step 1 |
-| Notepad keeps foreground while background processing | NOT VERIFIED | Guide step 2 |
-| Smart result pastes without Copy | NOT VERIFIED | Guide step 3 |
-| Delayed Fake preserves newer text; explicit Copy fallback | NOT VERIFIED | Guide step 4 |
-| Markdown + settings/history after GUI restart | NOT VERIFIED | Guide step 5 |
-| Windows real Codex via desktop UI | NOT VERIFIED | Existing M2 proof retained; new shell has not been operator-observed |
+| Fresh screenshot automatically submits without a Submit action | PASS | Item 1 reported PASS |
+| Notepad retains foreground focus during capture/processing | PASS | Item 2 reported PASS |
+| Smart result actually pastes without Copy | PASS, environment caveat | Item 3 reported PASS; substantially more reliable after switching away from WeChat Input Method |
+| Newer text is preserved; manual Copy then returns result | PASS | Item 4 reported PASS |
+| Markdown save and settings/history survive GUI restart | PASS | Item 5 reported PASS |
+| Pause/resume ignores paused contents and accepts a fresh capture | PASS | Item 6 reported PASS |
+| Confirmation/discard GUI observations | NOT VERIFIED | Not separately included in the six reported observations; automated coverage remains |
+| Authenticated real Codex through desktop UI | NOT VERIFIED | Active adapter was not separately identified in this feedback; retain the earlier M2 evidence at its own scope |
+
+### Smart / clipboard-sync observation
+
+The operator reported frequent initially empty clipboard contents with `blocked_by_clipboard_change`, occasional success, and a possible association with WeChat Input Method's cross-device clipboard synchronization. After switching away from that input method, behavior was largely reliable. Preserve this as an operator-observed association; neither the external component as root cause nor universal input-method compatibility is established. The initial intermittent behavior is not erased by the overall PASS report.
+
+The current Smart decision uses the Windows clipboard sequence and helper session. Another writer may change that sequence even if the user did not deliberately copy new content. A blocked comparison does not write on that comparison branch, but the receipt alone does not prove who emptied the clipboard or reveal whether an earlier native write attempt failed; no content capture or timing trace was collected. Do not describe this as a confirmed third-party defect or a resolved application defect.
+
+The feedback raises a bounded follow-up proposal: configurable retry limits/backoff for eligible transient delivery failures, clearer refusal/failure diagnostics, and explicit Agent rerun controls. See [retry policy proposal](RESULT_DELIVERY.md#local-retry-policy-current-behavior-and-proposal). This acceptance update changes documentation only; it does not add retries, relax Smart protection or rerun user tasks.
 
 ## Deliberate bounds
 
@@ -71,3 +83,5 @@ Final source commit for Windows build validation: `0c3bc6ac232ac50c2dafe5f521df9
 ### Interactive UI automation availability
 
 Attempted `mcp__node_repl__js` initialization of bundled `@oai/sky` and `sky.list_windows()` to establish whether the native UI could be inspected without touching the clipboard. Tool invocation failed before JavaScript execution: MCP **-32602**, `codex/sandbox-state-meta: sandboxCwd is not a local file URI: file:///mnt/d/code/projects/Shot2Agent`. No app input, UI launch, screenshot or clipboard action occurred; this is a tool/environment error (no process exit code). The earlier PowerShell EXE smoke still passed, but this interface cannot provide interactive evidence from the current WSL working directory. Operator observations remain NOT VERIFIED, with the ready-to-run staging shortcut and exact five-step guide supplied.
+
+Acceptance documentation update verification (2026-10-21): `git fetch origin --prune` and ancestry inspection exit 0; main `2e394df` is already integrated. `npm test` exit 0, 90 total / 89 pass / 0 fail / 1 Windows-native skip in WSL. `git diff --check` exit 0. Only documentation/instructions changed; no running app settings, input method, clipboard, tasks or Agent execution were modified. The original M3 request authorizes the normal PR review/merge workflow when evidence and permissions permit; final checks must pass before merge. Retry improvements remain proposals for separately scoped work.

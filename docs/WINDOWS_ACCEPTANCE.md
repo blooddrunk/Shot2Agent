@@ -1,6 +1,6 @@
 # Current M3-L desktop acceptance
 
-Use [M3 Windows run guide](M3_WINDOWS_RUN.md) for the ready-to-run portable build, actual GUI/tray control names, isolated staging root, deterministic 8-second Fake result and five affected observations. M3 native observations are NOT VERIFIED until recorded in [M3 evidence](M3_VALIDATION.md). M2 minimum-loop acceptance below remains historical and valid at its recorded scope.
+Use [M3 Windows run guide](M3_WINDOWS_RUN.md) for the ready-to-run portable build, actual GUI/tray control names, isolated staging root, deterministic 8-second Fake result and five affected observations. The six M3 desktop observations have operator-reported PASS on 2026-10-21, with the Smart/input-method caveat and remaining boundaries in [M3 evidence](M3_VALIDATION.md#operator-acceptance--2026-10-21). Repeat only affected observations after relevant changes. M2 minimum-loop acceptance below remains historical and valid at its recorded scope.
 
 # Windows 验收：只做本次改动需要确认的项目
 

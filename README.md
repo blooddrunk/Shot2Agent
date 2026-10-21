@@ -1,4 +1,4 @@
-> **M3-L desktop implementation:** Windows Tauri 2 + Vue 3 Local shell, opt-in automatic new-image submission, confirmation preview, pause/resume, history, independent Smart/manual/Always clipboard and Markdown save. No Relay/listener. See [Windows build/run and five native observations](docs/M3_WINDOWS_RUN.md) and [M3 evidence](docs/M3_VALIDATION.md). M2 operator acceptance is preserved; M3 native acceptance is separate.
+> **M3-L desktop implementation:** Windows Tauri 2 + Vue 3 Local shell, opt-in automatic new-image submission, confirmation preview, pause/resume, history, independent Smart/manual/Always clipboard and Markdown save. No Relay/listener. See [Windows build/run and five native observations](docs/M3_WINDOWS_RUN.md) and [M3 evidence](docs/M3_VALIDATION.md). M2 acceptance is preserved. The six M3 desktop observations were operator-accepted on 2026-10-21, with a Smart/input-method compatibility caveat; see the evidence record.
 
 # Shot2Agent
 
@@ -85,7 +85,7 @@ Local needs no Relay URL, server or Agent credentials. Tests cover both direct L
 
 ## Implementation / deployment status
 
-M1 provides shared task/attempt/result persistence, private verified images, idempotent upload, transactional claims/leases and Fake execution in both modes. M2-L provides clipboard PNG/DIB intake, confirmation/default or opt-in auto submission, version-pinned read-only Codex execution, persistent history, manual/Smart/explicit Always text return, independent atomic Markdown save and delivery retries. **The minimum Local loop has operator acceptance; detailed Smart/focus/interruption cases remain separately unverified. Tray/UI, folder watch, batch editor, file clipboard, remote notifications and production VPS deployment remain deferred.** The optional Relay is unchanged and not imported by Local MVP.
+M1 provides shared task/attempt/result persistence, private verified images, idempotent upload, transactional claims/leases and Fake execution in both modes. M2-L provides clipboard PNG/DIB intake, confirmation/default or opt-in auto submission, version-pinned read-only Codex execution, persistent history, manual/Smart/explicit Always text return, independent atomic Markdown save and delivery retries. **The minimum Local loop and six M3 desktop observations have scoped operator acceptance. Smart/input-method interactions and unobserved interruption cases retain explicit limits. The Local tray/UI is implemented; folder watch, batch editor, file clipboard, remote notifications and production VPS deployment remain deferred.** The optional Relay is unchanged and not imported by Local MVP.
 
 ## Security baseline
 
