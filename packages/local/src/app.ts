@@ -25,6 +25,14 @@ export class LocalApp {
     this.adapter = adapter; this.profile = profile; this.config = config; this.clipboard = clipboard;
     this.core = openCore(root); this.state = new LocalState(root);
   }
+  get pending() { return this.pendingImage; }
+  discard(): void { this.pendingImage = undefined; }
+  /** Arm at the current sequence without reading/submitting historical clipboard contents. */
+  async arm(): Promise<void> {
+    requireValue(this.clipboard, 'WINDOWS_CLIPBOARD_REQUIRED');
+    this.pendingImage = undefined;
+    this.lastSequence = await this.clipboard.sequence();
+  }
   async submit(bytes: Buffer, baseline?: Baseline, force = false): Promise<string | undefined> {
     const originalHash = sha256(bytes);
     const prepared = await prepareImage(bytes); bytes = prepared.bytes;
@@ -67,7 +75,7 @@ export class LocalApp {
     return { changed: true, image: true, ...(auto ? { id: await this.submit(image.bytes, { session: this.clipboard.session, sequence: image.sequence }) } : {}) };
   }
   async work(signal?: AbortSignal): Promise<boolean> {
-    if (this.working || this.cleanupBlocked) return false; this.working = true;
+    if (this.working || this.cleanupBlocked) return false; this.state.acquireWorker(); this.working = true;
     try {
       const worked = await runOnce(this.core.worker(LOCAL_IDENTITY), this.adapter, [this.profile], 5000, signal);
       for (const task of this.list()) await deliver(task, this.config, this.state, this.clipboard);

@@ -1,5 +1,7 @@
 # Validation policy and explicit manual smoke steps
 
+> M3-L desktop update: Tauri 2/Vue 3 uses a restricted anonymous-pipe Node child; no network listener or Relay. Windows Job containment owns descendants; EOF/quit aborts and settles work. Versioned capture settings share M2 settings with backup; SQLite tasks are retained. Worker exclusion is transactional and PID-aware. See [desktop operation](M3_WINDOWS_RUN.md) and [evidence](M3_VALIDATION.md).
+
 > M2-L update (2026-10-20): M2-L adds process-backed mock Codex, clipboard abstraction, image pixel/byte/provenance, independent delivery and fresh-cwd compiled smoke coverage. `npm run check` runs all tests/build/smoke; Windows CI also opts into synthetic native clipboard helper testing. Neither CI nor WSL real Codex proves a Windows user workflow/focus. Follow [Windows commands and acceptance table](LOCAL_MVP_USAGE.md) and [executed evidence](M2_VALIDATION.md).
 
 ## Human acceptance should be a small observation, not a development task

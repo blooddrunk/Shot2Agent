@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { chmodSync, lstatSync } from 'node:fs';
 import { join } from 'node:path';
@@ -8,6 +9,7 @@ export type DeliveryStatus = 'pending' | 'succeeded' | 'failed' | 'disabled' | '
 export interface Receipt { status: DeliveryStatus; attempts: number; code?: string }
 export class LocalState {
   private db: DatabaseSync;
+  private workerToken = randomUUID();
   constructor(root: string) {
     privateDirectory(root); const path = join(root, 'local.sqlite');
     try { requireValue(lstatSync(path).isFile() && !lstatSync(path).isSymbolicLink(), 'UNSAFE_DATABASE'); }
@@ -15,6 +17,7 @@ export class LocalState {
     this.db = new DatabaseSync(path);
     if (process.platform !== 'win32') chmodSync(path, 0o600);
     this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;
+      CREATE TABLE IF NOT EXISTS local_worker (slot INTEGER PRIMARY KEY, pid INTEGER NOT NULL, token TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS captures (task TEXT PRIMARY KEY, hash TEXT NOT NULL, at INTEGER NOT NULL, baseline TEXT);
       CREATE TABLE IF NOT EXISTS provenance (task TEXT PRIMARY KEY, record TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS delivery (task TEXT NOT NULL, channel TEXT NOT NULL, record TEXT NOT NULL, PRIMARY KEY(task,channel));`);
@@ -53,5 +56,18 @@ export class LocalState {
       this.put(task, channel, receipt); this.db.exec('COMMIT'); return receipt;
     } catch (e) { this.db.exec('ROLLBACK'); throw e; }
   }
-  close(): void { this.db.close(); }
+  acquireWorker(): void {
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      const old = this.db.prepare('SELECT pid,token FROM local_worker WHERE slot=1').get();
+      if (old && old.token !== this.workerToken) {
+        let alive = true;
+        try { process.kill(Number(old.pid), 0); } catch (e) { alive = (e as NodeJS.ErrnoException).code !== 'ESRCH'; }
+        requireValue(!alive, 'LOCAL_WORKER_ALREADY_RUNNING');
+      }
+      this.db.prepare('INSERT INTO local_worker VALUES (1,?,?) ON CONFLICT(slot) DO UPDATE SET pid=excluded.pid,token=excluded.token').run(process.pid, this.workerToken);
+      this.db.exec('COMMIT');
+    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
+  }
+  close(): void { this.db.prepare('DELETE FROM local_worker WHERE token=?').run(this.workerToken); this.db.close(); }
 }

@@ -1,5 +1,7 @@
 # Result delivery policy — confirmed V1 behavior
 
+> M3-L desktop update: Tauri 2/Vue 3 uses a restricted anonymous-pipe Node child; no network listener or Relay. Windows Job containment owns descendants; EOF/quit aborts and settles work. Versioned capture settings share M2 settings with backup; SQLite tasks are retained. Worker exclusion is transactional and PID-aware. See [desktop operation](M3_WINDOWS_RUN.md) and [evidence](M3_VALIDATION.md).
+
 > M2-L update (2026-10-20): M2-L implements Local text clipboard (manual/Smart/explicit Always), independent atomic Markdown save, persistent per-channel reservations/outcomes and explicit delivery-only retry. Local history is always retained. Remote push, CF_HDROP/files, toast and Remote receiver remain planned. See [Local operation](LOCAL_MVP_USAGE.md). The older M3/M4 ordering below is superseded only for this Local slice.
 
 **Status:** confirmed V1 behavior as of 2026-10-20. M2-L implements independent Local Markdown save and text clipboard return, with successful [operator-reported receipts](M2_VALIDATION.md#operator-acceptance-2026-10-20). File clipboard, Remote push/receiver and toast remain planned; a successful receipt does not prove actual paste or first-attempt Smart behavior. The M3-M5 sections retain the deferred full V1 scope.
@@ -81,3 +83,27 @@ REMOTE: Worker PC B -> authenticated Relay result/artifacts
 **M5:** prove standalone Windows Local operation without Relay, then optional VPS/cross-device and offline reliability.
 
 Acceptance tests must prove (a) all three enabled channels fire independently, (b) each one can fail without blocking others, (c) all optional channels disabled results in history-only mode, (d) newer user clipboard content is preserved in smart mode, (e) copy-files works in Windows Explorer with real downloaded files, and (f) offline origin can resume safely. See [Testing](TESTING.md).
+
+## Local retry policy: current behavior and proposal
+
+Operator discussion on 2026-10-21 follows the [M3 desktop acceptance](M3_VALIDATION.md#operator-acceptance--2026-10-21). Configurable retry counts are **proposed, not implemented**; no new runtime behavior is authorized by this design note.
+
+Current implementation:
+
+- Native clipboard request exceptions get at most **6 total attempts** (initial + 5 retries), sleeping 30/60/90/120/150 ms between failed attempts. These limits are fixed in `clipboard.ps1`, not UI settings. They are separate from the persisted delivery receipt's `attempts`, which counts channel processing/retry/Copy actions rather than these low-level attempts.
+- A Smart sequence mismatch returns `written=false` and `blocked_by_clipboard_change`; it is not an exception and is not retried by that native loop. Explicit delivery retry keeps the original baseline/session, so it cannot bypass a later clipboard change. Manual Copy is the existing deliberate overwrite action.
+- The GUI's delivery retry reuses an existing successful result and channel receipts, independently of Agent execution. Successful channels remain idempotent; channel failure does not fail the task or the other channel.
+- Agent terminal failures/unknown outcomes are not automatically executed again. Started Codex interruption/nonzero exit may be `execution_unknown`; current GUI has no Agent rerun control. Unstarted expired leases can recover through existing queue rules.
+
+Proposed bounded follow-up (requires implementation and automated verification):
+
+| Situation | Proposed behavior |
+| --- | --- |
+| Clipboard busy / classified transient delivery failure | Configurable maximum retries, backoff and total time budget; 0 means no retries, counts exclude the initial attempt. Every Smart attempt retains/rechecks the original safety condition. Stop on a mismatch, permanent refusal or ambiguous write outcome. |
+| Smart conflict / changed helper session | Keep content untouched by further automatic attempts; show conflict reason and manual Copy. Do not treat unknown clipboard activity as permission to overwrite or silently refresh the baseline. |
+| Same content re-published by a sync component | Investigate a race-safe content-equivalence check separately; sequence changes alone cannot identify the writer or prove user intent. This is not solved by increasing retry counts. |
+| Transient Markdown save failure | Independent bounded retries; no retry through unsafe paths, conflicting files or permission/policy refusals; successful saves remain idempotent. |
+| Recoverable failure proven to occur before Agent launch | Consider opt-in bounded retry after structured classification; do not retry permanent version/profile/auth/configuration refusals automatically. |
+| Agent may have started, timed out or has uncertain outcome | Default automatic execution retries remain 0. Offer explicit rerun/review preserving the original record and recording the new execution separately, with pinned profile and possible extra usage shown. `failed` alone is not proof that execution never started. |
+
+Expose retry counts, reasons and terminal outcomes without screenshot/clipboard contents or raw Agent logs. Test transient busy -> success, retry exhaustion, changed clipboard during backoff, delivery-channel independence, restart accounting and no automatic Agent replay. No Relay, Remote expansion or new infrastructure milestone is required for this bounded reliability work.
