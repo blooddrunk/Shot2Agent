@@ -59,6 +59,9 @@ fn contain(child: &Child) -> std::io::Result<Job> {
 }
 fn diagnostic_phase(line: &str) -> Option<&'static str> {
     match line {
+        "CODEX_SETUP_REQUIRED" => Some("CODEX_SETUP_REQUIRED"),
+        "CODEX_PROFILE_REQUIRED" => Some("CODEX_PROFILE_REQUIRED"),
+        "FAKE_ACCEPTANCE_PROFILE_REQUIRED" => Some("FAKE_ACCEPTANCE_PROFILE_REQUIRED"),
         "PHASE_PARENT_GATE" => Some("PHASE_PARENT_GATE"),
         "PHASE_COORDINATOR_INIT" => Some("PHASE_COORDINATOR_INIT"),
         "PHASE_CLIPBOARD_START" => Some("PHASE_CLIPBOARD_START"),
@@ -99,28 +102,53 @@ fn smoke_root() -> &'static std::path::PathBuf {
         ))
     })
 }
+// Fixed launch roots preserve old histories and never infer a different Profile.
+fn launch_mode(args: &[String]) -> Result<&'static str, &'static str> {
+    let mut mode = None;
+    for arg in args {
+        let next = match arg.as_str() {
+            "--codex" => "codex",
+            "--staging" => "staging",
+            "--legacy" => "legacy",
+            "--smoke" => continue,
+            _ => return Err("INVALID_LAUNCH_MODE"),
+        };
+        if mode.replace(next).is_some() {
+            return Err("CONFLICTING_LAUNCH_MODE");
+        }
+    }
+    if args.iter().any(|a| a == "--smoke") && mode != Some("staging") {
+        return Err("SMOKE_REQUIRES_STAGING");
+    }
+    Ok(mode.unwrap_or("codex"))
+}
+fn mode_label(mode: &str) -> &'static str {
+    match mode {
+        "staging" => "Fake acceptance",
+        "legacy" => "Legacy Local",
+        _ => "Codex",
+    }
+}
 impl Bridge {
     fn start() -> Result<Self, String> {
         let exe = std::env::current_exe().map_err(|_| "APP_PATH")?;
         let runtime = exe.parent().ok_or("APP_PATH")?.join("runtime");
-        let staging = std::env::args().any(|a| a == "--staging");
+        let mode = launch_mode(&std::env::args().skip(1).collect::<Vec<_>>())?;
         let root = std::env::var_os("LOCALAPPDATA").ok_or("WINDOWS_USER_SESSION_REQUIRED")?;
         let root = if std::env::args().any(|a| a == "--smoke") {
             smoke_root().clone()
         } else {
-            std::path::PathBuf::from(root).join(if staging {
-                "Shot2Agent-M3-Acceptance"
-            } else {
-                "Shot2Agent"
+            std::path::PathBuf::from(root).join(match mode {
+                "staging" => "Shot2Agent-M3-Acceptance",
+                "legacy" => "Shot2Agent",
+                _ => "Shot2Agent-Codex",
             })
         };
         let mut command = Command::new(runtime.join("node.exe"));
         command
             .arg(runtime.join("dist/packages/desktop/src/main.js"))
-            .arg(root);
-        if staging {
-            command.arg("--staging");
-        }
+            .arg(root)
+            .arg(format!("--{mode}"));
         command
             .current_dir(&runtime)
             .stdin(Stdio::piped())
@@ -280,7 +308,13 @@ async fn rpc(app: tauri::AppHandle, request: Value) -> Result<Value, String> {
         let response = response?;
         if let Some(status) = response.pointer("/value/status").and_then(Value::as_str) {
             if let Some(tray) = app.tray_by_id("local") {
-                let _ = tray.set_tooltip(Some(format!("Shot2Agent · {status}")));
+                let _ = tray.set_tooltip(Some(format!(
+                    "Shot2Agent · {} · {status}",
+                    mode_label(
+                        launch_mode(&std::env::args().skip(1).collect::<Vec<_>>())
+                            .unwrap_or("invalid")
+                    )
+                )));
             }
         }
         Ok(response)
@@ -383,6 +417,11 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![rpc, hide_window])
         .setup(|app| {
+            let mode =
+                launch_mode(&std::env::args().skip(1).collect::<Vec<_>>()).unwrap_or("invalid");
+            if let Some(window) = app.get_webview_window("main") {
+                window.set_title(&format!("Shot2Agent · {}", mode_label(mode)))?;
+            }
             let show = MenuItem::with_id(app, "show", "Show Shot2Agent", true, None::<&str>)?;
             let hide = MenuItem::with_id(app, "hide", "Hide", true, None::<&str>)?;
             let pause = MenuItem::with_id(app, "pause", "Pause capture", true, None::<&str>)?;
@@ -402,7 +441,7 @@ fn main() {
             }
             TrayIconBuilder::with_id("local")
                 .icon(tauri::image::Image::new_owned(pixels, 32, 32))
-                .tooltip("Shot2Agent · Local")
+                .tooltip(format!("Shot2Agent · {}", mode_label(mode)))
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => {
@@ -445,7 +484,13 @@ fn main() {
                     .and_then(Value::as_str)
                     .unwrap_or("coordinator unavailable; quit and restart");
                 if let Some(tray) = handle.tray_by_id("local") {
-                    let _ = tray.set_tooltip(Some(format!("Shot2Agent · {status}")));
+                    let _ = tray.set_tooltip(Some(format!(
+                        "Shot2Agent · {} · {status}",
+                        mode_label(
+                            launch_mode(&std::env::args().skip(1).collect::<Vec<_>>())
+                                .unwrap_or("invalid")
+                        )
+                    )));
                 }
             });
             Ok(())
@@ -467,4 +512,26 @@ fn main() {
                 quit(app.clone());
             }
         });
+}
+
+#[cfg(test)]
+mod launch_tests {
+    use super::*;
+    fn args(a: &[&str]) -> Vec<String> {
+        a.iter().map(|s| s.to_string()).collect()
+    }
+    #[test]
+    fn fixed_launch_modes_fail_closed() {
+        assert_eq!(launch_mode(&args(&[])), Ok("codex"));
+        assert_eq!(launch_mode(&args(&["--legacy"])), Ok("legacy"));
+        assert_eq!(launch_mode(&args(&["--smoke", "--staging"])), Ok("staging"));
+        for a in [
+            &["--smoke"][..],
+            &["--staging", "--codex"],
+            &["--root=private"],
+            &["--codex", "--codex"],
+        ] {
+            assert!(launch_mode(&args(a)).is_err());
+        }
+    }
 }

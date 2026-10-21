@@ -12,22 +12,27 @@ process.stderr.write('PHASE_PARENT_GATE\n');
 await waitForParent(process.stdin);
 process.stderr.write('PHASE_COORDINATOR_INIT\n');
 let desktop: DesktopController | undefined;
+let clipboard: WindowsClipboard | undefined;
 try {
   const fake = new FakeAgent();
-  const staging = process.argv[3] === '--staging';
-  desktop = new DesktopController(root, new WindowsClipboard(), staging ? {
+  const mode = process.argv[3];
+  if (!['--codex', '--legacy', '--staging'].includes(mode)) throw new Error('INVALID_LAUNCH_MODE');
+  const staging = mode === '--staging';
+  clipboard = new WindowsClipboard();
+  desktop = new DesktopController(root, clipboard, staging ? {
     profile: { ...FAKE_PROFILE, timeoutMs: 30_000 },
     adapter: { name: 'fake', version: 'm3-staging', async execute(task, profile, images, signal) {
       await delay(8000, undefined, { signal }).catch(() => {});
       if (signal.aborted) return { status: 'execution_unknown', summary: 'Staging execution interrupted', contentMarkdown: '', artifacts: [], errorCode: 'STAGING_STOPPED' };
       return fake.execute(task, profile, images, signal);
     } },
-  } : undefined);
+  } : undefined, staging ? 'staging' : mode === '--codex' ? 'codex' : 'legacy');
   process.stderr.write('PHASE_CLIPBOARD_START\n');
   await desktop.start();
   process.stderr.write('PHASE_SERVING\n');
   const finish = serve(desktop, process.stdin, process.stdout);
   process.on('SIGTERM', () => { void finish(); }); process.on('SIGINT', () => { void finish(); });
 } catch (error) {
-  await desktop?.close(); process.stderr.write(safeError(error) + '\n'); process.exitCode = 1;
+  if (desktop) await desktop.close(); else clipboard?.close();
+  process.stderr.write(safeError(error) + '\n'); process.stdin.destroy(); process.exitCode = 1;
 }

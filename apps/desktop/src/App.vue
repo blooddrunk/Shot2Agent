@@ -3,7 +3,7 @@ import { onMounted, onUnmounted, ref } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 type Receipt = { status: string; code?: string; attempts: number; classification?: string; stopReason?: string };
 type Task = { id: string; status: string; summary?: string; error?: string; clipboard?: Receipt; save?: Receipt };
-type Snapshot = { root: string; status: string; error?: string; total: number; pending: string | null; captureStatus: string;
+type Snapshot = { launchMode: string; root: string; status: string; error?: string; total: number; pending: string | null; captureStatus: string;
   settings: { enabled: boolean; mode: string; paused: boolean; autoConsent: boolean; alwaysConsent: boolean };
   delivery: { clipboard: string; saveDirectory?: string; retry?: { maxRetries: number; backoffMs: number; budgetMs: number } };
   profile: { adapter: string; id: string; workspace?: string; version?: string; sandbox: string }; tasks: Task[] };
@@ -13,6 +13,7 @@ const maxRetries = ref(0); const backoffMs = ref(100); const budgetMs = ref(3000
 const autoConsent = ref(false); const alwaysConsent = ref(false); const dirty = ref(false);
 const selected = ref(''); const detail = ref<{ status: string; result?: { contentMarkdown: string; errorCode?: string } }>();
 let timer: ReturnType<typeof setInterval> | undefined; let polling = false;
+const modeText: Record<string, string> = { codex: '正式 Codex', staging: 'Fake 验收', legacy: '旧 Local 历史' };
 const statusText: Record<string, string> = { monitoring: '正在监听新图片', paused: '捕获已暂停', capture_off: '剪贴板捕获已关闭', worker_error: 'Worker 已停止 · 请检查后重启', capture_error: '剪贴板读取暂停 · 可重新连接' };
 function hydrate(s: Snapshot) {
   data.value = s;
@@ -59,9 +60,10 @@ onMounted(() => { void refresh(); timer = setInterval(() => { void refresh(); },
 onUnmounted(() => clearInterval(timer));
 </script>
 <template>
-  <header><div class="identity"><svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><path d="M3 12V4h8M21 4h8v8M29 21v8h-8M11 29H3v-8" fill="none" stroke="currentColor" stroke-width="3"/><path d="m11 17 4 4 7-10" fill="none" stroke="currentColor" stroke-width="2"/></svg><div><h1>Shot2Agent</h1><p>Local · 此电脑处理，无需 Relay</p></div></div><div class="header-actions"><button @click="invoke('hide_window')">隐藏到托盘</button><button @click="action('quit')" :disabled="busy">退出</button></div></header>
+  <header><div class="identity"><svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><path d="M3 12V4h8M21 4h8v8M29 21v8h-8M11 29H3v-8" fill="none" stroke="currentColor" stroke-width="3"/><path d="m11 17 4 4 7-10" fill="none" stroke="currentColor" stroke-width="2"/></svg><div><h1>Shot2Agent</h1><p>{{ data ? modeText[data.launchMode] : '正在连接执行配置' }} · Local，无需 Relay</p></div></div><div class="header-actions"><button @click="invoke('hide_window')">隐藏到托盘</button><button @click="action('quit')" :disabled="busy">退出</button></div></header>
   <main>
     <div class="statusbar" role="status"><span class="dot" :class="{ active: data?.status === 'monitoring' }"></span><strong>{{ data ? statusText[data.status] : '连接本地服务…' }}</strong><button v-if="data" @click="action('pause', { paused: !data.settings.paused })" :disabled="busy">{{ data.settings.paused ? '恢复捕获' : '暂停捕获' }}</button></div>
+    <p v-if="!data && transportError" class="notice">正式入口须已有 %LOCALAPPDATA%\Shot2Agent-Codex 中经批准的 Codex 配置及 CLI 登录。CODEX_SETUP_REQUIRED / CODEX_PROFILE_REQUIRED 表示配置未就绪；请按随包说明配置，或打开 Start acceptance.cmd 使用 Fake 验收。</p>
     <p v-if="error || transportError || data?.error" class="error" role="alert">{{ error || transportError || data?.error }}。设置失败时请检查选项。服务停止时请退出并重新打开应用；不会自动重跑已启动任务。<button v-if="data?.status === 'capture_error'" @click="action('recover')">重新连接剪贴板</button></p>
     <p v-if="message" class="notice" role="status">{{ message }}</p>
     <div class="columns"><section class="controls" aria-label="捕获及输出设置">
@@ -84,7 +86,7 @@ onUnmounted(() => clearInterval(timer));
         </details>
         <button class="primary" type="submit" :disabled="busy || !data">{{ busy ? '处理中…' : '应用设置' }}</button><span v-if="dirty" class="hint unsaved">尚未保存</span>
       </form>
-      <div class="profile" v-if="data"><h2>执行配置</h2><p><strong>{{ data.profile.adapter === 'fake' ? 'Fake · 合成测试' : 'Codex · 云模型' }}</strong> / {{ data.profile.sandbox }}</p><p class="path">{{ data.profile.workspace || 'Fake 不访问工作区。验收模式下结果延迟 8 秒。' }}</p><p class="hint">{{ data.profile.version || data.profile.id }}。配置由本机 Worker 管理；更换配置须退出后重新启动，不会修改排队任务。</p><details><summary>本地数据位置</summary><p class="path">{{ data.root }}</p></details></div>
+      <div class="profile" v-if="data"><h2>执行配置</h2><p><strong>{{ data.profile.adapter === 'fake' ? 'Fake · 合成测试' : 'Codex · 云模型' }}</strong> / {{ data.profile.sandbox }}</p><p class="path">{{ data.profile.workspace || 'Fake 不访问工作区。仅 Fake 验收入口延迟 8 秒。' }}</p><p class="hint">{{ data.profile.version || data.profile.id }}。配置由本机 Worker 管理；更换配置须退出后重新启动，不会修改排队任务。</p><details><summary>本地数据位置</summary><p class="path">{{ data.root }}</p></details></div>
     </section><section class="workspace" aria-label="预览和历史">
       <div class="section-heading"><h2>当前图片</h2><button @click="action('current')" :disabled="busy || !data">提交当前剪贴板图片</button></div>
       <div class="preview" v-if="data?.pending"><img :src="data.pending" alt="待确认的截图预览"><div><strong>等待确认</strong><p>仅此预览会被提交；后来复制的文字不会替换它。</p><button class="primary" @click="action('submit')" :disabled="busy">提交图片</button><button @click="action('discard')" :disabled="busy">丢弃</button></div></div>
