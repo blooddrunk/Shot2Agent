@@ -163,7 +163,6 @@ export class DesktopController {
     try {
       if (provider === 'claude-compatible-endpoint') {
         requireValue(['2.1.305 (Claude Code)', '2.1.306 (Claude Code)'].includes(candidate.version), 'GATEWAY_CLI_NOT_QUALIFIED');
-        requireValue(request.enableAfterTest === true, 'GATEWAY_TEST_CONFIRMATION_REQUIRED');
         const endpoint = request.endpoint;
         const model = request.model;
         requireValue(typeof endpoint === 'string' && typeof model === 'string', 'GATEWAY_CONFIGURATION_REQUIRED');
@@ -184,12 +183,15 @@ export class DesktopController {
         const gateway: GatewayConfig = { kind: 'claude-compatible-endpoint', baseUrl: endpoint, model,
           models: { sonnet: model, opus: model, haiku: model }, credentialRef, vision: 'not-verified' };
         validateGateway(gateway);
-        operationStage = 'GATEWAY_SYNTHETIC_TEST_FAILED';
-        await this.testGateway(gateway, token);
-        syntheticTestPassed = true;
-        // The operator explicitly confirms the potentially billable synthetic image test in the GUI.
-        // Persist that exact result; do not label it as a general or CLI qualification.
-        gateway.vision = 'synthetic-test-passed';
+        // Saving credentials is local-only. Qualification survives only an unchanged connection.
+        if (!tokenInput && existingGateway?.baseUrl === endpoint && existingGateway.model === model)
+          gateway.vision = existingGateway.vision;
+        if (request.enableAfterTest === true) {
+          operationStage = 'GATEWAY_SYNTHETIC_TEST_FAILED';
+          await this.testGateway(gateway, token);
+          syntheticTestPassed = true;
+          gateway.vision = 'synthetic-test-passed';
+        }
         const policy: ClaudePolicy = { ...common, gateway,
           ...(['2.1.305 (Claude Code)', '2.1.306 (Claude Code)'].includes(candidate.version) ? { imageProtocol: 'windows-jsonl-v1' } : {}) };
         claudeProfile(policy);
@@ -207,16 +209,18 @@ export class DesktopController {
       profiles.push(approved);
       next.adapter = 'codex';
       if (provider === 'codex' && !next.codex) next.codex = approved.policy as CodexPolicy;
-      next.agents = { version: 1, selected: { id, version }, profiles, archived: next.agents?.archived ?? [] };
+      const selected = editing && next.agents && (next.agents.selected.id !== editId || next.agents.selected.version !== editVersion)
+        ? next.agents.selected : { id, version };
+      next.agents = { version: 1, selected, profiles, archived: next.agents?.archived ?? [] };
       const registry = executionRegistry(profiles);
       // Fresh installs preselect Always, but leave capture disabled and require consent before writing.
       validate(next, true);
       operationStage = 'PROFILE_SETTINGS_SAVE_FAILED';
       saveSettings(this.root, next);
-      this.settings = next; this.app.setRegistry(registry, id, version);
+      this.settings = next; this.app.setRegistry(registry, selected.id, selected.version);
       if (credentialRef) {
         this.credentialStatuses.set(credentialRef, 'available');
-        this.gatewayTests.set(credentialRef, 'synthetic_test_passed');
+        this.gatewayTests.set(credentialRef, syntheticTestPassed ? 'synthetic_test_passed' : approved.provider === 'claude-compatible-endpoint' && approved.policy.gateway?.vision !== 'not-verified' ? 'previously_attested' : 'not_tested');
       }
       await this.refreshDiscovery();
       return { provider, id, version, gateway: syntheticTestPassed ? 'synthetic_test_passed' : undefined };
@@ -276,7 +280,7 @@ export class DesktopController {
     const allowed: Record<string, string[]> = { snapshot: [], 'configure-hotkeys': ['hotkeys'], action: ['action'], configure: ['capture', 'delivery', 'autoConsent', 'alwaysConsent'],
       submit: [], current: [], discard: [], pause: ['paused'], copy: ['id'], detail: ['id'], 'retry-delivery': ['id'], recover: [], 'select-agent': ['id', 'version'],
       'archive-agent': ['id', 'version', 'archived', 'confirm'], 'delete-agent': ['id', 'version', 'confirm'], 'cleanup-unused-agents': [],
-      'create-profile': ['provider', 'id', 'path', 'workspace', 'prompt', 'endpoint', 'model', 'token', 'editId', 'editVersion', 'reuseExisting', 'enableAfterTest'], 'credential-status': ['id', 'version'],
+      'create-profile': ['provider', 'id', 'path', 'workspace', 'prompt', 'endpoint', 'model', 'token', 'editId', 'editVersion', 'reuseExisting', 'enableAfterTest'], 'credential-status': ['id', 'version'], 'test-agent': ['id', 'version', 'confirm'],
       'delete-history': ['ids', 'reviewedUnknown'], 'clear-history': ['mode'], 'discover-agents': [], quit: [] };
     requireValue(Object.hasOwn(allowed, r.command) && Object.keys(r).every(k => ['v', 'command', ...allowed[r.command as string]].includes(k)), 'COMMAND_REFUSED');
     const id = () => { requireValue(typeof r.id === 'string' && /^[0-9a-f-]{36}$/.test(r.id), 'INVALID_TASK_ID'); return r.id; };
@@ -324,6 +328,15 @@ export class DesktopController {
         break;
       }
       case 'create-profile': await this.createProfile(r); break;
+      case 'test-agent': {
+        requireValue(r.confirm === true, 'GATEWAY_TEST_CONFIRMATION_REQUIRED');
+        const profile = this.settings.agents?.profiles.find(p => p.policy.id === r.id && p.policy.version === r.version);
+        requireValue(profile?.provider === 'claude-compatible-endpoint' && profile.policy.gateway, 'GATEWAY_PROFILE_REQUIRED');
+        await this.createProfile({ provider: profile.provider, id: profile.policy.id, editId: profile.policy.id,
+          editVersion: profile.policy.version, reuseExisting: true, workspace: profile.policy.workspace,
+          prompt: profile.policy.prompt, endpoint: profile.policy.gateway.baseUrl, model: profile.policy.gateway.model, enableAfterTest: true });
+        break;
+      }
       case 'credential-status': {
         requireValue(this.settings.agents && typeof r.id === 'string' && typeof r.version === 'string', 'PROFILE_NOT_FOUND');
         const profile = this.settings.agents.profiles.find(p => p.policy.id === r.id && p.policy.version === r.version);
