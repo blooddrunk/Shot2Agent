@@ -11,7 +11,7 @@ export interface DeliveryConfig { clipboard: 'off' | 'manual' | 'smart' | 'alway
 /** Shared entry-point policy. Legacy M2 CLI configs have no desktop consent boundary. */
 export function effectiveDelivery(settings: { delivery: DeliveryConfig; desktop?: { alwaysConsent?: boolean } }): DeliveryConfig {
   const config = structuredClone(settings.delivery);
-  if (settings.desktop && config.clipboard === 'always' && settings.desktop.alwaysConsent !== true) config.clipboard = 'manual';
+  if (Object.hasOwn(settings, 'desktop') && config.clipboard === 'always' && settings.desktop?.alwaysConsent !== true) config.clipboard = 'manual';
   return config;
 }
 export function validateRetry(policy?: RetryPolicy): void {
