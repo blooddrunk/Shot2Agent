@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { Worker } from 'node:worker_threads';
 import { atomicSave, deliver, validateRetry } from '../src/delivery.ts';
 import { LocalState } from '../src/state.ts';
+import { WindowsClipboard } from '../src/clipboard.ts';
 const root = () => realpathSync(mkdtempSync(join(tmpdir(), 'shot2agent-m4-')));
 const config = { clipboard: 'smart', retry: { maxRetries: 2, backoffMs: 10, budgetMs: 500 } };
 function task() { return { status: 'succeeded', submission: { taskId: randomUUID() }, result: { contentMarkdown: 'synthetic result' } }; }
@@ -135,3 +136,24 @@ test('legacy failed clipboard receipts with a baseline retain conservative Smart
   assert.equal(state.get(id, 'clipboard').status, 'blocked_by_clipboard_change');
   assert.equal(clip.written, 0);
 }));
+
+// Fault-inject the inherited pipe/queue without starting PowerShell or changing a
+// real clipboard. Public writeText/request/timeout/close methods remain production.
+function stalledClipboard(queue = Promise.resolve()) {
+  const clipboard = Object.create(WindowsClipboard.prototype); let writes = 0; let kills = 0;
+  Object.assign(clipboard, { queue, dead: false, child: { stdin: { write() { writes++; } }, kill() { kills++; } } });
+  return { clipboard, writes: () => writes, kills: () => kills };
+}
+test('clipboard budget expires while queued and forbids a late pipe write after queue release', async () => {
+  let release; const gate = new Promise(resolve => { release = resolve; }); const port = stalledClipboard(gate);
+  await assert.rejects(port.clipboard.writeText('synthetic', undefined, 20), /CLIPBOARD_DEADLINE_BEFORE_WRITE/);
+  assert.equal(port.writes(), 0); assert.equal(port.kills(), 0);
+  release(); await port.clipboard.queue; assert.equal(port.writes(), 0); port.clipboard.close();
+});
+test('clipboard budget expiry during an active write kills its helper and never replays', async () => {
+  const port = stalledClipboard();
+  await assert.rejects(port.clipboard.writeText('synthetic', undefined, 20), /CLIPBOARD_HELPER_TIMEOUT/);
+  assert.equal(port.writes(), 1); assert.equal(port.kills(), 1);
+  await assert.rejects(port.clipboard.writeText('synthetic', undefined, 20), /CLIPBOARD_HELPER_STOPPED/);
+  assert.equal(port.writes(), 1);
+});
