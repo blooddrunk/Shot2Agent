@@ -1,5 +1,6 @@
 // Local operator utility. Run from the portable package after exiting Shot2Agent.
 import { spawn } from 'node:child_process';
+import console from 'node:console';
 import { copyFileSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -47,7 +48,7 @@ try {
   await run(command.executable, command.args, command.env);
   await readGatewayToken(reference); // Availability only; the token is never printed or saved as plaintext.
   const bind = vision => {
-   const policy = structuredClone(prior.policy);
+   const policy = JSON.parse(JSON.stringify(prior.policy));
    policy.version = `m6-${randomUUID()}`;
    policy.gateway = { ...policy.gateway, credentialRef: reference, vision };
    const approved = { provider: 'claude-compatible-endpoint', policy };
