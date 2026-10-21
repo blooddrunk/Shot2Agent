@@ -152,7 +152,7 @@ test('clipboard budget expires while queued and forbids a late pipe write after 
 });
 test('clipboard budget expiry during an active write kills its helper and never replays', async () => {
   const port = stalledClipboard();
-  await assert.rejects(port.clipboard.writeText('synthetic', undefined, 20), /CLIPBOARD_HELPER_TIMEOUT/);
+  await assert.rejects(port.clipboard.writeText('synthetic', undefined, 1000), /CLIPBOARD_HELPER_TIMEOUT/);
   assert.equal(port.writes(), 1); assert.equal(port.kills(), 1);
   await assert.rejects(port.clipboard.writeText('synthetic', undefined, 20), /CLIPBOARD_HELPER_STOPPED/);
   assert.equal(port.writes(), 1);

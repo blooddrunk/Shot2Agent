@@ -36,9 +36,10 @@ export class WindowsClipboard implements ClipboardPort {
   private request(request: object, timeoutMs = 15000): Promise<Record<string, unknown>> {
     const deadline = performance.now() + timeoutMs;
     let queuedTimer: ReturnType<typeof setTimeout> | undefined;
+    let expiredInQueue = false;
     const operation = this.queue.then(() => new Promise<Record<string, unknown>>((resolve, reject) => {
       clearTimeout(queuedTimer);
-      if (performance.now() >= deadline) { reject(new Error('CLIPBOARD_DEADLINE_BEFORE_WRITE')); return; }
+      if (expiredInQueue || performance.now() >= deadline) { reject(new Error('CLIPBOARD_DEADLINE_BEFORE_WRITE')); return; }
       if (this.dead) { reject(new Error('CLIPBOARD_HELPER_STOPPED')); return; }
       const timer = setTimeout(() => { this.receive = undefined; this.close(); reject(new Error('CLIPBOARD_HELPER_TIMEOUT')); }, Math.max(1, deadline - performance.now()));
       this.receive = line => {
@@ -57,7 +58,7 @@ export class WindowsClipboard implements ClipboardPort {
     // Expiry while queued is a proven non-write. The queued operation still checks
     // the same deadline before touching the pipe, so it cannot write after rejection.
     const queuedDeadline = new Promise<Record<string, unknown>>((_, reject) => {
-      queuedTimer = setTimeout(() => reject(new Error('CLIPBOARD_DEADLINE_BEFORE_WRITE')), timeoutMs);
+      queuedTimer = setTimeout(() => { expiredInQueue = true; reject(new Error('CLIPBOARD_DEADLINE_BEFORE_WRITE')); }, timeoutMs);
     });
     this.queue = operation.catch(() => {});
     return Promise.race([operation, queuedDeadline]).finally(() => clearTimeout(queuedTimer));
