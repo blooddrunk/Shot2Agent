@@ -120,3 +120,16 @@ test('parent handshake preserves a coalesced first JSON request and refuses inva
   input.write('SHOT2AGENT/1\n'+request); await ready; assert.equal(input.read().toString(),request); input.destroy();
   const invalid=new PassThrough(); const rejected=waitForParent(invalid); invalid.write('INVALID\n'); await assert.rejects(rejected,/PARENT_HANDSHAKE_INVALID/); invalid.destroy();
 });
+
+test('desktop retry settings validated, persisted and shown without exposing execution policy', async t => {
+  const h = host(); t.after(() => h.child.kill());
+  const retry = { maxRetries: 2, backoffMs: 20, budgetMs: 1000 };
+  let s = await h.rpc('configure', { delivery: { clipboard: 'smart', retry } });
+  assert.deepEqual(s.delivery.retry, retry);
+  for (const bad of [{ ...retry, maxRetries: 11 }, { ...retry, command: 'unsafe' }, { ...retry, budgetMs: 0 }, { ...retry, maxRetries: '2' }]) {
+    assert.equal((await h.raw('configure', { delivery: { clipboard: 'smart', retry: bad } })).error, 'INVALID_DELIVERY_RETRY');
+  }
+  assert.deepEqual((await h.rpc('snapshot')).delivery.retry, retry); await h.close();
+  const next = host(h.root); t.after(() => next.child.kill()); s = await next.rpc('snapshot');
+  assert.deepEqual(s.delivery.retry, retry); assert.equal(s.total, 0); await next.close();
+});

@@ -1,4 +1,4 @@
-import { closeSync, fsyncSync, lstatSync, openSync, readFileSync, renameSync, rmSync, writeFileSync, realpathSync } from 'node:fs';
+import { closeSync, fsyncSync, lstatSync, openSync, readFileSync, linkSync, rmSync, writeFileSync, realpathSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { TaskView } from '../../core/src/model.ts';
@@ -6,7 +6,15 @@ import { requireValue } from '../../core/src/model.ts';
 import { privateDirectory } from '../../core/src/store.ts';
 import type { ClipboardPort } from './clipboard.ts';
 import type { LocalState } from './state.ts';
-export interface DeliveryConfig { clipboard: 'off' | 'manual' | 'smart' | 'always'; saveDirectory?: string }
+export interface RetryPolicy { maxRetries: number; backoffMs: number; budgetMs: number }
+export interface DeliveryConfig { clipboard: 'off' | 'manual' | 'smart' | 'always'; saveDirectory?: string; retry?: RetryPolicy }
+export function validateRetry(policy?: RetryPolicy): void {
+  if (policy === undefined) return;
+  requireValue(policy && Object.keys(policy).every(k => ['maxRetries', 'backoffMs', 'budgetMs'].includes(k)) &&
+    Number.isInteger(policy.maxRetries) && policy.maxRetries >= 0 && policy.maxRetries <= 10 &&
+    Number.isInteger(policy.backoffMs) && policy.backoffMs >= 10 && policy.backoffMs <= 1000 &&
+    Number.isInteger(policy.budgetMs) && policy.budgetMs >= 100 && policy.budgetMs <= 10000, 'INVALID_DELIVERY_RETRY');
+}
 export function atomicSave(directory: string, id: string, text: string): void {
   requireValue(isAbsolute(directory) && /^[0-9a-f-]{36}$/.test(id), 'UNSAFE_SAVE_PATH');
   privateDirectory(directory);
@@ -21,33 +29,79 @@ export function atomicSave(directory: string, id: string, text: string): void {
   try {
     const fd = openSync(temp, 'wx', 0o600);
     try { writeFileSync(fd, expected); fsyncSync(fd); } finally { closeSync(fd); }
-    // The output root is operator-owned; concurrent retries write identical immutable bytes.
-    renameSync(temp, target);
+    // Hard-link publication is atomic and cannot replace an existing destination.
+    // Unsupported filesystems fail closed; never fall back to replacing rename.
+    try { linkSync(temp, target); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      const stat = lstatSync(target);
+      requireValue(stat.isFile() && !stat.isSymbolicLink() && stat.size === expected.length && readFileSync(target).equals(expected), 'SAVE_CONFLICT');
+    }
     if (process.platform !== 'win32') { const dir = openSync(directory, 'r'); try { fsyncSync(dir); } finally { closeSync(dir); } }
   } finally { rmSync(temp, { force: true }); }
 }
-export async function deliver(task: TaskView, config: DeliveryConfig, state: LocalState, clipboard?: ClipboardPort, retry = false): Promise<void> {
+export type FailureClass = 'transient' | 'permanent' | 'conflict' | 'ambiguous';
+export function deliveryFailure(error: unknown, channel: string): { code: string; classification: FailureClass } {
+  const e = error as NodeJS.ErrnoException;
+  const code = e?.code ?? (error instanceof Error ? error.message : '');
+  if (['SAVE_CONFLICT', 'UNSAFE_SAVE_PATH'].includes(code)) return { code, classification: 'conflict' };
+  if (channel === 'clipboard') {
+    if (code === 'CLIPBOARD_BUSY') return { code, classification: 'transient' };
+    if (['CLIPBOARD_WRITE_AMBIGUOUS', 'CLIPBOARD_HELPER_TIMEOUT', 'CLIPBOARD_HELPER_STOPPED', 'CLIPBOARD_PROTOCOL'].includes(code))
+      return { code, classification: 'ambiguous' };
+    return { code: ['CLIPBOARD_TEXT_LIMIT', 'CLIPBOARD_UNAVAILABLE'].includes(code) ? code : 'CLIPBOARD_FAILED', classification: 'permanent' };
+  }
+  if (['EBUSY', 'EAGAIN', 'EMFILE', 'ENFILE'].includes(code)) return { code: `SAVE_${code}`, classification: 'transient' };
+  return { code: ['EACCES', 'EPERM', 'ENOSPC', 'ENOENT', 'ENOTSUP'].includes(code) ? `SAVE_${code}` : 'SAVE_FAILED', classification: 'permanent' };
+}
+export async function deliver(task: TaskView, config: DeliveryConfig, state: LocalState, clipboard?: ClipboardPort, retry = false, save: typeof atomicSave = atomicSave): Promise<void> {
   if (task.status !== 'succeeded' || !task.result) return;
+  validateRetry(config.retry);
+  // Snapshot settings and ORIGINAL capture baseline for the whole bounded operation.
+  const settings = structuredClone(config);
+  const policy = settings.retry ?? { maxRetries: 0, backoffMs: 100, budgetMs: 3000 };
   const id = task.submission.taskId; const text = task.result.contentMarkdown;
+  const baseline = state.baseline(id);
   await Promise.all(['save', 'clipboard'].map(async channel => {
     const reservation = state.reserve(id, channel, retry); if (!reservation) return;
-    try {
-      if (channel === 'save') {
-        if (!config.saveDirectory) { state.put(id, channel, { ...reservation, status: 'disabled' }); return; }
-        atomicSave(config.saveDirectory, id, text);
-      } else {
-        if (config.clipboard === 'off' || config.clipboard === 'manual') {
-          state.put(id, channel, { ...reservation, status: config.clipboard === 'off' ? 'disabled' : 'manual' }); return;
+    const started = performance.now();
+    for (let attempt = 0; ; attempt++) {
+      if (attempt > 0) reservation.attempts++;
+      state.put(id, channel, { ...reservation, status: 'pending' });
+      try {
+        if (channel === 'save') {
+          if (!settings.saveDirectory) { state.put(id, channel, { ...reservation, status: 'disabled' }); return; }
+          save(settings.saveDirectory, id, text);
+        } else {
+          if (settings.clipboard === 'off' || settings.clipboard === 'manual') {
+            state.put(id, channel, { ...reservation, status: settings.clipboard === 'off' ? 'disabled' : 'manual' }); return;
+          }
+          if (settings.clipboard === 'smart' && (!baseline || baseline.session !== clipboard?.session)) {
+            state.put(id, channel, { ...reservation, status: 'blocked_by_clipboard_change', code: 'CLIPBOARD_SESSION_CHANGED', classification: 'conflict' }); return;
+          }
+          requireValue(clipboard, 'CLIPBOARD_UNAVAILABLE');
+          // Native helper compares under the clipboard lock on EVERY write, including retries.
+          const success = await clipboard.writeText(text, settings.clipboard === 'smart' ? baseline?.sequence : undefined, Math.max(1, policy.budgetMs - (performance.now() - started)));
+          if (!success) { state.put(id, channel, { ...reservation, status: 'blocked_by_clipboard_change', code: 'CLIPBOARD_SEQUENCE_CHANGED', classification: 'conflict' }); return; }
         }
-        const baseline = state.baseline(id);
-        if (config.clipboard === 'smart' && (!baseline || baseline.session !== clipboard?.session)) {
-          state.put(id, channel, { ...reservation, status: 'blocked_by_clipboard_change' }); return;
+        state.put(id, channel, { ...reservation, status: 'succeeded' }); return;
+      } catch (error) {
+        const failure = deliveryFailure(error, channel);
+        const elapsedMs = Math.round(performance.now() - started);
+        reservation.history = [...(reservation.history ?? []), { attempt: reservation.attempts, at: Date.now(), elapsedMs, ...failure }].slice(-100);
+        const backoff = Math.min(1000, policy.backoffMs * 2 ** attempt);
+        const remaining = policy.budgetMs - elapsedMs;
+        // The native transport receives the remaining budget and kills its helper on expiry.
+        // A write timeout is ambiguous and is never scheduled again.
+        const again = failure.classification === 'transient' && attempt < policy.maxRetries && remaining > backoff;
+        state.put(id, channel, { ...reservation, status: again ? 'pending' : 'failed', ...failure,
+          stopReason: again ? undefined : failure.classification !== 'transient' ? failure.classification : attempt >= policy.maxRetries ? 'retry_limit' : 'time_budget' });
+        if (!again) return;
+        await new Promise(resolve => setTimeout(resolve, backoff));
+        if (performance.now() - started >= policy.budgetMs) {
+          state.put(id, channel, { ...reservation, status: 'failed', ...failure, stopReason: 'time_budget' }); return;
         }
-        requireValue(clipboard, 'CLIPBOARD_UNAVAILABLE');
-        const success = await clipboard.writeText(text, config.clipboard === 'smart' ? baseline?.sequence : undefined);
-        if (!success) { state.put(id, channel, { ...reservation, status: 'blocked_by_clipboard_change' }); return; }
       }
-      state.put(id, channel, { ...reservation, status: 'succeeded' });
-    } catch { state.put(id, channel, { ...reservation, status: 'failed', code: channel === 'save' ? 'SAVE_FAILED' : 'CLIPBOARD_FAILED' }); }
+    }
   }));
 }

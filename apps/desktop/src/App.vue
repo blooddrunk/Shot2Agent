@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-type Receipt = { status: string; code?: string };
+type Receipt = { status: string; code?: string; attempts: number; classification?: string; stopReason?: string };
 type Task = { id: string; status: string; summary?: string; error?: string; clipboard?: Receipt; save?: Receipt };
 type Snapshot = { root: string; status: string; error?: string; total: number; pending: string | null; captureStatus: string;
   settings: { enabled: boolean; mode: string; paused: boolean; autoConsent: boolean; alwaysConsent: boolean };
-  delivery: { clipboard: string; saveDirectory?: string };
+  delivery: { clipboard: string; saveDirectory?: string; retry?: { maxRetries: number; backoffMs: number; budgetMs: number } };
   profile: { adapter: string; id: string; workspace?: string; version?: string; sandbox: string }; tasks: Task[] };
 const data = ref<Snapshot>(); const transportError = ref(''); const error = ref(''); const message = ref(''); const busy = ref(false);
 const enabled = ref(false); const mode = ref('confirm'); const clipboard = ref('manual'); const save = ref(false); const directory = ref('');
+const maxRetries = ref(0); const backoffMs = ref(100); const budgetMs = ref(3000);
 const autoConsent = ref(false); const alwaysConsent = ref(false); const dirty = ref(false);
 const selected = ref(''); const detail = ref<{ status: string; result?: { contentMarkdown: string; errorCode?: string } }>();
 let timer: ReturnType<typeof setInterval> | undefined; let polling = false;
@@ -16,6 +17,7 @@ const statusText: Record<string, string> = { monitoring: '正在监听新图片'
 function hydrate(s: Snapshot) {
   data.value = s;
   if (!dirty.value) { enabled.value = s.settings.enabled; mode.value = s.settings.mode; clipboard.value = s.delivery.clipboard;
+    maxRetries.value = s.delivery.retry?.maxRetries ?? 0; backoffMs.value = s.delivery.retry?.backoffMs ?? 100; budgetMs.value = s.delivery.retry?.budgetMs ?? 3000;
     save.value = !!s.delivery.saveDirectory; directory.value = s.delivery.saveDirectory ?? ''; autoConsent.value = s.settings.autoConsent; alwaysConsent.value = s.settings.alwaysConsent; }
 }
 async function rpc(command: string, args: Record<string, unknown> = {}) {
@@ -42,7 +44,7 @@ async function action(command: string, args: Record<string, unknown> = {}) {
 async function apply() {
   if (save.value && !directory.value.trim()) { error.value = '请填写完整的本地保存目录。'; return; }
   await action('configure', { capture: { enabled: enabled.value, mode: mode.value }, autoConsent: autoConsent.value, alwaysConsent: alwaysConsent.value,
-    delivery: { clipboard: clipboard.value, ...(save.value ? { saveDirectory: directory.value.trim() } : {}) } });
+    delivery: { clipboard: clipboard.value, retry: { maxRetries: maxRetries.value, backoffMs: backoffMs.value, budgetMs: budgetMs.value }, ...(save.value ? { saveDirectory: directory.value.trim() } : {}) } });
   if (!error.value) { dirty.value = false; message.value = '设置已保存。从下一次剪贴板变化开始监听。'; await refresh(); }
 }
 async function openTask(id: string) {
@@ -74,6 +76,12 @@ onUnmounted(() => clearInterval(timer));
         <label v-if="clipboard === 'always'" class="consent"><input type="checkbox" v-model="alwaysConsent">我同意结果自动覆盖剪贴板，包括后来复制的内容。</label>
         <label class="check"><input type="checkbox" v-model="save">自动保存 Markdown</label>
         <label v-if="save">本地目录（完整路径）<input type="text" v-model="directory" placeholder="D:\Shot2Agent Results" spellcheck="false"></label>
+        <details><summary>投递失败重试</summary>
+          <p class="hint">仅重试明确的暂时失败，两个通道独立。Smart 始终保护后来的内容。不会重新执行 Agent。</p>
+          <label>额外尝试次数（0 表示关闭）<input type="number" v-model.number="maxRetries" min="0" max="10" step="1" required></label>
+          <label>初始等待（毫秒，最多递增到 1000）<input type="number" v-model.number="backoffMs" min="10" max="1000" step="1" required></label>
+          <label>每通道时间预算（毫秒）<input type="number" v-model.number="budgetMs" min="100" max="10000" step="1" required></label>
+        </details>
         <button class="primary" type="submit" :disabled="busy || !data">{{ busy ? '处理中…' : '应用设置' }}</button><span v-if="dirty" class="hint unsaved">尚未保存</span>
       </form>
       <div class="profile" v-if="data"><h2>执行配置</h2><p><strong>{{ data.profile.adapter === 'fake' ? 'Fake · 合成测试' : 'Codex · 云模型' }}</strong> / {{ data.profile.sandbox }}</p><p class="path">{{ data.profile.workspace || 'Fake 不访问工作区。验收模式下结果延迟 8 秒。' }}</p><p class="hint">{{ data.profile.version || data.profile.id }}。配置由本机 Worker 管理；更换配置须退出后重新启动，不会修改排队任务。</p><details><summary>本地数据位置</summary><p class="path">{{ data.root }}</p></details></div>
@@ -83,7 +91,7 @@ onUnmounted(() => clearInterval(timer));
       <div v-else class="empty"><strong>等待下一张截图</strong><p>使用 Win + Shift + S 复制图片。自动模式会直接排队；确认模式会在此预览。</p></div>
       <div class="section-heading history-heading"><h2>本地历史 <span>{{ data?.total ?? 0 }}</span></h2><span class="hint">显示最近 50 项</span></div>
       <p class="hint" v-if="!data?.tasks.length">尚无任务。启用捕获并应用设置，然后复制一张合成截图。</p>
-      <ul class="tasks"><li v-for="task in data?.tasks" :key="task.id"><button class="task-title" @click="openTask(task.id)" :disabled="busy"><strong>{{ task.summary || task.status }}</strong><span>{{ task.id.slice(0, 8) }} · {{ task.status }}</span></button><p class="hint">剪贴板：{{ task.clipboard?.status || '等待结果' }} · 保存：{{ task.save?.status || '等待结果' }}</p><p class="error" v-if="task.error">{{ task.error }} · 请检查 Agent 配置。此任务不会自动重跑。</p><p v-if="task.clipboard?.status === 'blocked_by_clipboard_change'" class="notice">Smart 已保护较新的剪贴板内容，可手动复制结果。</p><div class="task-actions" v-if="task.status === 'succeeded'"><button @click="action('copy', { id: task.id })" :disabled="busy">复制结果</button><button @click="action('retry-delivery', { id: task.id })" :disabled="busy">重试结果投递</button></div><p class="notice" v-if="task.status === 'execution_unknown'">执行结果不确定。请先检查 Agent；应用不会自动重新执行。</p></li></ul>
+      <ul class="tasks"><li v-for="task in data?.tasks" :key="task.id"><button class="task-title" @click="openTask(task.id)" :disabled="busy"><strong>{{ task.summary || task.status }}</strong><span>{{ task.id.slice(0, 8) }} · {{ task.status }}</span></button><p class="hint">剪贴板：{{ task.clipboard?.status || '等待结果' }} · 保存：{{ task.save?.status || '等待结果' }}</p><p class="hint" v-if="task.clipboard?.code">剪贴板：{{ task.clipboard.code }} · {{ task.clipboard.classification }} · {{ task.clipboard.attempts }} 次 · {{ task.clipboard.stopReason }}</p><p class="hint" v-if="task.save?.code">保存：{{ task.save.code }} · {{ task.save.classification }} · {{ task.save.attempts }} 次 · {{ task.save.stopReason }}</p><p class="error" v-if="task.error">{{ task.error }} · 请检查 Agent 配置。此任务不会自动重跑。</p><p v-if="task.clipboard?.status === 'blocked_by_clipboard_change'" class="notice">Smart 已保护较新的剪贴板内容，可手动复制结果。</p><div class="task-actions" v-if="task.status === 'succeeded'"><button @click="action('copy', { id: task.id })" :disabled="busy">复制结果</button><button @click="action('retry-delivery', { id: task.id })" :disabled="busy">重试结果投递</button></div><p class="notice" v-if="task.status === 'execution_unknown'">执行结果不确定。请先检查 Agent；应用不会自动重新执行。</p></li></ul>
       <article v-if="detail" class="result"><div class="section-heading"><h2>结果详情</h2><button @click="detail = undefined; selected = ''">关闭详情</button></div><p class="hint">{{ selected }} · {{ detail.status }}</p><pre>{{ detail.result?.contentMarkdown || detail.result?.errorCode || '暂无结果；完成后重新打开详情。' }}</pre></article>
     </section></div>
   </main>

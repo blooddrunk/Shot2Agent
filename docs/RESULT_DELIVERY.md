@@ -84,26 +84,17 @@ REMOTE: Worker PC B -> authenticated Relay result/artifacts
 
 Acceptance tests must prove (a) all three enabled channels fire independently, (b) each one can fail without blocking others, (c) all optional channels disabled results in history-only mode, (d) newer user clipboard content is preserved in smart mode, (e) copy-files works in Windows Explorer with real downloaded files, and (f) offline origin can resume safely. See [Testing](TESTING.md).
 
-## Local retry policy: current behavior and proposal
+## Local retry policy (M4-L, 0.4.0)
 
-Operator discussion on 2026-10-21 follows the [M3 desktop acceptance](M3_VALIDATION.md#operator-acceptance--2026-10-21). Configurable retry counts are **proposed, not implemented**; no new runtime behavior is authorized by this design note.
+The desktop exposes extra attempts (0–10; default 0), initial backoff (10–1000 ms; default 100) and per-channel budget (100–10000 ms; default 3000) under **投递失败重试**. Backoff doubles up to 1000 ms. Clipboard writes use the remaining transport deadline; synchronous filesystem calls cannot be preempted, so the save budget bounds scheduling rather than OS call duration. Settings are persisted and validated through the restricted IPC boundary. Existing settings without a retry policy preserve zero extra write attempts.
 
-Current implementation:
+- Save and clipboard reserve/record/retry independently. A successful channel is never automatically repeated. Final failures show a safe code, classification, attempts and stop reason; SQLite preserves up to 100 failure events with timing. No private clipboard data is logged.
+- Automatic retries apply only to known pre-write clipboard contention (`CLIPBOARD_BUSY`) and temporary save resource failures (`EBUSY/EAGAIN/EMFILE/ENFILE`). Permission, full disk, unsafe path and unknown errors are permanent; mismatched files are conflicts. Possible post-clear clipboard failure, helper timeout/death and protocol uncertainty are ambiguous and stop without automatic replay.
+- Smart retries ALWAYS retain the original capture session and sequence. Native comparison and write share one lock. A changed sequence/session stops with `blocked_by_clipboard_change`; neither copying identical content nor external sync activity grants permission to reset that baseline. Manual **复制结果** remains an explicit overwrite.
+- Restart acquires exclusive Worker ownership before converting stale pending delivery to `interrupted`, without replay. **重试结果投递** explicitly retries eligible non-success channels using existing results and the original Smart baseline; it never executes an Agent. Concurrent retry cannot steal a pending reservation.
+- Native write exceptions no longer have a hidden 6-attempt loop. Native read contention retains its bounded handling. A timeout kills the helper and requires restart/recovery as indicated; it is not retried as if a write were known absent.
+- Markdown publish uses a flushed private temporary file plus no-clobber hard-link creation. An existing identical result is idempotent; different bytes, links/junctions and unsupported filesystems fail closed. Use a canonical operator-owned local directory.
 
-- Native clipboard request exceptions get at most **6 total attempts** (initial + 5 retries), sleeping 30/60/90/120/150 ms between failed attempts. These limits are fixed in `clipboard.ps1`, not UI settings. They are separate from the persisted delivery receipt's `attempts`, which counts channel processing/retry/Copy actions rather than these low-level attempts.
-- A Smart sequence mismatch returns `written=false` and `blocked_by_clipboard_change`; it is not an exception and is not retried by that native loop. Explicit delivery retry keeps the original baseline/session, so it cannot bypass a later clipboard change. Manual Copy is the existing deliberate overwrite action.
-- The GUI's delivery retry reuses an existing successful result and channel receipts, independently of Agent execution. Successful channels remain idempotent; channel failure does not fail the task or the other channel.
-- Agent terminal failures/unknown outcomes are not automatically executed again. Started Codex interruption/nonzero exit may be `execution_unknown`; current GUI has no Agent rerun control. Unstarted expired leases can recover through existing queue rules.
+Agent rerun UI is deferred: existing preflight `failed`, launched failures and `execution_unknown` stay terminal with immutable evidence. No possibly launched Codex operation automatically reruns. Existing explicit delivery retry and Copy do not incur new model execution. A future rerun must create independent lineage, pin the approved profile and disclose possible extra model cost.
 
-Proposed bounded follow-up (requires implementation and automated verification):
-
-| Situation | Proposed behavior |
-| --- | --- |
-| Clipboard busy / classified transient delivery failure | Configurable maximum retries, backoff and total time budget; 0 means no retries, counts exclude the initial attempt. Every Smart attempt retains/rechecks the original safety condition. Stop on a mismatch, permanent refusal or ambiguous write outcome. |
-| Smart conflict / changed helper session | Keep content untouched by further automatic attempts; show conflict reason and manual Copy. Do not treat unknown clipboard activity as permission to overwrite or silently refresh the baseline. |
-| Same content re-published by a sync component | Investigate a race-safe content-equivalence check separately; sequence changes alone cannot identify the writer or prove user intent. This is not solved by increasing retry counts. |
-| Transient Markdown save failure | Independent bounded retries; no retry through unsafe paths, conflicting files or permission/policy refusals; successful saves remain idempotent. |
-| Recoverable failure proven to occur before Agent launch | Consider opt-in bounded retry after structured classification; do not retry permanent version/profile/auth/configuration refusals automatically. |
-| Agent may have started, timed out or has uncertain outcome | Default automatic execution retries remain 0. Offer explicit rerun/review preserving the original record and recording the new execution separately, with pinned profile and possible extra usage shown. `failed` alone is not proof that execution never started. |
-
-Expose retry counts, reasons and terminal outcomes without screenshot/clipboard contents or raw Agent logs. Test transient busy -> success, retry exhaustion, changed clipboard during backoff, delivery-channel independence, restart accounting and no automatic Agent replay. No Relay, Remote expansion or new infrastructure milestone is required for this bounded reliability work.
+WeChat Input Method synchronization is an operator-observed correlation. These diagnostics do not establish which component changed/emptied the clipboard or certify input-method compatibility. See [M4 scope](M4_LOCAL_RELIABILITY.md), [validation](M4_VALIDATION.md) and the retained [M3 observations](M3_VALIDATION.md#operator-acceptance--2026-10-21).

@@ -77,7 +77,7 @@ public static class ShotClipboard {
       try {
         // PowerShell coerces $null to an empty string for a C# string parameter.
         if (!String.IsNullOrEmpty(expected) && GetClipboardSequenceNumber().ToString() != expected) return false;
-        if (!EmptyClipboard() || SetClipboardData(13, handle) == IntPtr.Zero) throw new Exception("CLIPBOARD_WRITE");
+        if (!EmptyClipboard() || SetClipboardData(13, handle) == IntPtr.Zero) throw new Exception("CLIPBOARD_WRITE_AMBIGUOUS");
         owned = false; return true;
       } finally { CloseClipboard(); }
     } finally { if (owned) GlobalFree(handle); }
@@ -104,10 +104,17 @@ while ($null -ne ($line = [Console]::ReadLine())) {
         }
         break
       } catch {
-        if ($attempt -eq 5) { throw }
+        if ($request.op -eq 'write' -or $attempt -eq 5 -or $_.Exception.ToString() -notmatch 'CLIPBOARD_BUSY') { throw }
         Start-Sleep -Milliseconds (30 * ($attempt + 1))
       }
     }
     [Console]::WriteLine(($response | ConvertTo-Json -Compress))
-  } catch { [Console]::WriteLine('{"error":"CLIPBOARD_UNAVAILABLE_OR_OVERSIZED"}') }
+  } catch {
+    # Whitelisted phase codes only. Never emit clipboard data or exception text.
+    $code = 'CLIPBOARD_UNAVAILABLE_OR_OVERSIZED'
+    foreach ($safe in @('CLIPBOARD_BUSY','CLIPBOARD_ALLOC','CLIPBOARD_WRITE_AMBIGUOUS')) {
+      if ($_.Exception.ToString().Contains($safe)) { $code = $safe; break }
+    }
+    [Console]::WriteLine((@{error=$code} | ConvertTo-Json -Compress))
+  }
 }

@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { privateDirectory } from '../../core/src/store.ts';
 import { requireValue } from '../../core/src/model.ts';
 import type { CodexPolicy } from '../../worker/src/codex.ts';
+import { validateRetry } from '../../local/src/delivery.ts';
 import type { DeliveryConfig } from '../../local/src/delivery.ts';
 export interface Settings {
   adapter: 'fake' | 'codex'; delivery: DeliveryConfig; codex?: CodexPolicy;
@@ -15,6 +16,7 @@ export function validate(settings: Settings): void {
   requireValue(settings && ['fake', 'codex'].includes(settings.adapter) && settings.delivery &&
     ['off', 'manual', 'smart', 'always'].includes(settings.delivery.clipboard) &&
     (settings.delivery.saveDirectory === undefined || (typeof settings.delivery.saveDirectory === 'string' && isAbsolute(settings.delivery.saveDirectory))), 'INVALID_SETTINGS');
+  validateRetry(settings.delivery.retry);
   const c = settings.desktop;
   requireValue(c && c.version === 1 && ['confirm', 'auto'].includes(c.mode) &&
     [c.enabled, c.paused, c.autoConsent, c.alwaysConsent].every(v => typeof v === 'boolean'), 'INVALID_DESKTOP_SETTINGS');
