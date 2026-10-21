@@ -61,7 +61,8 @@ async function rpc(command: string, args: Record<string, unknown> = {}) {
 }
 async function refresh() {
   if (polling || busy.value) return; polling = true;
-  try { hydrate(await rpc('snapshot') as Snapshot); transportError.value = ''; } catch (e) { transportError.value = String(e); }
+  try { hydrate(await rpc('snapshot') as Snapshot); transportError.value = ''; }
+  catch (e) { if (!transportError.value) transportError.value = String(e); }
   finally { polling = false; }
 }
 async function action(command: string, args: Record<string, unknown> = {}) {
