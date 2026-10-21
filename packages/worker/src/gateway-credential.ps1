@@ -1,7 +1,8 @@
-param([ValidateSet('add','read','delete')][string]$Action, [string]$Reference)
+param([ValidateSet('add','read','delete')][string]$Action, [string]$Reference, [switch]$TokenFromPipe)
 $ErrorActionPreference = 'Stop'
 $stage = 'INPUT'
 try {
+  if ($TokenFromPipe -and $Action -ne 'add') { exit 2 }
   if ($Reference -notmatch '^Shot2Agent-Gateway-[0-9a-f-]{36}$') { exit 2 }
   $stage = 'NATIVE_TYPE'
   Add-Type -TypeDefinition @'
@@ -44,7 +45,22 @@ public static class ShotCredential {
   if ($exists) { [ShotCredential]::CredFree($ptr); exit 4 }
   if ($readError -ne 1168) { [Console]::Error.WriteLine('GATEWAY_SECURE_STORE_ERROR_' + $readError); exit 3 }
   $stage = 'PROMPT'
-  $secure = Read-Host 'Gateway API Token (hidden; never saved as plaintext)' -AsSecureString
+  if ($TokenFromPipe) {
+    # Private redirected stdin for internal/native tests or a future masked caller.
+    # Never a token argument, environment variable, file or diagnostic.
+    if (-not [Console]::IsInputRedirected) { exit 2 }
+    $text = New-Object System.Text.StringBuilder
+    while ($text.Length -le 2048) {
+      $next = [Console]::In.Read()
+      if ($next -lt 0 -or $next -eq 10 -or $next -eq 13) { break }
+      [void]$text.Append([char]$next)
+    }
+    if ($text.Length -lt 8 -or $text.Length -gt 2048 -or $text.ToString() -notmatch '^[\x21-\x7e]+$') { exit 2 }
+    $secure = ConvertTo-SecureString $text.ToString() -AsPlainText -Force
+    [void]$text.Clear()
+  } else {
+    $secure = Read-Host 'Gateway API Token (hidden; never saved as plaintext)' -AsSecureString
+  }
   $stage = 'SECURE_BUFFER'
   $blob = [Runtime.InteropServices.Marshal]::SecureStringToCoTaskMemUnicode($secure)
   try {

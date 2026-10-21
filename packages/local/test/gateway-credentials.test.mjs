@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { credentialCommand, readGatewayToken } from '../../worker/src/gateway.ts';
 const gateway = () => ({ credentialRef: `Shot2Agent-Gateway-${randomUUID()}` });
@@ -9,10 +8,9 @@ test('Windows secure store refuses absent disposable reference; no personal cred
 });
 test('Windows OS-backed credential lifecycle uses a unique disposable target and refuses replacement', { skip: process.platform !== 'win32' }, async () => {
   const { spawnSync } = await import('node:child_process');
-  const { credentialScript } = await import('../../worker/src/gateway.ts');
   const reference = gateway().credentialRef; const native = credentialCommand('delete', reference);
-  const helper = fileURLToPath(new URL('./mock-credential-add.ps1', import.meta.url));
-  const add = () => spawnSync(native.executable, ['-NoProfile', '-NonInteractive', '-File', helper, '-Script', credentialScript, '-Reference', reference], { shell: false, encoding: 'utf8', timeout: 15000 });
+  const addCommand = credentialCommand('add', reference);
+  const add = () => spawnSync(addCommand.executable, [...addCommand.args, '-TokenFromPipe'], { input: 'synthetic-fixture-only-credential\n', shell: false, encoding: 'utf8', timeout: 15000 });
   try {
     const created = add(); assert.equal(created.status, 0, `synthetic secure-store create refused: ${created.stderr}`);
     assert.equal(await readGatewayToken(reference), 'synthetic-fixture-only-credential');
