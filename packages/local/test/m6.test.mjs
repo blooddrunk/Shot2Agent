@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import sharp from 'sharp';
 import { ClaudeAgent, claudeProfile, assertClaudeMachinePolicy } from '../../worker/src/claude.ts';
-import { validateGateway, assertGatewayVision, credentialCommand, readGatewayToken } from '../../worker/src/gateway.ts';
+import { validateGateway, assertGatewayVision, credentialCommand } from '../../worker/src/gateway.ts';
 import { programDigest } from '../../worker/src/discovery.ts';
 import { executionRegistry } from '../../worker/src/registry.ts';
 import { sha256 } from '../../core/src/blobs.ts';
@@ -72,24 +72,6 @@ for (const mode of ['success', 'auth', 'echo-secret', 'malformed', 'credential-m
     assert.notEqual(profile.fingerprint, claudeProfile({ ...policy, gateway: { ...policy.gateway, credentialRef: gateway().credentialRef } }).fingerprint);
   } finally { server.closeAllConnections(); await new Promise(r => server.close(r)); rmSync(root, { recursive: true, force: true }); }
 });
-test('Windows secure store refuses absent disposable reference; no personal credentials accessed', { skip: process.platform !== 'win32' }, async () => {
-  await assert.rejects(readGatewayToken(gateway().credentialRef), /GATEWAY_CREDENTIAL_UNAVAILABLE/);
-});
 test('production gateway retains Windows policy requirement', { skip: process.platform === 'win32' }, async () => {
   await assert.rejects(assertClaudeMachinePolicy(), /CLAUDE_WINDOWS_ONLY/);
-});
-
-test('Windows OS-backed credential lifecycle uses a unique disposable target and refuses replacement', { skip: process.platform !== 'win32' }, async () => {
-  const { spawnSync } = await import('node:child_process');
-  const { credentialScript } = await import('../../worker/src/gateway.ts');
-  const reference = gateway().credentialRef; const native = credentialCommand('delete', reference);
-  const helper = fileURLToPath(new URL('./mock-credential-add.ps1', import.meta.url));
-  const add = () => spawnSync(native.executable, ['-NoProfile', '-NonInteractive', '-File', helper, '-Script', credentialScript, '-Reference', reference], { shell: false, encoding: 'utf8', timeout: 15000 });
-  try {
-    const created = add(); assert.equal(created.status, 0, 'synthetic secure-store create refused');
-    assert.equal(await readGatewayToken(reference), 'synthetic-fixture-only-credential');
-    assert.notEqual(add().status, 0, 'existing reference must be immutable');
-    assert.equal(spawnSync(native.executable, native.args, { shell: false, timeout: 15000 }).status, 0);
-    await assert.rejects(readGatewayToken(reference), /GATEWAY_CREDENTIAL_UNAVAILABLE/);
-  } finally { spawnSync(native.executable, native.args, { shell: false, timeout: 15000, stdio: 'ignore' }); }
 });

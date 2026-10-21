@@ -15,15 +15,21 @@ public static class ShotCredential {
  [DllImport("advapi32.dll", CharSet=CharSet.Unicode, SetLastError=true)] public static extern bool CredRead(string target,uint type,uint flags,out IntPtr p);
  [DllImport("advapi32.dll", CharSet=CharSet.Unicode, SetLastError=true)] public static extern bool CredDelete(string target,uint type,uint flags);
  [DllImport("advapi32.dll")] public static extern void CredFree(IntPtr p);
+ // Capture last error inside the same managed call; PowerShell/.NET can overwrite thread last-error between statements.
+ public static int ReadStatus(string target, out IntPtr p) { return CredRead(target,1,0,out p) ? 0 : Marshal.GetLastWin32Error(); }
+ public static int WriteStatus(ref CREDENTIAL c) { return CredWrite(ref c,0) ? 0 : Marshal.GetLastWin32Error(); }
+ public static int DeleteStatus(string target) { return CredDelete(target,1,0) ? 0 : Marshal.GetLastWin32Error(); }
 }
 '@
   if ($Action -eq 'delete') {
-    if (-not [ShotCredential]::CredDelete($Reference,1,0)) { exit 3 }; exit 0
+    $code = [ShotCredential]::DeleteStatus($Reference)
+    if ($code -ne 0) { [Console]::Error.WriteLine('GATEWAY_SECURE_STORE_ERROR_' + $code); exit 3 }; exit 0
   }
   $ptr = [IntPtr]::Zero
-  $exists = [ShotCredential]::CredRead($Reference,1,0,[ref]$ptr)
+  $readError = [ShotCredential]::ReadStatus($Reference,[ref]$ptr)
+  $exists = $readError -eq 0
   if ($Action -eq 'read') {
-    if (-not $exists) { exit 3 }
+    if (-not $exists) { [Console]::Error.WriteLine('GATEWAY_SECURE_STORE_ERROR_' + $readError); exit 3 }
     try {
       $credential = [Runtime.InteropServices.Marshal]::PtrToStructure($ptr,[type][ShotCredential+CREDENTIAL])
       $secret = [Runtime.InteropServices.Marshal]::PtrToStringUni($credential.CredentialBlob, $credential.CredentialBlobSize / 2)
@@ -33,7 +39,7 @@ public static class ShotCredential {
   }
   # References are immutable. Replace by adding a NEW reference and approving a NEW Profile.
   if ($exists) { [ShotCredential]::CredFree($ptr); exit 4 }
-  if ([Runtime.InteropServices.Marshal]::GetLastWin32Error() -ne 1168) { exit 3 }
+  if ($readError -ne 1168) { [Console]::Error.WriteLine('GATEWAY_SECURE_STORE_ERROR_' + $readError); exit 3 }
   $secure = Read-Host 'Gateway API Token (hidden; never saved as plaintext)' -AsSecureString
   $blob = [Runtime.InteropServices.Marshal]::SecureStringToCoTaskMemUnicode($secure)
   try {
@@ -41,7 +47,8 @@ public static class ShotCredential {
     $credential = New-Object ShotCredential+CREDENTIAL
     $credential.Type=1; $credential.TargetName=$Reference; $credential.UserName='Shot2Agent'; $credential.Persist=2
     $credential.CredentialBlob=$blob; $credential.CredentialBlobSize=$secure.Length*2
-    if (-not [ShotCredential]::CredWrite([ref]$credential,0)) { exit 3 }
+    $code = [ShotCredential]::WriteStatus([ref]$credential)
+    if ($code -ne 0) { [Console]::Error.WriteLine('GATEWAY_SECURE_STORE_ERROR_' + $code); exit 3 }
   } finally { [Runtime.InteropServices.Marshal]::ZeroFreeCoTaskMemUnicode($blob); $secure.Dispose() }
   exit 0
-} catch { exit 3 }
+} catch { [Console]::Error.WriteLine('GATEWAY_SECURE_STORE_EXCEPTION'); exit 3 }
