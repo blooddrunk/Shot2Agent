@@ -1,4 +1,5 @@
 import sharp from 'sharp';
+import { effectiveDelivery } from '../../local/src/delivery.ts';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AgentAdapter, Profile } from '../../contracts/src/index.ts';
@@ -35,7 +36,7 @@ export class DesktopController {
     this.app = new LocalApp(root, injected?.adapter ?? selected?.adapter ?? (this.settings.adapter === 'codex' ? new CodexAgent([policy!]) : new FakeAgent()),
       injected?.profile ?? selected?.profile ?? (this.settings.adapter === 'codex' ? codexProfile(policy!, false) : FAKE_PROFILE),
       // A fresh desktop preselects Always, but cannot write until overwrite consent.
-      { ...this.settings.delivery, clipboard: this.settings.delivery.clipboard === 'always' && !this.settings.desktop.alwaysConsent ? 'manual' : this.settings.delivery.clipboard }, clipboard, entries);
+      effectiveDelivery(this.settings), clipboard, entries);
   }
   private async refreshDiscovery() {
     if (this.discovering) return this.discovering;
@@ -107,7 +108,7 @@ export class DesktopController {
         // A mode/source switch invalidates the staging slot and skips historical content.
         await this.app.arm(); saveSettings(this.root, next); this.settings = next;
         for (const key of Object.keys(this.app.config)) delete (this.app.config as unknown as Record<string, unknown>)[key];
-        Object.assign(this.app.config, next.delivery); this.armed = true; this.captureError = undefined;
+        Object.assign(this.app.config, effectiveDelivery(next)); this.armed = true; this.captureError = undefined;
         break;
       }
       case 'pause':

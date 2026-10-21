@@ -18,6 +18,7 @@ import { CodexAgent, codexProfile, inspectCodex } from '../../../packages/worker
 import type { CodexPolicy } from '../../../packages/worker/src/codex.ts';
 import { WindowsClipboard } from '../../../packages/local/src/clipboard.ts';
 import { LocalApp, readImageFile } from '../../../packages/local/src/app.ts';
+import { effectiveDelivery } from '../../../packages/local/src/delivery.ts';
 import type { DeliveryConfig } from '../../../packages/local/src/delivery.ts';
 const { positionals, values } = parseArgs({ allowPositionals: true, options: {
   root: { type: 'string' }, adapter: { type: 'string' }, workspace: { type: 'string' }, codex: { type: 'string' },
@@ -109,13 +110,14 @@ async function main() {
     log({ adapter: settings.adapter, version: policy?.cliVersion, platform: process.platform, nativeClipboard: process.platform === 'win32' ? 'requires interactive session acceptance' : 'unavailable', root }); return;
   }
   requireValue(settings.adapter !== 'codex' || policy, 'MISSING_CODEX_POLICY');
-  const needsClipboard = ['submit', 'copy', 'watch'].includes(command) || (['work', 'file'].includes(command) && ['smart', 'always'].includes(settings.delivery.clipboard));
+  const delivery = effectiveDelivery(settings);
+  const needsClipboard = ['submit', 'copy', 'watch'].includes(command) || (['work', 'file'].includes(command) && ['smart', 'always'].includes(delivery.clipboard));
   const clipboard = needsClipboard ? new WindowsClipboard() : undefined;
   const registry = settings.agents ? executionRegistry(settings.agents.profiles) : undefined;
   const selected = registry?.find(e => e.profile.id === settings.agents!.selected.id && e.profile.version === settings.agents!.selected.version);
   requireValue(!registry || selected, 'UNAPPROVED_PROFILE');
   const adapter = selected?.adapter ?? (settings.adapter === 'codex' ? new CodexAgent([policy!]) : new FakeAgent());
-  const app = new LocalApp(root, adapter, selected?.profile ?? (settings.adapter === 'codex' ? codexProfile(policy!) : FAKE_PROFILE), settings.delivery, clipboard, registry);
+  const app = new LocalApp(root, adapter, selected?.profile ?? (settings.adapter === 'codex' ? codexProfile(policy!) : FAKE_PROFILE), delivery, clipboard, registry);
   const controller = new AbortController();
   const stop = () => controller.abort(); process.once('SIGINT', stop); process.once('SIGTERM', stop);
   const actions = async (action: string, id?: string) => {
