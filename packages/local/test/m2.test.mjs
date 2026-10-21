@@ -376,3 +376,28 @@ test('manual Copy refuses a pending delivery without replacing its receipt', asy
     await app.copy(id); assert.equal(clipboard.writes, 1); assert.deepEqual(app.state.get(id, 'clipboard').history, history);
   } finally { app.close(); rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('CLI process reads fresh desktop Always as manual without starting native clipboard', async () => {
+  const { defaults, saveSettings } = await import('../../desktop/src/settings.ts');
+  const { effectiveDelivery } = await import('../src/delivery.ts');
+  const dir = root(); const settings = defaults(); saveSettings(dir, settings);
+  let app = new LocalApp(dir, new FakeAgent(), FAKE_PROFILE, effectiveDelivery(settings));
+  const id = await app.submit(await fixture()); app.close(); app = undefined;
+  try {
+    const child = spawnSync(process.execPath, ['--experimental-strip-types', 'apps/cli/src/mvp.ts', 'work', '--root', dir], { encoding: 'utf8', timeout: 15000 });
+    assert.equal(child.status, 0, child.stderr);
+    app = new LocalApp(dir, new FakeAgent(), FAKE_PROFILE, effectiveDelivery(settings));
+    assert.equal(app.get(id).status, 'succeeded');
+    assert.equal(app.state.get(id, 'clipboard').status, 'manual');
+    app.close(); app = undefined;
+    for (const config of [settings, { ...settings, desktop: { ...settings.desktop, alwaysConsent: true } }, { adapter: 'fake', delivery: { clipboard: 'always' } }]) {
+      const cb = new Clipboard(); app = new LocalApp(dir, new FakeAgent(), FAKE_PROFILE, effectiveDelivery(config), cb);
+      const taskId = await app.submit(await fixture(), { session: 'old-session', sequence: '1' }, true);
+      await app.work(); assert.equal(cb.writes, config.desktop?.alwaysConsent === false ? 0 : 1);
+      // Old blocked Smart guard cannot be cleared by a current Always config.
+      app.state.put(taskId, 'clipboard', { status: 'blocked_by_clipboard_change', smartGuard: true, attempts: 1 });
+      const before = cb.writes; await app.retryDelivery(taskId); assert.equal(cb.writes, before);
+      app.close(); app = undefined;
+    }
+  } finally { app?.close(); rmSync(dir, { recursive: true, force: true }); }
+});

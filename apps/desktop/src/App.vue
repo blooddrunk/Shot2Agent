@@ -10,7 +10,7 @@ type Snapshot = { launchMode: string; root: string; status: string; error?: stri
   agents: Agent[]; discovery: { provider: string; path: string; version?: string; status: string }[];
   profile: { adapter: string; id: string; profileVersion?: string; workspace?: string; version?: string; sandbox: string }; tasks: Task[] };
 const data = ref<Snapshot>(); const transportError = ref(''); const error = ref(''); const message = ref(''); const busy = ref(false);
-const enabled = ref(false); const mode = ref('confirm'); const clipboard = ref('manual'); const save = ref(false); const directory = ref('');
+const enabled = ref(false); const mode = ref('confirm'); const clipboard = ref('always'); const save = ref(false); const directory = ref('');
 const maxRetries = ref(0); const backoffMs = ref(100); const budgetMs = ref(3000);
 const autoConsent = ref(false); const alwaysConsent = ref(false); const dirty = ref(false);
 const selected = ref(''); const detail = ref<{ status: string; result?: { contentMarkdown: string; errorCode?: string } }>();
@@ -81,6 +81,7 @@ onUnmounted(() => clearInterval(timer));
         <h2>结果去向</h2><p class="hint">历史始终保留。剪贴板与 Markdown 保存可同时启用。</p>
         <label>剪贴板返回<select v-model="clipboard"><option value="off">关闭</option><option value="manual">手动复制</option><option value="smart">Smart · 保护后来复制的内容</option><option value="always">Always · 总是覆盖</option></select></label>
         <label v-if="clipboard === 'always'" class="consent"><input type="checkbox" v-model="alwaysConsent">我同意结果自动覆盖剪贴板，包括后来复制的内容。</label>
+        <p v-if="clipboard === 'always' && !alwaysConsent" class="hint">勾选并应用后启用 Always；确认前仅可手动复制结果。</p>
         <label class="check"><input type="checkbox" v-model="save">自动保存 Markdown</label>
         <label v-if="save">本地目录（完整路径）<input type="text" v-model="directory" placeholder="D:\Shot2Agent Results" spellcheck="false"></label>
         <details><summary>投递失败重试</summary>

@@ -1,4 +1,6 @@
-> **M5-L 0.5.0 candidate:** Local Codex/Claude discovery, stopped-Worker explicit approval and immutable new-task Agent selection. Claude native transport qualified only at 2.1.305/2.1.306, personal Pro/Max only; actual model/GUI gates remain separate. See [Windows controls and restrictions](docs/M5_WINDOWS_ACCEPTANCE.md) and [executed validation](docs/M5_VALIDATION.md).
+> **Desktop default follow-up:** Fresh desktop settings preselect Always, with capture disabled and overwrite consent required before use. Existing settings are preserved. Smart remains optional; its reported sequence conflicts are unresolved. See [operation](docs/M3_WINDOWS_RUN.md#always-default-selection--2026-10-21).
+
+> **M5-L 0.5.0 candidate:** Local Codex/Claude discovery, stopped-Worker explicit approval and immutable new-task Agent selection. Claude native transport qualified only at 2.1.305/2.1.306, personal Pro/Max only; custom GLM/token endpoints are not supported in this release. Actual model/GUI gates remain separate. See [Windows controls and restrictions](docs/M5_WINDOWS_ACCEPTANCE.md) and [executed validation](docs/M5_VALIDATION.md).
 
 > **Desktop 0.4.1:** `Shot2Agent.exe` / `Start Codex.cmd` opens the existing approved `Shot2Agent-Codex` Profile; missing configuration fails visibly. `Start acceptance.cmd` stays Fake, and `Start legacy Local.cmd` preserves the original Local history. See [Windows startup](docs/M3_WINDOWS_RUN.md) and [verification boundaries](docs/DESKTOP_CODEX_ENTRY_VALIDATION.md).
 

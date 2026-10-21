@@ -45,3 +45,7 @@ M4-L 0.4.0 adds no-clobber Markdown publication, independent bounded delivery re
 ## M5-L implementation candidate
 
 Worker-owned provider/Profile registry, CLI discovery, explicit stopped-Worker `approve-agent` and new-task-only desktop selection are implemented for 0.5.0. Preserve old Codex/Fake/legacy roots and Profiles. Native Claude 2.1.305/2.1.306 JSONL image transport was probed against a synthetic local API; this is not real Claude model/authentication proof. Personal Pro/Max only; managed policy, API-key/Token/Team/unknown auth and unqualified versions refuse execution. Do not expand this boundary or use bare/permission bypass. Follow docs/M5_WINDOWS_ACCEPTANCE.md and docs/M5_VALIDATION.md; no failover or Agent auto-rerun. Final PR and merged main require independent gates.
+
+## Operator follow-up — Always default and custom GLM
+
+The operator reports other checked items PASS, but Smart still blocks new and historical tasks even after WeChat Input Method clipboard synchronization is disabled. Do not claim a Smart fix or attribute the cause to that input method. Fresh desktop settings preselect Always with capture disabled and overwrite consent unchecked; effective delivery stays manual until consent. Preserve existing modes and sticky Smart receipts. Custom GLM/token authentication is not supported by the current personal Pro/Max Claude adapter; the operator's working standalone CLI configuration is not Shot2Agent image-analysis proof. See docs/M5_VALIDATION.md.

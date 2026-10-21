@@ -62,3 +62,9 @@ npm run desktop:package
 ```
 
 Output: `build\Shot2Agent\Shot2Agent.exe` with runtime; CI also archives `Shot2Agent-Windows-x64.zip` and runs the packaged executable `--staging --smoke` through the real Rust-to-Node pipe (snapshot, command refusal, natural coordinator exit, unexpected coordinator death and descendant cleanup). CI smoke is not logged-in user tray/focus/paste acceptance. No installer, launch-on-login, Remote, watched folder, batch editor or file clipboard is included in this slice.
+
+## Always default selection — 2026-10-21
+
+New desktop settings preselect Always. Capture remains disabled and overwrite consent remains unchecked. Check **我同意结果自动覆盖剪贴板，包括后来复制的内容** and Apply before enabling it. Until then, even an explicit task submission uses manual clipboard delivery. Existing saved modes and legacy M2 migration remain unchanged. CLI init still defaults to manual.
+
+For an existing installation, select Always, check overwrite consent and Apply. This affects future eligible delivery; existing blocked Smart receipts keep their original guard. Use Copy for those results. Always may replace text copied while the Agent was running; Markdown saving remains independent.

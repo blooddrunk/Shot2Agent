@@ -1,4 +1,5 @@
 import sharp from 'sharp';
+import { effectiveDelivery } from '../../local/src/delivery.ts';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AgentAdapter, Profile } from '../../contracts/src/index.ts';
@@ -33,7 +34,9 @@ export class DesktopController {
     const entries = !injected && this.settings.agents ? executionRegistry(this.settings.agents.profiles) : undefined;
     const selected = entries?.find(e => e.profile.id === this.settings.agents!.selected.id && e.profile.version === this.settings.agents!.selected.version);
     this.app = new LocalApp(root, injected?.adapter ?? selected?.adapter ?? (this.settings.adapter === 'codex' ? new CodexAgent([policy!]) : new FakeAgent()),
-      injected?.profile ?? selected?.profile ?? (this.settings.adapter === 'codex' ? codexProfile(policy!, false) : FAKE_PROFILE), this.settings.delivery, clipboard, entries);
+      injected?.profile ?? selected?.profile ?? (this.settings.adapter === 'codex' ? codexProfile(policy!, false) : FAKE_PROFILE),
+      // A fresh desktop preselects Always, but cannot write until overwrite consent.
+      effectiveDelivery(this.settings), clipboard, entries);
   }
   private async refreshDiscovery() {
     if (this.discovering) return this.discovering;
@@ -105,7 +108,7 @@ export class DesktopController {
         // A mode/source switch invalidates the staging slot and skips historical content.
         await this.app.arm(); saveSettings(this.root, next); this.settings = next;
         for (const key of Object.keys(this.app.config)) delete (this.app.config as unknown as Record<string, unknown>)[key];
-        Object.assign(this.app.config, next.delivery); this.armed = true; this.captureError = undefined;
+        Object.assign(this.app.config, effectiveDelivery(next)); this.armed = true; this.captureError = undefined;
         break;
       }
       case 'pause':

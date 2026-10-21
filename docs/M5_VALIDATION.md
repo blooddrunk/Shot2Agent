@@ -63,3 +63,13 @@ A concurrent local full check during stabilization exposed two Mock desktop poll
 Read-only native isolation/auth-status preflight against the installed 2.1.305 returned `CLAUDE_AUTH_UNVERIFIED`; no model was invoked and no account/credential output was logged. This is a concrete unmet authentication precondition, not proof that image analysis works or a reason to change accounts automatically.
 
 The next Windows Node 22 run at `f4a0880` confirmed the new diagnostic: all twelve native Mock cases failed with `CLAUDE_POLICY_CHECK_TIMEOUT`, rather than a present-policy result. Merely doubling the budget did not fix it. The fixed OS registry helper now inherits the normal Windows system environment, like the existing clipboard helper; this exception is restricted by exact executable/argument/file checks in `boundedProcess`. Codex/Claude model processes still use the credential/environment allowlist. The exact missing Windows startup dependency remains unproven; the next final-head run must establish whether this resolves the hosted failure.
+
+## Operator follow-up — 2026-10-21
+
+The operator reports the other checked items PASS, with two explicit exclusions: Smart consistently blocks both new captures and historical retries, and Claude with a custom GLM endpoint fails authentication preflight. This is an operator report, not independent automated observation or real Claude/GLM image-analysis proof. No additional item-by-item acceptance detail was supplied.
+
+Copy followed by delivery retry does not establish a successful Smart comparison: Copy marks clipboard delivery succeeded and retry skips that channel. The component responsible for sequence changes remains unestablished, including after WeChat Input Method clipboard synchronization was disabled.
+
+The operator requests Always as the default. Fresh desktop settings now preselect Always with capture disabled and overwrite consent unchecked; actual clipboard delivery stays manual until explicitly approved. Existing settings are retained. No operator configuration, database, running process or model authentication is modified by this source change.
+
+GLM authentication is not supported in 0.5.0. Current preflight requires `auth status` to verify a personal claude.ai Pro/Max subscription. Child-process environment filtering does not forward `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL` or the custom model aliases. Do not remove the subscription check alone or inherit all user settings to work around this boundary. A future gateway profile must pin endpoint/model and a local credential reference, preserve hook/tool/MCP isolation, and separately qualify image transport against the endpoint. Never store tokens in task metadata, public diagnostics or Git.

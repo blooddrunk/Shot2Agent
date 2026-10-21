@@ -13,9 +13,9 @@ export interface Settings {
   agents?: { version: 1; selected: { id: string; version: string }; profiles: ApprovedPolicy[] };
   desktop: { version: 1; enabled: boolean; mode: 'confirm' | 'auto'; paused: boolean; autoConsent: boolean; alwaysConsent: boolean };
 }
-export const defaults = (): Settings => ({ adapter: 'fake', delivery: { clipboard: 'manual' },
+export const defaults = (): Settings => ({ adapter: 'fake', delivery: { clipboard: 'always' },
   desktop: { version: 1, enabled: false, mode: 'confirm', paused: false, autoConsent: false, alwaysConsent: false } });
-export function validate(settings: Settings): void {
+export function validate(settings: Settings, allowPendingAlways = false): void {
   requireValue(settings && ['fake', 'codex'].includes(settings.adapter) && settings.delivery &&
     ['off', 'manual', 'smart', 'always'].includes(settings.delivery.clipboard) &&
     (settings.delivery.saveDirectory === undefined || (typeof settings.delivery.saveDirectory === 'string' && isAbsolute(settings.delivery.saveDirectory))), 'INVALID_SETTINGS');
@@ -30,10 +30,10 @@ export function validate(settings: Settings): void {
   requireValue(c && c.version === 1 && ['confirm', 'auto'].includes(c.mode) &&
     [c.enabled, c.paused, c.autoConsent, c.alwaysConsent].every(v => typeof v === 'boolean'), 'INVALID_DESKTOP_SETTINGS');
   requireValue(c.mode !== 'auto' || c.autoConsent, 'AUTO_CLOUD_CONSENT_REQUIRED');
-  requireValue(settings.delivery.clipboard !== 'always' || c.alwaysConsent, 'ALWAYS_OVERWRITE_CONSENT_REQUIRED');
+  requireValue(settings.delivery.clipboard !== 'always' || c.alwaysConsent || (allowPendingAlways && !c.enabled), 'ALWAYS_OVERWRITE_CONSENT_REQUIRED');
 }
 export function saveSettings(root: string, settings: Settings): void {
-  validate(settings); privateDirectory(root);
+  validate(settings, true); privateDirectory(root);
   const path = join(root, 'settings.json'); const temp = join(root, `.settings-${randomUUID()}.tmp`);
   if (existsSync(path)) requireValue(lstatSync(path).isFile() && !lstatSync(path).isSymbolicLink(), 'UNSAFE_SETTINGS');
   const fd = openSync(temp, 'wx', 0o600);
@@ -53,5 +53,5 @@ export function loadSettings(root: string): Settings {
     if (settings.delivery?.clipboard === 'always') settings.delivery.clipboard = 'manual';
     saveSettings(root, settings);
   }
-  validate(settings); return settings;
+  validate(settings, true); return settings;
 }
