@@ -1,3 +1,5 @@
+> **M7-UX 0.7.1:** Four focused Local desktop pages, visible Agent editor, responsive controls, history management and separate local GLM Token save / optional paid connection test. [GUI guide](docs/M7_UX_RUN.md) · [validation and Windows package evidence](docs/M7_UX_VALIDATION.md).
+
 > **M6-L 0.6.0 candidate:** Configurable native Windows global hotkeys, latest completed-result actions, and separate Claude-compatible Gateway Profiles with Windows Credential Manager references. No real GLM vision claim; setup refuses unqualified image models until explicit operator attestation. See [controls and acceptance](docs/M6_WINDOWS_ACCEPTANCE.md) and [validation](docs/M6_VALIDATION.md).
 
 > **Desktop default follow-up:** Fresh desktop settings preselect Always, with capture disabled and overwrite consent required before use. Existing settings are preserved. Smart remains optional; its reported sequence conflicts are unresolved. See [operation](docs/M3_WINDOWS_RUN.md#always-default-selection--2026-10-21).

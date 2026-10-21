@@ -1,6 +1,6 @@
 # M7-UX: Local desktop usability closeout before M8-L
 
-Status: PLANNED, not implemented. 2026-10-22. Baseline: M7-L PR #13 squash-merged into main as `7990eda80d46c378cc7d866fff70889fcd559c33`. This is a **small product-quality closeout** before the previously agreed M8-L features; it does not add another infrastructure/security milestone.
+Status: IMPLEMENTED in PR #14; final automated results and Windows evidence in [M7_UX_VALIDATION.md](M7_UX_VALIDATION.md). 2026-10-22. Baseline: M7-L PR #13 squash-merged into main as `7990eda80d46c378cc7d866fff70889fcd559c33`. This is a **small product-quality closeout** before the previously agreed M8-L features; it does not add another infrastructure/security milestone.
 
 ## Why now
 

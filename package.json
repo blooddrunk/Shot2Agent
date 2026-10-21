@@ -22,7 +22,8 @@
     "desktop:ui": "vite build --config apps/desktop/vite.config.mjs",
     "desktop:typecheck": "vue-tsc -p apps/desktop/tsconfig.json --noEmit",
     "desktop:build": "npm run build && npm run desktop:ui && cd apps/desktop && tauri build --no-bundle",
-    "desktop:package": "node scripts/desktop-package.mjs"
+    "desktop:package": "node scripts/desktop-package.mjs",
+    "desktop:test-ui": "playwright test"
   },
   "dependencies": {
     "@fastify/multipart": "10.1.4",

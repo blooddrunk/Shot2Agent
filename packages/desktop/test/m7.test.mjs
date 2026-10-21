@@ -249,3 +249,31 @@ test('M7 UX local Gateway save never requests a model; optional test versions on
     assert.equal(readFileSync(join(dir, 'settings.json'), 'utf8').includes('wrong-token-123'), false);
   } finally { await desktop.close(); rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('M7 UX editing another assistant preserves default and a running task keeps its original policy', async () => {
+  const dir = root(); const workspace = join(dir, 'workspace'); mkdirSync(workspace); const executable = makeCli(dir, 'codex');
+  const desktop = makeDesktop(dir); let release; let work;
+  try {
+    await desktop.start();
+    const fields = { provider: 'codex', path: executable, workspace: realpathSync(workspace), prompt: 'Original prompt.' };
+    await desktop.dispatch({ v: 1, command: 'create-profile', ...fields, id: 'first-codex' });
+    const original = desktop.app.profile;
+    let announceStarted; const started = new Promise(resolve => { announceStarted = resolve; });
+    const gate = new Promise(resolve => { release = resolve; });
+    const adapter = { name: 'fake', version: '1', async execute(...args) { announceStarted(); await gate; return new FakeAgent().execute(...args); } };
+    desktop.app.setRegistry([{ profile: original, adapter }], original.id, original.version);
+    const id = await desktop.app.submit(await image(), undefined, true);
+    work = desktop.app.work(); await started;
+    assert.equal(desktop.app.get(id).status, 'running');
+    await desktop.dispatch({ v: 1, command: 'create-profile', ...fields, id: 'second-codex' });
+    const selectedVersion = desktop.app.profile.version;
+    const result = await desktop.dispatch({ v: 1, command: 'create-profile', ...fields, id: 'first-codex', prompt: 'Updated prompt.',
+      editId: original.id, editVersion: original.version, reuseExisting: true });
+    assert.equal(result.profile.id, 'second-codex'); assert.equal(result.profile.profileVersion, selectedVersion);
+    assert.equal(desktop.app.get(id).submission.profileVersion, original.version);
+    assert.equal(desktop.app.get(id).submission.profileFingerprint, original.fingerprint);
+    release(); await work;
+    assert.equal(desktop.app.get(id).status, 'succeeded');
+    assert.equal(desktop.app.get(id).submission.profileVersion, original.version);
+  } finally { release?.(); await work; await desktop.close(); rmSync(dir, { recursive: true, force: true }); }
+});
