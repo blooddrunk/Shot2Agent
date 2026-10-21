@@ -193,3 +193,18 @@ test('formal mode selects the approved Codex adapter and acceptance refuses it',
     await assert.rejects(desktop.dispatch({ v: 1, command: 'snapshot', adapter: 'fake' }), /COMMAND_REFUSED/);
   } finally { await desktop.close(); }
 });
+
+
+test('native formal startup refusal exits and releases its clipboard helper', { skip: process.platform !== 'win32' }, async t => {
+  const root = temp();
+  const child = spawn(process.execPath, ['--experimental-strip-types', fileURLToPath(new URL('../src/main.ts', import.meta.url)), root, '--codex'], { stdio: ['pipe', 'pipe', 'pipe'], shell: false });
+  t.after(() => { if (child.exitCode === null) child.kill(); });
+  let stderr = ''; child.stderr.on('data', chunk => { stderr += chunk; }); child.stdout.resume();
+  child.stdin.write('SHOT2AGENT/1\n');
+  const code = await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(Error('STARTUP_REFUSAL_DID_NOT_EXIT')), 10000);
+    child.once('close', code => { clearTimeout(timer); resolve(code); }); child.once('error', reject);
+  });
+  assert.equal(code, 1); assert.match(stderr, /CODEX_SETUP_REQUIRED/);
+  assert.equal(existsSync(join(root, 'settings.json')), false);
+});

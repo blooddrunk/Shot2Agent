@@ -96,3 +96,5 @@ The operator's 2026-10-21 feedback requests discussion of configurable retries f
 ## M4-L Local reliability / Windows release gate
 
 The bounded 0.4.0 slice implements no-clobber Markdown publication, independent bounded delivery retries, safe clipboard/IPC diagnostics and restart receipts. Agent rerun UI is deferred; no possibly launched execution replays automatically. No installer/Remote expansion. See [scope](M4_LOCAL_RELIABILITY.md) and [executed validation](M4_VALIDATION.md); CI/native observations remain separate.
+
+Desktop 0.4.1 is a bounded M4 closeout: explicit real Codex entry using the existing approved Profile, separate Fake/legacy history and mode labels. It does not begin another milestone or add a Profile editor/Agent rerun. See [entry validation](DESKTOP_CODEX_ENTRY_VALIDATION.md).

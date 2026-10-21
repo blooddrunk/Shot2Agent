@@ -16,8 +16,8 @@ Scope: make the existing approved real Codex Profile the explicit desktop entry.
 | --- | --- | --- |
 | Baseline `npm test` | 0 | 114 tests: 113 PASS, 1 Windows-only SKIP |
 | `corepack pnpm install --frozen-lockfile` | 0 | Frozen lockfile unchanged |
-| Final `npm run check` | 0 | 117 tests: 116 PASS, 1 Windows-only SKIP; lint/typecheck/build/UI/smoke passed |
-| `node --experimental-strip-types --test packages/desktop/test/desktop.test.mjs` | 0 | 17/17 PASS |
+| Final `npm run check` | 0 | 118 tests: 116 PASS, 2 Windows-only SKIP; lint/typecheck/build/UI/smoke passed |
+| `node --experimental-strip-types --test packages/desktop/test/desktop.test.mjs` | 0 | 17/17 PASS (before the additional native startup-refusal regression) |
 | `cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml` | 0 | Formatted |
 | Impeccable mechanical detector | 0 | No findings |
 | Playwright synthetic Codex snapshot at 1040x760 and 720x560 | 0 | Mode displayed; 720px document width 720px, no horizontal overflow |
@@ -28,4 +28,4 @@ An initial local check failed on a TypeScript parameter property unsupported by 
 
 Windows native runtime `node.exe "Verify Codex.mjs" --allow-model-cost <portable-directory>` exited 0 using the existing approved policy: adapter `codex`, CLI `codex-cli 0.163.0`, sandbox `read-only`, task `succeeded`, exactly 1 attempt, synthetic `SHOT2AGENT 42` marker observed. Operator history and Windows clipboard were not accessed. This establishes current real authentication/execution through the production desktop controller/adapter; it does not establish a new GUI capture/focus/paste observation.
 
-Candidate CI/package gate is pending. Do not treat synthetic UI/mocks as real authentication, native EXE execution, focus or paste evidence. Existing M3 operator acceptance and the unconfirmed input-method correlation retain their original scope.
+A native refusal probe initially failed to exit within 10 seconds: controller construction was refused correctly, but its inherited input pipe remained open. Startup failure now explicitly closes both the clipboard helper and parent input; the corrected native probe exited 1 immediately with CODEX_SETUP_REQUIRED (verification driver exit 0, no settings created). Native initialization failure explicitly closes the clipboard helper if controller construction is refused; a Windows process regression checks bounded exit without creating Fake settings. Candidate CI/package gate is pending. Do not treat synthetic UI/mocks as real authentication, native EXE execution, focus or paste evidence. Existing M3 operator acceptance and the unconfirmed input-method correlation retain their original scope.
