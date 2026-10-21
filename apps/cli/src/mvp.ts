@@ -61,7 +61,7 @@ async function main() {
       requireValue(reference && (command !== 'credential-delete' || values['confirm-delete']), 'CREDENTIAL_DELETE_CONFIRMATION_REQUIRED');
       const native = credentialCommand(command === 'credential-add' ? 'add' : 'delete', reference);
       const code = await new Promise<number | null>(resolve => {
-        const child = spawn(native.executable, native.args, { shell: false, stdio: 'inherit' });
+        const child = spawn(native.executable, native.args, { env: native.env, shell: false, stdio: 'inherit' });
         const timer = setTimeout(() => child.kill(), 300000);
         child.on('error', () => {}); child.on('close', code => { clearTimeout(timer); resolve(code); });
       });

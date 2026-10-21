@@ -25,17 +25,20 @@ export function assertGatewayVision(g: GatewayConfig): void {
   requireValue(g.vision === 'operator-attested', 'GATEWAY_VISION_NOT_VERIFIED');
 }
 export const credentialScript = fileURLToPath(new URL('./gateway-credential.ps1', import.meta.url));
-export function credentialCommand(action: 'add' | 'read' | 'delete', reference: string): { executable: string; args: string[] } {
+export function credentialCommand(action: 'add' | 'read' | 'delete', reference: string): { executable: string; args: string[]; env: NodeJS.ProcessEnv } {
   requireValue(process.platform === 'win32', 'WINDOWS_SECURE_STORE_REQUIRED');
   requireValue(/^Shot2Agent-Gateway-[0-9a-f-]{36}$/.test(reference), 'INVALID_CREDENTIAL_REF');
   return { executable: join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
-    args: ['-NoProfile', '-File', credentialScript, '-Action', action, '-Reference', reference] };
+    args: ['-NoProfile', '-File', credentialScript, '-Action', action, '-Reference', reference],
+    env: { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => ['systemroot', 'windir', 'path', 'temp', 'tmp', 'userprofile', 'appdata', 'localappdata', 'programdata', 'programfiles'].includes(key.toLowerCase()))),
+      // The caller may be pwsh/CI; never inherit its incompatible or user-owned module paths.
+      PSModulePath: join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'Modules') } };
 }
 /** Token travels only through a private pipe and the selected child's environment. Never diagnostic output. */
 export async function readGatewayToken(reference: string): Promise<string> {
   const command = credentialCommand('read', reference);
   return new Promise((resolve, reject) => {
-    const child = spawn(command.executable, command.args, { shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+    const child = spawn(command.executable, command.args, { env: command.env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
     let output = ''; let oversized = false;
     const timer = setTimeout(() => child.kill(), 10000);
     child.stdout.on('data', b => { if (output.length + b.length > 4096) { oversized = true; child.kill(); } else output += b.toString('utf8'); });
