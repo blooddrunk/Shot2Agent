@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 type Receipt = { status: string; code?: string; attempts: number; classification?: string; stopReason?: string };
 type Task = { id: string; status: string; provider?: string; profileId?: string; profileVersion?: string; summary?: string; error?: string; clipboard?: Receipt; save?: Receipt };
@@ -16,12 +16,16 @@ const data = ref<Snapshot>(); const transportError = ref(''); const error = ref(
 const enabled = ref(false); const mode = ref('confirm'); const clipboard = ref('always'); const save = ref(false); const directory = ref('');
 const maxRetries = ref(0); const backoffMs = ref(100); const budgetMs = ref(3000);
 const autoConsent = ref(false); const alwaysConsent = ref(false); const dirty = ref(false);
+const showOtherProfiles = ref(false);
+const activeAgents = computed(() => data.value?.agents.filter(a => !a.archived) ?? []);
+const archivedAgents = computed(() => data.value?.agents.filter(a => a.archived) ?? []);
+function isSelectedAgent(agent: Agent) { return agent.id === data.value?.profile.id && agent.version === data.value?.profile.profileVersion; }
 const removing = ref<Agent>();
 const selected = ref(''); const detail = ref<{ status: string; gateway?: { endpoint: string; model: string; vision: string }; result?: { contentMarkdown: string; errorCode?: string } }>();
 let timer: ReturnType<typeof setInterval> | undefined; let polling = false;
 const providerText: Record<string, string> = { fake: 'Fake · 合成测试', codex: 'Codex CLI · 云模型', claude: 'Claude Code · 个人订阅', 'claude-compatible-endpoint': 'Claude Code · 自定义网关' };
 const modeText: Record<string, string> = { codex: '正式 Local', staging: 'Fake 验收', legacy: '旧 Local 历史' };
-const cliStatusText: Record<string, string> = { not_found: '未安装', invalid: '路径无效', unsupported: '功能不兼容', version_changed: '批准的版本或文件已变化', unverified_auth: '已找到，模型认证未验证', scan_incomplete: '检测未完成，请指定绝对路径' };
+const cliStatusText: Record<string, string> = { not_found: '未安装', invalid: '路径无效', unsupported: '功能不兼容', version_changed: '批准的版本或文件已变化', unverified_auth: '安装检查通过（此处不测试模型认证）', scan_incomplete: '检测未完成，请指定绝对路径' };
 const statusText: Record<string, string> = { monitoring: '正在监听新图片', paused: '捕获已暂停', capture_off: '剪贴板捕获已关闭', worker_error: 'Worker 已停止 · 请检查后重启', capture_error: '剪贴板读取暂停 · 可重新连接' };
 function hydrate(s: Snapshot) {
   data.value = s;
@@ -114,18 +118,21 @@ onUnmounted(() => clearInterval(timer));
         </details>
         <button class="primary" type="submit" :disabled="busy || !data">{{ busy ? '处理中…' : '应用设置' }}</button><span v-if="dirty" class="hint unsaved">尚未保存</span>
       </form>
-      <div class="profile" v-if="data"><h2>执行配置</h2><p><strong>{{ providerText[data.profile.adapter] || data.profile.adapter }}</strong> / {{ data.profile.sandbox }}</p><p class="path">{{ data.profile.workspace || 'Fake 不访问工作区。仅 Fake 验收入口延迟 8 秒。' }}</p><details><summary>CLI 路径与状态</summary><div v-for="agent in data.agents" :key="agent.id + agent.version"><strong>{{ providerText[agent.provider] || agent.provider }} · {{ agent.cliVersion }}</strong><p class="hint path">{{ agent.id }} / {{ agent.version }} · {{ agent.archived ? '已移除' : '可用于新任务' }}</p><p v-if="agent.gateway" class="hint">{{ agent.gateway.endpoint }} · {{ agent.gateway.model }} · 视觉：{{ agent.gateway.vision }} · 凭据：{{ agent.gateway.credentialStatus }}（执行时检查可用性）</p><p class="path">{{ agent.path }}</p>
+      <div class="profile" v-if="data"><h2>执行配置</h2><p><strong>{{ providerText[data.profile.adapter] || data.profile.adapter }}</strong> / {{ data.profile.sandbox }}</p><p class="path">{{ data.profile.workspace || 'Fake 不访问工作区。仅 Fake 验收入口延迟 8 秒。' }}</p><details><summary>CLI 路径与状态</summary>
+        <p class="hint">默认显示当前版本。每次批准、凭据修复和视觉确认会保留独立版本，供原任务和历史使用。</p>
+        <button v-if="activeAgents.length > 1" :aria-expanded="showOtherProfiles" @click="showOtherProfiles = !showOtherProfiles">{{ showOtherProfiles ? '收起其他已批准版本' : '显示其他已批准版本' }}（{{ activeAgents.length - 1 }}）</button>
+        <div v-for="agent in activeAgents" v-show="isSelectedAgent(agent) || showOtherProfiles" :key="agent.id + agent.version"><strong>{{ providerText[agent.provider] || agent.provider }} · {{ agent.cliVersion }}</strong><p class="hint path">{{ agent.id }} / {{ agent.version }} · {{ isSelectedAgent(agent) ? '当前版本' : '其他已批准版本' }}</p><p v-if="agent.gateway" class="hint">{{ agent.gateway.endpoint }} · {{ agent.gateway.model }} · 视觉：{{ agent.gateway.vision }} · 凭据：{{ agent.gateway.credentialStatus }}（执行时检查可用性）</p><p class="path">{{ agent.path }}</p>
           <div class="profile-actions">
-            <button v-if="agent.archived" :disabled="busy" @click="action('archive-agent', { id: agent.id, version: agent.version, archived: false, confirm: true })">恢复到列表</button>
-            <button v-else :disabled="busy || !agent.removable" @click="removing = agent">从列表移除</button>
+            <button :disabled="busy || !agent.removable" @click="removing = agent">从列表移除</button>
           </div>
           <p v-if="!agent.archived && !agent.removable" class="hint">当前正在选择此配置；请先在上方选择要保留的 Agent，再移除重复项。</p>
           <div v-if="removing?.id === agent.id && removing?.version === agent.version" class="notice">
             <p>移除此版本后，新任务和循环切换不会再选中它。已有任务继续使用原配置；历史和 Token 保留。</p>
             <div class="profile-actions"><button :disabled="busy" @click="action('archive-agent', { id: agent.id, version: agent.version, archived: true, confirm: true })">确认移除</button><button :disabled="busy" @click="removing = undefined">取消</button></div>
-          </div><p class="hint">{{ agent.status === 'image_protocol_not_verified' ? '此版本图片协议尚未验证，执行将被拒绝' : 'CLI 已批准；真实认证与识图须单独验证' }}</p></div>
+          </div><p class="hint">{{ agent.status === 'image_protocol_not_verified' ? '此版本图片协议尚未验证，执行将被拒绝' : agent.gateway?.vision === 'operator-attested' ? 'CLI 已批准；视觉支持已有操作人员声明。安装检测不发起模型请求。' : 'CLI 已批准；真实认证与识图须单独验证' }}</p></div>
+        <details v-if="archivedAgents.length"><summary>已移除的历史配置（{{ archivedAgents.length }}）</summary><p class="hint">保留用于原任务和来源记录，不参与新任务选择。需要时可恢复。</p><div v-for="agent in archivedAgents" :key="agent.id + agent.version"><p class="hint path">{{ providerText[agent.provider] || agent.provider }} · {{ agent.gateway?.model || agent.cliVersion }}<br>{{ agent.id }} / {{ agent.version }}</p><button :disabled="busy" @click="action('archive-agent', { id: agent.id, version: agent.version, archived: false, confirm: true })">恢复到列表</button></div></details>
         <button v-if="data.profile.adapter !== 'fake'" @click="action('discover-agents')" :disabled="busy">刷新安装检测</button><p class="hint">检测不会批准或替换 CLI。手动路径及多安装选择请退出应用后按 Windows 手册配置。</p><div v-for="(candidate, index) in data.discovery" :key="index"><p class="hint">{{ candidate.provider }} · {{ candidate.version }} · {{ cliStatusText[candidate.status] || candidate.status }}</p><p class="path">{{ candidate.path }}</p></div></details>
-        <p class="hint">{{ data.profile.version || data.profile.id }}。配置由本机 Worker 管理；更换配置须退出后重新启动，不会修改排队任务。</p><details><summary>本地数据位置</summary><p class="path">{{ data.root }}</p></details></div>
+        <p class="hint">切换已批准配置只影响新任务。新增或更改 CLI 配置须停止 Worker；原有排队任务和历史保留原版本。</p><details><summary>本地数据位置</summary><p class="path">{{ data.root }}</p></details></div>
     </section><section class="workspace" aria-label="预览和历史">
       <div class="section-heading"><h2>当前图片</h2><button @click="action('current')" :disabled="busy || !data">提交当前剪贴板图片</button></div>
       <div class="preview" v-if="data?.pending"><img :src="data.pending" alt="待确认的截图预览"><div><strong>等待确认</strong><p>仅此预览会被提交；后来复制的文字不会替换它。</p><button class="primary" @click="action('submit')" :disabled="busy">提交图片</button><button @click="action('discard')" :disabled="busy">丢弃</button></div></div>

@@ -101,13 +101,13 @@ The bounded 0.4.0 slice implements no-clobber Markdown publication, independent 
 
 Desktop 0.4.1 is a bounded M4 closeout: explicit real Codex entry using the existing approved Profile, separate Fake/legacy history and mode labels. It does not begin another milestone or add a Profile editor/Agent rerun. See [entry validation](DESKTOP_CODEX_ENTRY_VALIDATION.md).
 
-## M6-L Local global actions and Gateway Profiles (0.6.0 candidate)
+## M6-L Local global actions and Gateway Profiles (0.6.0 implemented; operator accepted)
 
 - PR #9 shared effective delivery consent fixed and merged; post-merge gates are independent.
 - Native Windows RegisterHotKey thread: individually configurable bindings (all disabled initially), transactional conflict rollback, exit cleanup, tray/UI actions and bounded feedback.
 - Latest successful durable result ordering; delivery-only retry skips succeeded, conflict and ambiguous/interrupted channels; immutable approved Agent cycling.
 - Distinct Claude-compatible endpoint Profiles, two explicitly pinned HTTPS endpoints, model mappings, OS-backed immutable credential references, isolated child environment and unchanged policy/tools/MCP checks.
 - Mock and actual native-CLI-to-Mock transport are separate from paid model vision. Default vision is NOT VERIFIED and refuses execution. No fallback. Operator attestation requires separate endpoint/model evidence; not an automated qualification.
-- Global-action acceptance steps 1–6 are operator-reported PASS on 2026-10-21, including hidden-window copy/focus/paste, pause/resume, delivery retry, persistence/cleanup and configuration refusal. Optional branches are not separately attested. See [M6 validation](M6_VALIDATION.md). Actual Gateway authentication and GLM vision remain NOT VERIFIED.
+- Global-action acceptance steps 1–6 are operator-reported PASS on 2026-10-21, including hidden-window copy/focus/paste, pause/resume, delivery retry, persistence/cleanup and configuration refusal. Optional branches are not separately attested. See [M6 validation](M6_VALIDATION.md). The operator also reports real Claude Code + `glm-5.3-flash` testing PASS on 2026-10-21. Acceptance is scoped to that local configuration; exact HTTP counts, independent TLS/redirect evidence and other configurations are not inferred.
 - Profile list management supports confirmed removal/restoration without deleting immutable execution bindings or shared credentials. A separate one-request direct-image diagnostic has an explicit launch entry and durable repeat protection; Claude CLI live qualification remains separate.
-- Next: obtain separate endpoint/model evidence and explicit cost authorization before any synthetic real-model vision test; retain default refusal until qualified and stabilize only demonstrated core failures. Remote/VPS, installer, folder watching and Agent rerun remain deferred.
+- Close this bounded M6-L round after the display-only stabilization gates pass; no further paid-model acceptance is requested. Unapproved Profiles still default to refusal. PR merge and post-merge main checks remain separate. If product work resumes later, prioritize graphical Profile/credential configuration over more infrastructure. Remote/VPS, installer, folder watching and Agent rerun remain deferred.

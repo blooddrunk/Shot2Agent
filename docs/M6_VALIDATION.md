@@ -96,3 +96,15 @@ Follow-up local complete `npm run check` passed (168 tests: 152 PASS / 16 native
 To unblock the operator without requiring reference copying, a local double-click recovery utility reuses the fixed native hidden Token prompt and OS credential helper. It requires a stopped Worker, validates the existing selected domestic GLM-5.3-Flash Profile and unchanged approved CLI digest, reserves registry capacity, then creates a new immutable credential reference and Profile. Old bindings remain for historical/queued tasks and are removed only from new-task selection. It runs the already-authorized one-request diagnostic only if its durable receipt shows no prior request. Only after actual direct-image recognition can the operator explicitly type YES to create an attested version; this is operator attestation based on direct-endpoint evidence, not automatic native-CLI verification. No second model request occurs during enabling. Blank confirmation retains refusal.
 
 Windows orchestration tests with isolated fake storage/HTTP child fixtures passed 5/5: preflight-only, active-Worker refusal, successful recognition + explicit enabling, declined enabling, and failed request retaining not-verified. They assert original policy preservation, immutable credential reference binding, archival and no synthetic secret in settings/output. These fixtures do not validate a real token or model; actual hidden Token entry is operator-owned. The helper is also delivered as a local addition beside the previously verified EXE; the original CI ZIP remains unmodified.
+
+## 操作人员真实 Claude Code + GLM 验收 — 2026-10-21
+
+操作人员明确报告：**真实 Claude Code + `glm-5.3-flash` 测试 PASS**，并表示本次任务可以结束。该报告作为本机配置的操作人员验收证据，结合此前全局操作步骤 1–6 的 PASS，关闭本轮 M6-L 功能验收。无需再次调用付费模型。
+
+这更新了前文“真实模型尚未观察”的当前状态；前文凭据错误 1168、`requestsSent:0` 等仍是当时探测的历史记录，不代表操作人员最新测试的结果。操作人员未另附本次测试的程序包 SHA、精确 CLI 版本、HTTP 请求计数或单独的 TLS/重定向证据，因此不推断任意密钥、区域、CLI 版本或其他模型均通过，也不把这次报告算作开发代理独立复测。原生 CLI-to-Mock、直接 API 诊断和真实 Claude Code 请求仍分别记录。Smart 的历史问题也未因此关闭。
+
+本轮收尾只修正重复显示：默认显示当前 Profile，其余批准版本和已移除版本分别折叠；保留原任务绑定和所有凭据。安装检测合并已批准检查与自动发现的相同实际 CLI 入口，Codex 的 Node 运行时与 npm 启动器不再因此显示为两个相同安装。真正不同的安装、版本变化/拒绝状态、扫描未完成警告仍保留。安装检查不调用模型，故其状态文本说明“此处不测试模型认证”，不再暗示已通过的真实任务认证失败。修改过时的“切换必须重启”说明：选择已批准配置立即影响新任务，新增或更改 CLI 配置仍要求停止 Worker。
+
+独立合成测试覆盖原配置与 npm 启动器合并、原执行程序/摘要不变、Windows 路径大小写及分隔符、不同安装/拒绝状态保留、POSIX 路径大小写和扫描警告。本次收尾不修改个人配置、凭据或任务，不发送真实模型请求。
+
+收尾本地门禁：`corepack pnpm install --frozen-lockfile`、完整 `npm run check`、`git diff --check` 通过。179 项测试中 155 PASS、24 平台相关 SKIP、0 FAIL；lint、TS/Vue 类型检查、build/UI 和 compiled Fake smoke 通过。浏览器使用合成 IPC，在 1040×760 和 720×560 检查其他批准版本展开、移除确认、历史配置折叠与恢复，无横向溢出，截图已检查。这是显示修正的自动化证据，不替代操作人员的真实模型报告。最终提交的 Windows/Linux CI 与 Windows 包证据见 PR；不自动合并主分支。

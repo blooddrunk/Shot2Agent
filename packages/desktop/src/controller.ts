@@ -1,3 +1,4 @@
+import { displayInventory } from './inventory.ts';
 import { ACTIONS, completedResults, retryableDelivery, retryableChannels, validateHotkeys } from './actions.ts';
 import sharp from 'sharp';
 import { effectiveDelivery } from '../../local/src/delivery.ts';
@@ -55,7 +56,7 @@ export class DesktopController {
         }
         return [...approved, ...await this.inventory(provider, this.settings.codex!.workspace)];
       }));
-      this.discovery = results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
+      this.discovery = displayInventory(results.flatMap(r => r.status === 'fulfilled' ? r.value : []));
     })().finally(() => { this.discovering = undefined; });
     return this.discovering;
   }
