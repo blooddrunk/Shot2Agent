@@ -1,3 +1,5 @@
+> **M7-UX 0.7.2:** Light/dark appearance switch, live capture/processing sidebar, cleaner hotkey/history/cleanup controls, and a fix for missing packaged GLM connection-test images. [Usage and verification](docs/M7_UX_VALIDATION.md#operator-acceptance-and-ui-follow-up--2026-10-22).
+
 > **M7-UX 0.7.1:** Four focused Local desktop pages, visible Agent editor, responsive controls, history management and separate local GLM Token save / optional paid connection test. [GUI guide](docs/M7_UX_RUN.md) · [validation and Windows package evidence](docs/M7_UX_VALIDATION.md).
 
 > **M6-L 0.6.0 candidate:** Configurable native Windows global hotkeys, latest completed-result actions, and separate Claude-compatible Gateway Profiles with Windows Credential Manager references. No real GLM vision claim; setup refuses unqualified image models until explicit operator attestation. See [controls and acceptance](docs/M6_WINDOWS_ACCEPTANCE.md) and [validation](docs/M6_VALIDATION.md).

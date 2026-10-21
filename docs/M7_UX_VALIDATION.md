@@ -42,3 +42,22 @@ Browser/controller evidence is not Windows tray/focus/paste proof, actual CLI au
 ## Next bounded milestone
 
 M8-L remains a separate implementation: independently configurable folder/clipboard capture with startup skipping and dedupe; a small ordered 2–5 image composer; independent file clipboard/Markdown/desktop notification delivery; explicit new-task rerun semantics. Do not start those features as part of this PR. M9 packaging/v1 acceptance and Remote remain later.
+
+
+## Operator acceptance and UI follow-up — 2026-10-22
+
+The operator reports **all basic functions PASS** for the M7-UX delivery, and requests only five UI refinements: quick-action button spacing, no redundant history checkbox text, live sidebar capture/Worker status, understandable/spaced old-configuration cleanup, and a persisted light/dark appearance switch. This is an operator report, not an inference that every provider/authentication, Smart/IME or interruption scenario was independently retested.
+
+Version 0.7.2 implements these five refinements. Appearance is a validated local WebView preference, applied before Vue mounts and independent from Worker settings, task history or credentials. Existing dark appearance stays the default. Storage refusal leaves the theme usable with visible persistence feedback. Runtime activity counts come from all stored tasks, so a filtered/paged history view cannot falsely indicate an idle Worker. Paused capture and ongoing processing are shown separately.
+
+Added browser coverage exercises theme changes/reload/storage failure without Worker reconfiguration, actual queued/running/paused Fake states, checkbox accessible names, measured action/cleanup spacing, and dark/light settings/editor/history at 1040×760, 720×560 and 480×640. Follow-up execution results and final Windows package are recorded in the follow-up PR. No new native or live-model claim is made from browser tests.
+
+### GLM optional connection-test packaging fix
+
+The operator reports that a working Claude Code / glm-5.3-flash assistant fails almost immediately on optional Test connection. Offline reproduction against the prior 0.7.1 Windows ZIP confirms `ENOENT` loading the default synthetic image, **before the supplied mock sender was called (0 requests)**. The compiled helper resolves `dist/scripts/fixtures/glm-vision.png`, but the build copied only PowerShell helpers, omitting that image. The generic error hid the local preparation failure. This reproduces the package defect; it is not a retrospective network receipt for the operator's individual click.
+
+Build now copies the resource to the module-relative compiled path. Missing/unreadable images report `GATEWAY_SYNTHETIC_IMAGE_UNAVAILABLE` with an explicit no-request explanation. The selected working configuration is preserved on failure. `scripts/gateway-test-smoke.mjs` exercises the actual compiled or packaged module with an injected mock sender, verifies the PNG/image block and marker, then tests a disposable broken-layout copy for zero-send refusal. It runs in `npm run smoke` and the Windows packaged workflow; no real Token or endpoint request is used. Live endpoint availability remains separate.
+
+### Follow-up executed checks
+
+Frozen pnpm install and `npm run check` passed locally on Node 24.19.0: 198 backend tests (173 pass, 25 explicit platform skips), lint, TS/Vue typechecks, production builds, compiled Fake smoke and the new compiled Gateway resource/mock/refusal smoke. All 13 browser/controller tests passed, including both themes at all three sizes and the working-GLM configuration preservation case. A parallel local browser invocation initially collided on the test server/artifact directory; the completed result is from a fresh, sequential full run, not that interrupted invocation. The design detector reported only 4 advisory type/radius documentation findings; there were no non-advisory findings. Windows source/package checks remain separately recorded by the follow-up PR's final CI links.

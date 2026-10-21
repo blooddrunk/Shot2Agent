@@ -7,7 +7,7 @@ import { DesktopController } from "../../../packages/desktop/src/controller.ts";
 import { FakeAgent } from "../../../packages/worker/src/fake.ts";
 import { makeCli, credentialStore } from "./fixtures.mjs";
 
-let desktop, root, workspace, testsSent;
+let desktop, root, workspace, testsSent, gatewayFailureCode;
 const previousLocalAppData = process.env.LOCALAPPDATA;
 test.beforeEach(async ({ page }) => {
   root = realpathSync(mkdtempSync(join(tmpdir(), "shot2agent-ui-")));
@@ -17,6 +17,7 @@ test.beforeEach(async ({ page }) => {
   makeCli(root, "codex");
   makeCli(root, "claude");
   testsSent = 0;
+  gatewayFailureCode = "";
   const clipboard = {
     session: "ui-synthetic",
     async sequence() {
@@ -45,6 +46,7 @@ test.beforeEach(async ({ page }) => {
     {
       credentials: credentialStore(),
       testGateway: async (_gateway, token) => {
+        if (gatewayFailureCode) throw new Error(gatewayFailureCode);
         testsSent++;
         if (token !== "synthetic-valid-token")
           throw new Error("GATEWAY_AUTH_FAILED");
@@ -352,4 +354,214 @@ test("history pages and searches older than the newest 50 tasks", async ({
   await page.getByRole("button", { name: "删除", exact: true }).click();
   await expect(page.locator(".tasks li")).toHaveCount(0);
   expect(desktop.app.list()).toHaveLength(50);
+});
+
+test("appearance switches immediately, persists after reload and does not reconfigure the Worker", async ({
+  page,
+}) => {
+  await add(page, "codex", "theme-codex");
+  await nav(page, "设置");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  const settingsBefore = JSON.stringify(desktop.settings);
+  await page.getByRole("button", { name: "浅色", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(
+    page.getByRole("button", { name: "浅色", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  expect(JSON.stringify(desktop.settings)).toBe(settingsBefore);
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(
+    page.getByRole("button", { name: "切换为深色主题", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "切换为深色主题", exact: true })
+    .click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+});
+
+test("appearance storage failure keeps the UI usable and explains persistence failure", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "localStorage", {
+      get() {
+        throw new Error("synthetic storage unavailable");
+      },
+    });
+  });
+  await page.reload();
+  await nav(page, "设置");
+  await page.getByRole("button", { name: "浅色", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(page.getByText(/主题已切换，但无法保存外观偏好/)).toBeVisible();
+});
+
+test("sidebar reports global running and queued work even when history is filtered and capture paused", async ({
+  page,
+}) => {
+  await add(page, "codex", "status-codex");
+  await seedTasks(1);
+  const profile = desktop.app.profile;
+  let release;
+  let began;
+  let work;
+  const started = new Promise((resolve) => {
+    began = resolve;
+  });
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const adapter = {
+    name: "fake",
+    version: "1",
+    async execute(...args) {
+      began();
+      await gate;
+      return new FakeAgent().execute(...args);
+    },
+  };
+  desktop.app.setRegistry([{ profile, adapter }], profile.id, profile.version);
+  const bytes = await sharp({
+    create: { width: 20, height: 20, channels: 3, background: "#88aa99" },
+  })
+    .png()
+    .toBuffer();
+  try {
+    await desktop.app.submit(bytes, undefined, true);
+    await desktop.app.submit(bytes, undefined, true);
+    work = desktop.app.work();
+    await started;
+    await desktop.dispatch({
+      v: 1,
+      command: "configure",
+      capture: { enabled: true, mode: "confirm" },
+      delivery: { clipboard: "manual" },
+    });
+    await nav(page, "历史记录");
+    await page.getByLabel("搜索历史").fill("synthetic-no-match");
+    const status = page.getByRole("status", { name: "运行状态" });
+    await expect(status).toContainText("正在监听新图片");
+    await expect(status).toContainText("正在处理 1 项 · 排队 1 项");
+    await desktop.dispatch({ v: 1, command: "pause", paused: true });
+    await expect(status).toContainText("捕获已暂停");
+    await expect(status).toContainText("正在处理 1 项");
+    await page.screenshot({
+      path: "build/ui-evidence/status-paused-running.png",
+    });
+    release();
+    await work;
+    await expect(status).toContainText("等待处理 1 项");
+  } finally {
+    release();
+    await work;
+  }
+});
+
+test("polish spacing and both themes across window sizes, with populated cleanup and accessible selection", async ({
+  page,
+}) => {
+  await add(page, "codex", "polish-codex");
+  await seedTasks(1);
+  const agent = (await desktop.dispatch({ v: 1, command: "snapshot" }))
+    .agents[0];
+  await desktop.dispatch({
+    v: 1,
+    command: "create-profile",
+    provider: agent.provider,
+    id: agent.id,
+    editId: agent.id,
+    editVersion: agent.version,
+    reuseExisting: true,
+    workspace: agent.workspace,
+    prompt: "Updated synthetic prompt.",
+  });
+  for (const [width, height] of [
+    [1040, 760],
+    [720, 560],
+    [480, 640],
+  ]) {
+    await page.setViewportSize({ width, height });
+    for (const theme of ["浅色", "深色"]) {
+      await nav(page, "设置");
+      await page.getByRole("button", { name: theme, exact: true }).click();
+      const hotkeys = page.locator(".hotkeys");
+      await hotkeys.locator("summary").click();
+      const actions = page.getByRole("group", { name: "立即操作" });
+      await actions.scrollIntoViewIfNeeded();
+      await expect(actions.getByRole("button")).toHaveCount(5);
+      const boxes = await actions.getByRole("button").evaluateAll((nodes) =>
+        nodes.map((node) => {
+          const r = node.getBoundingClientRect();
+          return { x: r.x, y: r.y, right: r.right, bottom: r.bottom };
+        }),
+      );
+      for (let i = 1; i < boxes.length; i++) {
+        if (Math.abs(boxes[i].y - boxes[i - 1].y) < 1)
+          expect(boxes[i].x - boxes[i - 1].right).toBeGreaterThanOrEqual(7.9);
+        else
+          expect(boxes[i].y - boxes[i - 1].bottom).toBeGreaterThanOrEqual(7.9);
+      }
+      await page.screenshot({
+        path: `build/ui-evidence/polish-${width}-${theme}-hotkeys.png`,
+        fullPage: true,
+      });
+      await nav(page, "AI 助手");
+      await page.locator(".cleanup-panel summary").click();
+      const cleanup = page.locator(".cleanup-panel");
+      await expect(cleanup.locator(".profile-entry")).toHaveCount(1);
+      const gap = await cleanup.evaluate(
+        (el) =>
+          el.querySelector(".cleanup-actions").getBoundingClientRect().top -
+          el.querySelector(".profile-entry").getBoundingClientRect().bottom,
+      );
+      expect(gap).toBeGreaterThanOrEqual(19.9);
+      await page.screenshot({
+        path: `build/ui-evidence/polish-${width}-${theme}-cleanup.png`,
+        fullPage: true,
+      });
+      await page.getByRole("button", { name: "编辑配置", exact: true }).click();
+      await page.screenshot({
+        path: `build/ui-evidence/polish-${width}-${theme}-editor.png`,
+      });
+      await page.keyboard.press("Escape");
+      await nav(page, "历史记录");
+      await expect(page.locator(".task-check input")).toHaveAccessibleName(
+        /^选择任务 /,
+      );
+      await expect(page.getByText("选择删除", { exact: true })).toHaveCount(0);
+      await page.locator(".task-check input").check();
+      await expect(
+        page.getByRole("button", { name: "删除所选（1）" }),
+      ).toBeEnabled();
+      await page.screenshot({
+        path: `build/ui-evidence/polish-${width}-${theme}-history.png`,
+        fullPage: true,
+      });
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+    }
+  }
+});
+
+test("missing synthetic resource reports no request and preserves the working GLM configuration", async ({
+  page,
+}) => {
+  await add(page, "claude-compatible-endpoint", "working-glm");
+  await page.getByRole("button", { name: "测试连接", exact: true }).click();
+  await expect(
+    page.getByText(/合成图片测试通过，可处理新的截图/),
+  ).toBeVisible();
+  const before = JSON.stringify(desktop.settings);
+  const sent = testsSent;
+  gatewayFailureCode = "GATEWAY_SYNTHETIC_IMAGE_UNAVAILABLE";
+  await page.getByRole("button", { name: "测试连接", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("未发送模型请求");
+  expect(testsSent).toBe(sent);
+  expect(JSON.stringify(desktop.settings)).toBe(before);
 });

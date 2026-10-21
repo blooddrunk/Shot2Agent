@@ -4,6 +4,11 @@ description: Compact Windows screenshot processing, following the operator's dar
 colors:
   accent: "#93d6ad"
   accent-hover: "#b1e6c5"
+  light-accent: "#246348"
+  light-canvas: "#f4f6f4"
+  light-text: "#24332b"
+  light-surface: "#ffffff"
+  light-muted: "#52645a"
   canvas: "#121512"
   surface: "#1c221e"
   sidebar: "#171c18"
@@ -68,6 +73,8 @@ A compact Windows utility in Operate mode. The operator's reference establishes 
 
 ## Colors
 
+Light and dark appearances share semantic CSS custom properties. Dark stays the default; the operator can switch in Settings or the sidebar and the local appearance preference survives reopening. All surfaces, modal headers, fields, selection, native control color-scheme, focus, feedback and scrollbars switch together. Light uses a pale green canvas, white surfaces and dark green text/actions.
+
 Accent identifies the primary action and active navigation. Dark neutral green surfaces distinguish navigation, work area and fields. Error, consent and success messages use separate readable text/background pairs. **The Textual Status Rule:** always pair status color with words; task state, clipboard and file-save receipts remain independent.
 
 ## Typography
@@ -87,6 +94,8 @@ Flat surfaces and borders carry normal structure. Native modal backdrop dims the
 Small consistent field/button corners, moderately rounded screenshot surface and dialog. Assistant and history entries use dividers rather than nested cards. Native checkboxes retain familiar Windows semantics.
 
 ## Components
+
+Quick actions form one wrapping group with an 8px gap. Advanced cleanup has a separate action row with 20px top spacing after version entries. History checkboxes retain task-specific accessible names without visible label duplication. Sidebar capture and processing states are separate, including processing while capture is paused.
 
 - Shared input/select/password/search/textarea styling, visible two-pixel keyboard focus, explicit labels and readable placeholders. Textarea fills its container and has a minimum usable height of 112px.
 - Editor uses a native dialog with title focus, modal keyboard containment, Escape/cancel, focus restoration, scrollable content and sticky title. Optional technical configuration is in disclosures.

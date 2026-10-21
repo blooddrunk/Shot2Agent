@@ -33,10 +33,14 @@ function requestOnce(url: string, token: string, body: string): Promise<GatewayR
 
 /** One explicit, non-retrying, direct synthetic-image request. Never follows redirects. */
 export async function testGatewayVision(config: GatewayConfig, token: string, send: GatewayRequest = requestOnce,
-  image: Uint8Array = readFileSync(SYNTHETIC_IMAGE)): Promise<GatewayTestResult> {
+  image?: Uint8Array): Promise<GatewayTestResult> {
   validateGateway(config);
   assertGatewayVision({ ...config, vision: 'operator-attested' });
   requireValue(typeof token === 'string' && /^[\x21-\x7e]{8,2048}$/.test(token), 'INVALID_GATEWAY_TOKEN');
+  if (!image) {
+    try { image = readFileSync(SYNTHETIC_IMAGE); }
+    catch { throw new Error('GATEWAY_SYNTHETIC_IMAGE_UNAVAILABLE'); }
+  }
   requireValue(image.length > 0 && image.length <= 1024 * 1024, 'SYNTHETIC_IMAGE_INVALID');
   const body = JSON.stringify({ model: config.model, max_tokens: 256, messages: [{ role: 'user', content: [
     { type: 'text', text: 'Read the text in this synthetic image and reply only with the exact text. Do not use tools.' },
