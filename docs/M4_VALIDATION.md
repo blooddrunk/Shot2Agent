@@ -17,8 +17,12 @@ M4 adds whitelist-only stage diagnostics without increasing the 20-second IPC ti
 - Initial `node --experimental-strip-types --test packages/local/test/reliability.test.mjs`: exit 0; 15/15 pass. Further independent-save/configuration tests were added afterward; final suite evidence follows.
 - First `npm run check`: exit 1 at lint (`queueMicrotask` undeclared global in new test); corrected to `globalThis.queueMicrotask`. No failing check is counted as PASS.
 - `npm run desktop:package` in WSL: exit 1, explicit `WINDOWS_BUILD_REQUIRED`; Windows CI is the required executable/package environment.
+- `npm run desktop:build` in WSL: exit 1, missing Linux D-Bus development library (`libdbus-1-dev`); this is not Windows build evidence.
 - `cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml`: exit 0.
 - UI mechanical detector: exit 0, three advisory findings for preexisting selection/scrollbar colors; those colors were not changed.
+
+- `playwright-cli` synthetic IPC preview: exit 0, retry controls and safe failure diagnostics visible at 1040×760 and 720×560, no horizontal overflow. Screenshots `/tmp/shot2agent-m4-ui-1040.png` and `/tmp/shot2agent-m4-ui-720.png` inspected; console had only an unrelated favicon 404. This is rendering evidence only; browser/server stopped afterward.
+- Rust diagnostic unit test rejects private/arbitrary stderr and accepts only known phases; Windows package workflow executes it in release mode after assets are built. No raw stderr is promoted into receipts.
 
 Final checks, PR/merge CI and artifact hashes will be appended only after execution. Local logs are generated outside Git under `/tmp/shot2agent-m4-*.log`. No production task/history, clipboard contents or Codex credentials are committed.
 
@@ -38,3 +42,11 @@ Use the portable artifact identified below in a logged-in Windows 11 session wit
 4. Only if desired, repeat 1–2 with the operator's chosen input method/synchronization setting. Record environment and PASS/FAIL/NOT VERIFIED without private content. No root-cause claim follows from correlation.
 
 These optional observations establish native focus/paste/confirmation behavior only for that session/build. They do not prove universal input-method compatibility, a real busy/retry fault (covered by injection/native CI), or real Codex authentication. Real Codex requires a separately approved logged-in Worker profile and sanitized screenshot; no login credentials or real screenshots are requested for this gate. Agent rerun UI remains deferred.
+
+## First complete M4 automated gate (source 1ca5163)
+
+- Local `npm run check`: exit 0; 108 total / 107 pass / 0 fail / 1 native skip; lint, TypeScript/Vue, core/UI builds and compiled fresh-cwd smoke passed. Further small stabilization changes listed below are verified by their own final CI.
+- `node --experimental-strip-types --test packages/local/test/reliability.test.mjs` after independent-save additions: exit 0, 17/17 pass.
+- [Windows/Linux Node 22/24 matrix 39531318912](https://github.com/blooddrunk/Shot2Agent/actions/runs/39531318912): all four jobs PASS, `npm run check` exit 0. Windows: 108/108, Linux: 107 pass / 1 native skip, zero failures. Native Windows lock contention/recovery passed in both Node jobs.
+- [Windows portable package 39531318925](https://github.com/blooddrunk/Shot2Agent/actions/runs/39531318925): install/build/package/actual EXE smoke/upload PASS, exit 0. Job cleanup smoke passed. Superseded push runs cancelled by workflow concurrency are not counted as passes.
+- Final stabilization preserves specific pre-write refusal codes, checks Smart sequence before allocation as well as under the lock, adds Rust phase-sanitization testing and prevents manual Copy from replacing a pending delivery receipt. Targeted `node --experimental-strip-types --test --test-name-pattern='manual Copy refuses' packages/local/test/m2.test.mjs`: exit 0, 1/1 pass. A new full CI is required for this final source.

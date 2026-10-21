@@ -49,7 +49,7 @@ export function deliveryFailure(error: unknown, channel: string): { code: string
     if (code === 'CLIPBOARD_BUSY') return { code, classification: 'transient' };
     if (['CLIPBOARD_WRITE_AMBIGUOUS', 'CLIPBOARD_HELPER_TIMEOUT', 'CLIPBOARD_HELPER_STOPPED', 'CLIPBOARD_PROTOCOL'].includes(code))
       return { code, classification: 'ambiguous' };
-    return { code: ['CLIPBOARD_TEXT_LIMIT', 'CLIPBOARD_UNAVAILABLE'].includes(code) ? code : 'CLIPBOARD_FAILED', classification: 'permanent' };
+    return { code: ['CLIPBOARD_TEXT_LIMIT', 'CLIPBOARD_UNAVAILABLE', 'CLIPBOARD_ALLOC', 'CLIPBOARD_DEADLINE_BEFORE_WRITE'].includes(code) ? code : 'CLIPBOARD_FAILED', classification: 'permanent' };
   }
   if (['EBUSY', 'EAGAIN', 'EMFILE', 'ENFILE'].includes(code)) return { code: `SAVE_${code}`, classification: 'transient' };
   return { code: ['EACCES', 'EPERM', 'ENOSPC', 'ENOENT', 'ENOTSUP'].includes(code) ? `SAVE_${code}` : 'SAVE_FAILED', classification: 'permanent' };

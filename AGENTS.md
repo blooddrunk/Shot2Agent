@@ -37,3 +37,7 @@ M3-L now provides `apps/desktop` (Tauri 2/Vue 3), `packages/desktop` (restricted
 ## Operator acceptance update — 2026-10-21
 
 The operator reported PASS for automatic submit, Notepad focus, actual Smart paste, conflict protection/manual Copy, save/restart persistence and pause/resume. Record the environment caveat: intermittent empty/blocked Smart behavior correlated with WeChat Input Method synchronization; root cause remains unverified. Do not claim universal input-method compatibility, separately unreported confirmation/discard GUI checks, or new real-Codex desktop proof. Configurable retry limits/Agent rerun are discussed proposals, not implemented or a waiver of Smart/no-auto-replay constraints. See `docs/M3_VALIDATION.md` and `docs/RESULT_DELIVERY.md`.
+
+## M4-L reliability handoff
+
+M4-L 0.4.0 adds no-clobber Markdown publication, independent bounded delivery retries and safe phase/error diagnostics. See `docs/M4_LOCAL_RELIABILITY.md` and `docs/M4_VALIDATION.md` for behavior and actual gate evidence. Smart retains original capture session/sequence on every attempt; ambiguous writes and interrupted delivery never auto-replay. Default 0 extra attempts; native writes have no hidden retries. Agent rerun UI is deferred; no possibly launched execution is automatically rerun. Keep the existing M3 operator scope and input-method caveat. New packaged smoke uses a unique disposable root, not operator history. Do not open a larger milestone solely for an unverified non-core desktop interaction.

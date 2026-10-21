@@ -96,6 +96,7 @@ export class LocalApp {
   async copy(id: string): Promise<void> {
     const task = this.get(id); requireValue(task.result && this.clipboard, 'RESULT_OR_CLIPBOARD_UNAVAILABLE');
     const old = this.state.get(id, 'clipboard');
+    requireValue(old?.status !== 'pending', 'DELIVERY_IN_PROGRESS');
     try {
       requireValue(await this.clipboard.writeText(task.result.contentMarkdown), 'COPY_FAILED');
       this.state.put(id, 'clipboard', { status: 'succeeded', attempts: (old?.attempts ?? 0) + 1 });

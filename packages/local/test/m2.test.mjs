@@ -362,3 +362,14 @@ test('Worker deadline records unknown but awaits adapter cleanup before releasin
     assert.equal(core.get(identity.ownerId, id).attempts.length, 1);
   } finally { core.close(); await removeOwnedDirectory(dir); }
 });
+
+test('manual Copy refuses a pending delivery without replacing its receipt', async () => {
+  const dir = root(); const clipboard = new Clipboard();
+  const app = new LocalApp(dir, new FakeAgent(), FAKE_PROFILE, { clipboard: 'manual' }, clipboard);
+  try {
+    const id = await app.submit(await fixture()); await app.work();
+    app.state.put(id, 'clipboard', { status: 'pending', attempts: 4 });
+    await assert.rejects(app.copy(id), /DELIVERY_IN_PROGRESS/);
+    assert.equal(clipboard.writes, 0); assert.deepEqual(app.state.get(id, 'clipboard'), { status: 'pending', attempts: 4 });
+  } finally { app.close(); rmSync(dir, { recursive: true, force: true }); }
+});

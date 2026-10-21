@@ -1,6 +1,6 @@
 # M4-L: bounded Local reliability gate (proposed next slice)
 
-Status: **planned, not implemented**. Baseline M3-L PR #3 merged into `main` at `077f90af490bd9e384dbe070544b7561257e1d19` on 2026-10-21. Sync the latest `origin/main` again before acting; this document does not supersede live CI or newer fixes.
+Status: **implemented in 0.4.0; current validation is recorded in M4_VALIDATION.md**. Baseline M3-L PR #3 merged into `main` at `077f90af490bd9e384dbe070544b7561257e1d19` on 2026-10-21. Sync the latest `origin/main` again before acting; this document does not supersede live CI or newer fixes.
 
 ## Gate 0 — restore main-branch packaged Windows smoke
 

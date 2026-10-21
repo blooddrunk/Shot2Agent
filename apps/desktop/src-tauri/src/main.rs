@@ -57,6 +57,35 @@ fn contain(child: &Child) -> std::io::Result<Job> {
         Ok(job)
     }
 }
+fn diagnostic_phase(line: &str) -> Option<&'static str> {
+    match line {
+        "PHASE_PARENT_GATE" => Some("PHASE_PARENT_GATE"),
+        "PHASE_COORDINATOR_INIT" => Some("PHASE_COORDINATOR_INIT"),
+        "PHASE_CLIPBOARD_START" => Some("PHASE_CLIPBOARD_START"),
+        "PHASE_SERVING" => Some("PHASE_SERVING"),
+        _ => None,
+    }
+}
+#[cfg(test)]
+mod diagnostic_tests {
+    use super::diagnostic_phase;
+    #[test]
+    fn untrusted_stderr_is_never_a_diagnostic() {
+        for line in [
+            "private clipboard text",
+            "PHASE_SERVING secret",
+            "PHASE_SERVING\nprivate",
+            "Error: token=synthetic",
+            "",
+        ] {
+            assert_eq!(diagnostic_phase(line), None);
+        }
+        assert_eq!(
+            diagnostic_phase("PHASE_CLIPBOARD_START"),
+            Some("PHASE_CLIPBOARD_START")
+        );
+    }
+}
 fn smoke_root() -> &'static std::path::PathBuf {
     static ROOT: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
     ROOT.get_or_init(|| {
@@ -128,14 +157,7 @@ impl Bridge {
                     break;
                 }
                 let code = line.trim();
-                if [
-                    "PHASE_PARENT_GATE",
-                    "PHASE_COORDINATOR_INIT",
-                    "PHASE_CLIPBOARD_START",
-                    "PHASE_SERVING",
-                ]
-                .contains(&code)
-                {
+                if let Some(code) = diagnostic_phase(code) {
                     if let Ok(mut value) = observed.lock() {
                         *value = code.to_string();
                     }

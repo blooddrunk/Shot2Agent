@@ -65,6 +65,9 @@ public static class ShotClipboard {
     } finally { CloseClipboard(); }
   }
   public static bool WriteText(string text, string expected) {
+    // Observe sequence changes even while another writer owns the lock, then recheck
+    // under our lock before modifying anything. Never refresh the caller's baseline.
+    if (!String.IsNullOrEmpty(expected) && GetClipboardSequenceNumber().ToString() != expected) return false;
     // Allocate before clearing. Comparison and write share one native clipboard lock.
     byte[] bytes = Encoding.Unicode.GetBytes(text + "\0");
     IntPtr handle = GlobalAlloc(0x42, (UIntPtr)bytes.Length);

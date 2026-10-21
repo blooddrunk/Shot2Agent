@@ -24,6 +24,7 @@ jobs:
           cache-on-failure: true
       - run: corepack pnpm install --frozen-lockfile
       - run: npm run desktop:build
+      - run: cargo test --release --features tauri/custom-protocol --manifest-path apps/desktop/src-tauri/Cargo.toml
       - run: npm run desktop:package
       - name: Exercise packaged Rust to Node pipes and clean shutdown
         shell: pwsh
