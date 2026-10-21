@@ -65,3 +65,14 @@ PR [#5](https://github.com/blooddrunk/Shot2Agent/pull/5) incorporates planning P
 For optional interactive observations above, the runnable candidate is `D:\code\projects\Shot2Agent\build\m4-candidate\Shot2Agent\Start acceptance.cmd` with the exact hashes above. Record each numbered observation **PASS / FAIL / NOT VERIFIED**, plus the visible clipboard/save code and actual pasted text (synthetic only). No new human action is required to establish the automated reliability gate; unreported confirmation/input-method/real-Codex observations remain NOT VERIFIED and do not justify another large milestone. Local daily use remains scoped to the approved Profile and already accepted desktop environment.
 
 Final review identified that explicit delivery retry could otherwise inherit newly changed Always settings for an originally Smart task. The follow-up persists a sticky Smart guard, conservatively protects legacy failed receipts with baselines, and adds two deterministic tests. The 0652119 candidate evidence above remains valid at that scope; this follow-up requires its own green CI before merge.
+
+## Final Smart-guard follow-up gate (source e04ffa2)
+
+This section supersedes the earlier candidate's test totals for current executable source. Original Smart protection now persists across explicit delivery retries even after changing settings to Always; legacy failed receipts with a baseline fail closed. Manual Copy is still explicit and preserves retry history.
+
+- `node --experimental-strip-types --test packages/local/test/reliability.test.mjs`: exit 0, **19/19** pass, including both sticky-guard cases.
+- Final local `npm run check`: exit 0, **111 total / 110 pass / 0 fail / 1 Windows-native skip**, plus lint/typechecks/core+UI builds/compiled smoke all passed.
+- [Current-source Windows/Linux × Node 22/24 checks 39532408594](https://github.com/blooddrunk/Shot2Agent/actions/runs/39532408594): all four jobs PASS, exit 0. Windows **111/111**, Linux **110 pass / 1 native skip**, no failures.
+- [Current-source Windows package 39532408648](https://github.com/blooddrunk/Shot2Agent/actions/runs/39532408648): frozen install, desktop build, Rust diagnostic **1/1**, package and actual EXE smoke all PASS, exit 0, with descendant cleanup; artifact uploaded. No timeout extension or automatic process/Agent replay was introduced.
+
+All executable changes end at `e04ffa2d9b56971460b0cc6da42df5a32aa658ca`. The following commit only records this evidence. Final-head CI and post-merge main Windows build remain required by the handoff workflow; final delivery reports those live results and the merged package SHA256 separately. Candidate artifact hashes above identify only their stated candidate snapshot. No new operator input-method, focus/paste or authenticated Codex desktop acceptance is claimed.
