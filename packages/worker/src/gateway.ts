@@ -30,7 +30,7 @@ export function credentialCommand(action: 'add' | 'read' | 'delete', reference: 
   requireValue(/^Shot2Agent-Gateway-[0-9a-f-]{36}$/.test(reference), 'INVALID_CREDENTIAL_REF');
   return { executable: join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
     args: ['-NoProfile', '-File', credentialScript, '-Action', action, '-Reference', reference],
-    env: { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => ['systemroot', 'windir', 'path', 'temp', 'tmp', 'userprofile', 'appdata', 'localappdata', 'programdata', 'programfiles'].includes(key.toLowerCase()))),
+    env: { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => ['systemroot', 'systemdrive', 'windir', 'path', 'pathext', 'comspec', 'os', 'temp', 'tmp', 'userprofile', 'appdata', 'localappdata', 'programdata', 'programfiles', 'programfiles(x86)', 'programw6432', 'allusersprofile', 'public', 'homedrive', 'homepath', 'username', 'userdomain', 'userdomain_roamingprofile', 'logonserver', 'processor_architecture', 'processor_identifier', 'processor_level', 'processor_revision', 'number_of_processors'].includes(key.toLowerCase()))),
       // The caller may be pwsh/CI; never inherit its incompatible or user-owned module paths.
       PSModulePath: join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'Modules') } };
 }

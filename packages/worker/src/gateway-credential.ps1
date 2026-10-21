@@ -50,18 +50,16 @@ public static class ShotCredential {
     # Never a token argument, environment variable, file or diagnostic.
     $stage = 'PIPE_CHECK'
     if (-not [Console]::IsInputRedirected) { exit 2 }
-    $stage = 'PIPE_BUFFER'
-    $text = New-Object System.Text.StringBuilder
     $stage = 'PIPE_READ'
-    while ($text.Length -le 2048) {
+    $secure = New-Object System.Security.SecureString
+    while ($secure.Length -le 2048) {
       $next = [Console]::In.Read()
       if ($next -lt 0 -or $next -eq 10 -or $next -eq 13) { break }
-      [void]$text.Append([char]$next)
+      if ($next -lt 33 -or $next -gt 126) { $secure.Dispose(); exit 2 }
+      $secure.AppendChar([char]$next)
     }
-    if ($text.Length -lt 8 -or $text.Length -gt 2048 -or $text.ToString() -notmatch '^[\x21-\x7e]+$') { exit 2 }
-    $stage = 'PIPE_CONVERT'
-    $secure = ConvertTo-SecureString $text.ToString() -AsPlainText -Force
-    [void]$text.Clear()
+    if ($secure.Length -lt 8 -or $secure.Length -gt 2048) { $secure.Dispose(); exit 2 }
+    $secure.MakeReadOnly()
   } else {
     $stage = 'INTERACTIVE_PROMPT'
     $secure = Read-Host 'Gateway API Token (hidden; never saved as plaintext)' -AsSecureString
