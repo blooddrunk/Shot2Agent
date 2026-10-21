@@ -4,14 +4,13 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { removeOwnedDirectory } from './cleanup.ts';
 import { lstatSync, realpathSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import type { AgentAdapter, AgentResult, Profile, SubmissionMetadata } from '../../contracts/src/index.ts';
 import { sha256, verifyImage } from '../../core/src/blobs.ts';
 import { requireValue } from '../../core/src/model.ts';
-import { boundedProcess } from './process.ts';
-import type { Program } from './process.ts';
+import { boundedProcess, claudePolicyCommand } from './process.ts';
+import type { Program, ProcessResult } from './process.ts';
 import { inspectClaude, programDigest } from './discovery.ts';
 export interface ClaudePolicy {
   id: string; version: string; workspace: string; program: Program; cliVersion: string;
@@ -50,13 +49,17 @@ export async function assertClaudeMachinePolicy(signal?: AbortSignal): Promise<v
     for (const name of ['managed-settings.json', 'managed-settings.d', 'managed-mcp.json']) assertAbsent(join(base, 'ClaudeCode', name));
   }
   assertAbsent(join(homedir(), '.claude', 'remote-settings.json'));
-  const powershell = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
   // Match the existing native helper's finite startup budget. A fixed file avoids
   // inline-command startup differences; no shell or user-supplied code is involved.
-  const script = fileURLToPath(new URL('./claude-policy.ps1', import.meta.url));
-  const policy = await boundedProcess({ executable: powershell, args: [] }, ['-NoProfile', '-NonInteractive', '-File', script], { cwd: process.env.SystemRoot ?? 'C:\\Windows', timeoutMs: 10000, maxBytes: 16384, signal, nativePolicy: true }); await policy.settled;
+  const { program, args } = claudePolicyCommand();
+  const policy = await boundedProcess(program, args, { cwd: process.env.SystemRoot ?? 'C:\\Windows', timeoutMs: 10000, maxBytes: 16384, signal, nativePolicy: true }); await policy.settled;
+  assertClaudePolicyResult(policy);
+}
+export function assertClaudePolicyResult(policy: Pick<ProcessResult, 'stopped' | 'code' | 'output'>): void {
   requireValue(!policy.stopped, 'CLAUDE_POLICY_CHECK_TIMEOUT');
-  requireValue(policy.code === 0 && policy.output.trim() === 'absent', policy.code === 1 ? 'CLAUDE_MANAGED_POLICY_REFUSED' : 'CLAUDE_POLICY_CHECK_UNAVAILABLE');
+  // Exit 1 alone also covers script startup/security errors. Require the helper's
+  // explicit marker before reporting that a managed policy actually exists.
+  requireValue(policy.code === 0 && policy.output.trim() === 'absent', policy.code === 1 && policy.output.trim() === 'present' ? 'CLAUDE_MANAGED_POLICY_REFUSED' : 'CLAUDE_POLICY_CHECK_UNAVAILABLE');
 }
 
 function assertAbsent(path: string): void {

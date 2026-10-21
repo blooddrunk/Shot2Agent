@@ -4,6 +4,11 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 export interface Program { executable: string; args: string[] }
+/** Fixed read-only OS helper; the execution policy applies only to this child. */
+export function claudePolicyCommand(): { program: Program; args: string[] } {
+  return { program: { executable: join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'), args: [] },
+    args: ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', fileURLToPath(new URL('./claude-policy.ps1', import.meta.url))] };
+}
 export interface ProcessResult {
   code: number | null; output: string; stopped: boolean; launched: boolean; overflow: boolean;
   /** Actual root and tree-killer handles have closed, independently of the bounded result deadline. */
@@ -14,7 +19,8 @@ export async function boundedProcess(program: Program, args: string[], options: 
   gateway?: { config: GatewayConfig; token: string; home: string };
   cwd: string; provider?: 'claude'; nativePolicy?: true; input?: string; signal?: AbortSignal; timeoutMs: number; maxBytes?: number;
 }): Promise<ProcessResult> {
-  if (options.nativePolicy && (process.platform !== 'win32' || program.executable !== join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe') || program.args.length || JSON.stringify(args) !== JSON.stringify(['-NoProfile', '-NonInteractive', '-File', fileURLToPath(new URL('./claude-policy.ps1', import.meta.url))]))) throw new Error('SYSTEM_POLICY_PROGRAM_REQUIRED');
+  const policyCommand = options.nativePolicy ? claudePolicyCommand() : undefined;
+  if (policyCommand && (process.platform !== 'win32' || program.executable !== policyCommand.program.executable || program.args.length || JSON.stringify(args) !== JSON.stringify(policyCommand.args))) throw new Error('SYSTEM_POLICY_PROGRAM_REQUIRED');
   if (options.signal?.aborted) return { code: null, output: '', stopped: true, launched: false, overflow: false, settled: Promise.resolve() };
   return new Promise(resolve => {
     let output = ''; let total = 0; let stopped = false; let launched = false; let overflow = false;

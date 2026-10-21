@@ -1,27 +1,33 @@
-# Windows Local quick start and M7 acceptance
+# Windows Local 使用与 M7 验收
 
-Use the `Shot2Agent-Windows-x64.zip` artifact from the Windows desktop workflow. Windows x64 and WebView2 are required. No Relay or VPS is needed.
+前提：Windows x64、已安装 WebView2。下载 Windows desktop 工作流中的 `Shot2Agent-Windows-x64`，解压内部程序包，双击 `Shot2Agent.exe`。Local 无需 Relay 或 VPS。
 
-## First run and GLM setup
+## 首次配置 Agent 与 GLM
 
-1. Extract the ZIP and double-click `Shot2Agent.exe`. A new installation opens the Agent setup form even when no Profile exists.
-2. Choose **Claude Code + GLM Gateway**. Shot2Agent discovers installed Claude Code; choose the detected entry or use **Browse CLI Program**. Pick a workspace folder or use the Shot2Agent default, then set the Agent name and prompt.
-3. Choose the domestic BigModel or international Z.ai endpoint, select a supported image model such as `glm-5.3-flash`, and enter the Token in the masked field.
-4. Select **Save and test synthetic image**. Confirm the notice only if you accept that the provider may charge for one request. Shot2Agent sends the bundled synthetic image, follows no redirects, and does not retry. It never sends a personal screenshot for this test.
-5. On success, the Token is saved to Windows Credential Manager and the Profile is selected for future tasks. The displayed test state means this endpoint recognized the synthetic marker; it is not a blanket claim about other models or endpoints. If the Token is wrong, keep the form open, enter the corrected Token, and run the test again.
+1. 新安装即使没有 Agent，也应显示“设置默认 Agent”界面。
+2. “Agent 类型”选择 **Claude Code + GLM Gateway**。在“本机安装”选择已发现的 Claude Code；也可点 **浏览 CLI 程序…**。用 **选择文件夹…** 选择工作区，或点 **使用 Shot2Agent 默认工作区**。填写 Agent 名称和默认提示词。
+3. 选择国内 BigModel 或国际 Z.ai Endpoint，填写支持图片的模型，例如 `glm-5.3-flash`，在密码框输入 Token。
+4. 点 **保存并测试合成图片**。确认弹窗会说明：向所选端点发送一张程序自带的合成图片，可能收费，不发送个人截图，不自动重试。仅在接受这一次请求后确认。
+5. 本地 Token 写入和读回先完成；失败时不发送测试请求。测试成功后，配置会启用并成为新任务的默认 Agent。测试状态只说明该端点和模型识别了本次合成标记。Token 错误时，在同一窗口输入正确 Token 后重新操作即可。
 
-For Codex CLI or personal Claude Code, choose that provider instead. The same GUI selects the installed CLI, workspace, prompt, and default Profile. Unsupported CLI versions remain unavailable for new tasks.
+Codex CLI 或 Claude Code 个人登录用户选择对应类型，使用同样的安装路径、工作区、提示词和默认 Agent 设置。不兼容的 CLI 版本会被明确拒绝。
 
-## Capture, delivery, and history
+## 捕获、结果和历史
 
-1. Select **Listen for new clipboard images** and a submission mode. Automatic submission requires explicit image-sharing consent.
-2. Choose clipboard return and Markdown saving independently. Always clipboard overwrite requires its own consent. Pick a save folder with **Choose Folder**.
-3. Select **Apply Settings**, then copy a screenshot with `Win+Shift+S`. Confirm mode shows a preview before submission; automatic mode submits only a new clipboard image.
-4. Open local history to inspect a result, copy it, delete one task, select multiple terminal tasks, clear successful history, or clear all safely deletable history. Queued/running and `execution_unknown` tasks are retained. Saved Markdown files outside Shot2Agent remain in place.
-5. Restart Shot2Agent and confirm the selected Agent, capture preferences, and remaining history persist.
+1. 勾选 **监听新的剪贴板图片**，选择提交模式；自动提交需要同意发送图片。
+2. 分别选择剪贴板返回和 Markdown 保存。Always 自动覆盖需要勾选同意覆盖；保存目录用 **选择文件夹…** 选择。
+3. 点 **应用设置**，再用 `Win+Shift+S` 截一张只包含测试文字的图片。确认模式先显示预览；自动模式只提交新图片。正常 Agent 任务可能产生模型费用。
+4. 任务成功后，打开结果并检查 Markdown；使用 **复制结果**。在“本地历史”测试单项 **删除**、选择多项后 **删除所选**、**清除成功历史** 和 **清除所有可安全删除的历史**。请用自行创建的测试任务验证删除。
+5. 排队、运行中和“执行结果不确定”的任务会保留。用户选择目录中已导出的 Markdown 文件保留。退出并重新打开程序后，检查 Agent、捕获设置和剩余历史仍存在。
 
-## Profile cleanup acceptance
+## Agent 配置清理
 
-Open **Manage Agent Profiles and Tokens**. Confirm historical versions are absent from the new-task selector. Remove a configuration, restore it, and clean unused historical versions. A task-referenced Profile cannot be permanently deleted; a Credential Manager entry remains while another Profile references it. Editing or replacing a Token creates a new Profile version for future tasks and leaves existing task bindings unchanged.
+打开 **管理 Agent 配置与 Token**，检查历史版本不会挤进“新任务 Agent”列表。测试移除、恢复和清理未引用的旧配置。被任务引用的版本不可永久删除；仍被其他 Profile 使用的凭据会保留。编辑配置或更换 Token 只影响之后的新任务，已有任务仍绑定原配置。
 
-These steps verify the packaged GUI on the tested Windows machine. They do not qualify other Windows users, CLI versions, Token regions, models, or endpoints. Do not use real screenshots or personal history for disposable checks.
+## 下载包中的本机检查错误
+
+Windows 可能给下载 ZIP 内的 PowerShell 文件保留互联网来源标记。三个固定内置辅助脚本都使用仅对子进程生效的执行策略参数，无需用户“解除锁定”或修改系统执行策略。Claude 策略辅助脚本只有返回明确的 `present` 标记才归类为 `CLAUDE_MANAGED_POLICY_REFUSED`；脚本启动失败显示为 `CLAUDE_POLICY_CHECK_UNAVAILABLE`。真实受管理配置仍会阻止执行。
+
+自动检查会给辅助脚本加上 `ZoneId=3`，复现原始脚本启动失败，再验证修复后的只读检查；该检查不启动 Claude、不发送模型请求，也不访问个人任务或 Token。旧失败任务保留，不会自动重跑。更新程序后使用现有 Agent 即可，无需重新保存 Token。
+
+以上 GUI 操作只能建立所测 Windows 用户、CLI、端点和模型的验收证据。自动化 Fake/Mock 与原生辅助脚本检查不代表真实模型或全部桌面交互已通过。

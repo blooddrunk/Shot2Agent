@@ -34,6 +34,10 @@ jobs:
           Set-Content -LiteralPath $clipboardScript -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3"
           $credentialScript = (Resolve-Path build/Shot2Agent/runtime/dist/packages/worker/src/gateway-credential.ps1).Path
           Set-Content -LiteralPath $credentialScript -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3"
+          $policyScript = (Resolve-Path build/Shot2Agent/runtime/dist/packages/worker/src/claude-policy.ps1).Path
+          Set-Content -LiteralPath $policyScript -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3"
+          & "$pwd/build/Shot2Agent/runtime/node.exe" scripts/windows/claude-policy-smoke.mjs "$pwd/build/Shot2Agent/runtime/dist/packages/worker/src/process.js"
+          if ($LASTEXITCODE -ne 0) { throw "packaged Claude policy smoke exit $LASTEXITCODE" }
           & "$pwd/build/Shot2Agent/runtime/node.exe" scripts/windows/credential-store-smoke.mjs "$pwd/build/Shot2Agent/runtime/dist/packages/worker/src/gateway.js"
           if ($LASTEXITCODE -ne 0) { throw "packaged Credential Manager smoke exit $LASTEXITCODE" }
           $proc = Start-Process -FilePath "$pwd/build/Shot2Agent/Shot2Agent.exe" -ArgumentList '--staging','--smoke' -PassThru

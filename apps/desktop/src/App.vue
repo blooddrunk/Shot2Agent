@@ -21,6 +21,9 @@ const modeText: Record<string, string> = { codex: 'Local', staging: 'Fake 验收
 const cliStatusText: Record<string, string> = { not_found: '未安装', invalid: '路径无效', unsupported: '功能不兼容', version_changed: '版本或文件已变化', unverified_auth: '已发现', scan_incomplete: '检测未完成' };
 const statusText: Record<string, string> = { monitoring: '正在监听新图片', paused: '捕获已暂停', capture_off: '捕获已关闭', setup_required: '先选择或配置一个 Agent', worker_error: 'Worker 已停止 · 请检查后重启', capture_error: '剪贴板读取暂停 · 可重新连接' };
 const errorText: Record<string, string> = {
+  CLAUDE_MANAGED_POLICY_REFUSED: '检测到 Claude 受管理配置，已停止执行。请确认本机是否安装了组织管理的 Claude 配置。',
+  CLAUDE_POLICY_CHECK_UNAVAILABLE: '无法完成 Claude 本机配置检查，请使用最新 Windows 程序包后重试新任务。',
+  CLAUDE_POLICY_CHECK_TIMEOUT: 'Claude 本机配置检查超时，请稍后手动提交新任务。',
   LOCAL_OPERATION_FAILED: '本地操作未完成。若刚确认了 GLM 合成图片测试，请先不要重复提交，以免重复请求。',
   WORKSPACE_PATH_UNAVAILABLE: '所选工作区不存在或无法访问，请用“选择文件夹…”选一个本机上可访问的文件夹。',
   WORKSPACE_CREATE_FAILED: '无法创建默认工作区，请改选一个有权限访问的本机文件夹。',
@@ -271,7 +274,7 @@ onUnmounted(() => clearInterval(timer));
         <p v-if="data?.lastHistoryCleanup" class="notice">最近清理：删除 {{ data.lastHistoryCleanup.deleted }} 项，保留 {{ data.lastHistoryCleanup.preservedActive }} 个活动任务和 {{ data.lastHistoryCleanup.preservedUnknown }} 个结果不确定任务。</p>
         <p class="hint" v-if="!data?.tasks.length">尚无任务。配置 Agent 后开启捕获并应用设置。</p>
         <ul class="tasks"><li v-for="task in data?.tasks" :key="task.id">
-          <div class="section-heading"><label class="check task-check"><input type="checkbox" :checked="selectedTasks.includes(task.id)" :disabled="busy || !isDeletable(task)" @change="toggleTask(task.id, ($event.target as HTMLInputElement).checked)"><span>选择删除</span></label><button class="task-title" @click="openTask(task.id)" :disabled="busy"><strong>{{ task.summary || task.status }}</strong><span>{{ task.provider || task.profileId }} · {{ task.id.slice(0, 8) }} · {{ task.status }}</span></button><button v-if="isDeletable(task)" @click="deleteTask(task.id)" :disabled="busy">删除</button></div>
+          <div class="section-heading"><label class="check task-check"><input type="checkbox" :checked="selectedTasks.includes(task.id)" :disabled="busy || !isDeletable(task)" @change="toggleTask(task.id, ($event.target as HTMLInputElement).checked)"><span>选择删除</span></label><button class="task-title" @click="openTask(task.id)" :disabled="busy"><strong>{{ (task.error && errorText[task.error]) || task.summary || task.status }}</strong><span>{{ task.provider || task.profileId }} · {{ task.id.slice(0, 8) }} · {{ task.status }}</span></button><button v-if="isDeletable(task)" @click="deleteTask(task.id)" :disabled="busy">删除</button></div>
           <p class="hint">剪贴板：{{ task.clipboard?.status || '等待结果' }} · 保存：{{ task.save?.status || '等待结果' }}</p>
           <p class="hint" v-if="task.clipboard?.code">剪贴板：{{ task.clipboard.code }} · {{ task.clipboard.classification }} · {{ task.clipboard.attempts }} 次</p><p class="hint" v-if="task.save?.code">保存：{{ task.save.code }} · {{ task.save.classification }} · {{ task.save.attempts }} 次</p>
           <p class="error" v-if="task.error">{{ task.error }} · 此任务不会自动重跑。</p><p class="notice" v-if="task.clipboard?.status === 'blocked_by_clipboard_change'">Smart 已保护较新的剪贴板内容，可手动复制结果。</p>

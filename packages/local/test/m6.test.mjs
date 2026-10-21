@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import sharp from 'sharp';
-import { ClaudeAgent, claudeProfile, assertClaudeMachinePolicy } from '../../worker/src/claude.ts';
+import { ClaudeAgent, claudeProfile, assertClaudeMachinePolicy, assertClaudePolicyResult } from '../../worker/src/claude.ts';
 import { validateGateway, assertGatewayVision, credentialCommand } from '../../worker/src/gateway.ts';
 import { programDigest } from '../../worker/src/discovery.ts';
 import { executionRegistry } from '../../worker/src/registry.ts';
@@ -17,6 +17,14 @@ const temp = () => realpathSync(mkdtempSync(join(tmpdir(), 'shot-m6-gateway-')))
 const gateway = () => ({ kind: 'claude-compatible-endpoint', baseUrl: 'https://open.bigmodel.cn/api/anthropic', model: 'glm-5.3-flash', models: { opus: 'glm-5.3-flash', sonnet: 'glm-5.3-flash', haiku: 'glm-5.3-flash' }, credentialRef: `Shot2Agent-Gateway-${randomUUID()}`, vision: 'not-verified' });
 const program = { executable: process.execPath, args: [fileURLToPath(new URL('./mock-gateway-cli.mjs', import.meta.url))] };
 const policyFor = workspace => ({ id: 'claude-gateway-readonly', version: 'v1', workspace, program, cliVersion: '2.1.305 (Claude Code)', digest: programDigest(program), timeoutMs: 15000, prompt: 'Synthetic only', imageProtocol: 'windows-jsonl-v1', gateway: gateway() });
+test('Claude policy check distinguishes actual managed policy from blocked or failed helper startup', () => {
+  assert.doesNotThrow(() => assertClaudePolicyResult({ code: 0, output: 'absent\r\n', stopped: false }));
+  assert.throws(() => assertClaudePolicyResult({ code: 1, output: 'present\r\n', stopped: false }), /CLAUDE_MANAGED_POLICY_REFUSED/);
+  for (const [code, output] of [[1, ''], [1, 'absent'], [2, ''], [0, 'present'], [0, ''], [null, '']]) {
+    assert.throws(() => assertClaudePolicyResult({ code, output, stopped: false }), /CLAUDE_POLICY_CHECK_UNAVAILABLE/);
+  }
+  assert.throws(() => assertClaudePolicyResult({ code: 0, output: 'absent', stopped: true }), /CLAUDE_POLICY_CHECK_TIMEOUT/);
+});
 test('gateway endpoints, mapping, credential reference and vision refuse unsafe configurations', () => {
   const base = gateway(); validateGateway(base);
   for (const baseUrl of ['http://open.bigmodel.cn/api/anthropic', 'https://token@open.bigmodel.cn/api/anthropic', 'https://open.bigmodel.cn/api/anthropic?token=private', 'https://evil.invalid', 'https://open.bigmodel.cn:443/api/anthropic', 'https://127.0.0.1/api/anthropic']) assert.throws(() => validateGateway({ ...base, baseUrl }));
