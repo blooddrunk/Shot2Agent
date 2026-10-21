@@ -99,3 +99,16 @@ $claude = 'C:\Users\YOUR_NAME\.local\bin\claude.exe' # 替换为实际发现的�
 5. 若收据为 `requestsSent:0` 且 `GATEWAY_CREDENTIAL_UNAVAILABLE`，表示尚未请求模型；不要重复添加凭据或清空系统凭据。先核对运行 Windows 用户和已选 Profile，再报告该错误。若出现 `GLM-ONCE-RUNNING.lock`，说明正在运行或上次中断，停止重复点击，先检查收据和进程；不要自行删除锁来触发可能的重复请求。
 
 该入口只验证直接端点认证、图片块请求和合成文字识别。即便成功，也不能宣称 Claude CLI 已通过真实端点验证，不能自动把正式 Profile 改为 `operator-attested`。正式请求仍保留原有视觉授权和隔离边界。
+
+## 当前凭据缺失时：双击修复并完成已授权测试
+
+本轮操作人员已授权一次 `glm-5.3-flash` 合成截图测试，但凭据前置检查失败，收据为 `requestsSent:0`。此时不要再批准重复 Profile 或直接添加 `--attest-vision`。
+
+1. 从托盘菜单 **Quit Shot2Agent** 完全退出程序。不要只关闭窗口。
+2. 在程序包目录双击 **Repair GLM credential and test.cmd**。保持当前已选 Gateway Profile 为国内端点的 `glm-5.3-flash`。
+3. 在弹出的本地隐藏输入提示中输入 GLM Token 并按回车。不要把 Token 发到聊天。程序仅新增 Windows 安全凭据引用；不覆盖或删除旧凭据，不改变历史任务绑定。旧版本会从新任务列表移除，仍可恢复。
+4. 凭据保存和读取确认成功后，程序只执行已授权的一次合成截图测试。成功必须显示实际识别出的 `SHOT2AGENT 42`，且同目录 `GLM-ONCE-RECEIPT.json` 为 `PASS_DIRECT_ENDPOINT_IMAGE_RECOGNITION`、`requestsSent:1`。失败或不确定时停止，不删除收据重试。
+5. 只有直接识图成功后，窗口才会询问是否基于此次证据声明该网关支持视觉并启用后续新任务。输入 `YES` 才保存一个新的 `operator-attested` Profile；按回车则保留 `not-verified`。此步骤不再请求模型，且不把 Claude CLI 的真实端点行为标记为已验证。只有你之后主动提交的新任务才会使用新配置。
+6. 选择启用后，关闭修复窗口，双击 **Start Codex.cmd**。在 **CLI 路径与状态** 核对模型为 `glm-5.3-flash`、视觉状态为 `operator-attested`。原有失败任务不会自动重新执行。
+
+`LOCAL_WORKER_ALREADY_RUNNING` 表示程序尚未完全退出；从托盘退出后再运行。`ONE_REQUEST_ALREADY_RESERVED_NO_RETRY` 表示收据已记录一次请求，不能在本次授权下再次测试。无论哪种错误，都不要删除个人历史、Token、测试收据或锁文件来绕过检查。
