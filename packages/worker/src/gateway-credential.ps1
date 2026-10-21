@@ -26,6 +26,7 @@ public static class ShotCredential {
 '@
   if ($Action -eq 'delete') {
     $code = [ShotCredential]::DeleteStatus($Reference)
+    if ($code -eq 1168) { exit 0 }
     if ($code -ne 0) { [Console]::Error.WriteLine('GATEWAY_SECURE_STORE_ERROR_' + $code); exit 3 }; exit 0
   }
   $ptr = [IntPtr]::Zero

@@ -32,7 +32,7 @@ function host(root = temp(), mode) {
     return new Promise((resolve,reject) => { receive = { resolve, reject }; child.stdin.write(JSON.stringify({ v: 1, command, ...args }) + '\n'); });
   }
   async function rpc(command, args) { const r = await raw(command,args); assert.equal(r.ok,true,r.error); return r.value; }
-  async function until(predicate) { for (let n=0;n<150;n++) { const s = await rpc('snapshot'); if (predicate(s)) return s; await sleep(25); } throw Error('snapshot condition timeout'); }
+  async function until(predicate, attempts = 150) { for (let n=0;n<attempts;n++) { const s = await rpc('snapshot'); if (predicate(s)) return s; await sleep(25); } throw Error('snapshot condition timeout'); }
   async function close() { if (exit === undefined) await rpc('quit'); await stopped; assert.equal(exit,0); }
   return { root, child, rpc, raw, event, until, close, stopped };
 }
@@ -127,9 +127,10 @@ test('desktop EOF gracefully aborts running work and keeps queued work durable',
 
 for (const mode of ['success', 'exit', 'hang']) test(`desktop pipes -> mock Codex ${mode}: failure/timeout remains visible and never replayed`, async t => {
   const root=temp(); const workspace=join(root,'workspace'); mkdirSync(workspace); writeFileSync(join(workspace,'mode'),mode);
-  const settings=defaults(); settings.adapter='codex'; settings.codex={ id:'codex-readonly',version:'v1',workspace:realpathSync(workspace),program:{executable:process.execPath,args:[fileURLToPath(new URL('../../local/test/mock-codex.mjs',import.meta.url))]},cliVersion:'codex-cli mock-1',timeoutMs:5000,prompt:'Analyze synthetic image only.' };
+  // Give Windows process-tree termination several seconds before the Worker safety deadline.
+  const settings=defaults(); settings.adapter='codex'; settings.codex={ id:'codex-readonly',version:'v1',workspace:realpathSync(workspace),program:{executable:process.execPath,args:[fileURLToPath(new URL('../../local/test/mock-codex.mjs',import.meta.url))]},cliVersion:'codex-cli mock-1',timeoutMs:mode==='hang'?15000:5000,prompt:'Analyze synthetic image only.' };
   saveSettings(root,settings); const h=host(root); t.after(()=>h.child.kill()); await configure(h,'off'); h.event(png2);
-  const expected=mode==='success'?'succeeded':'execution_unknown'; let s=await h.until(s=>s.tasks[0]?.status===expected); const id=s.tasks[0].id;
+  const expected=mode==='success'?'succeeded':'execution_unknown'; let s=await h.until(s=>s.tasks[0]?.status===expected,mode==='hang'?600:150); const id=s.tasks[0].id;
   if(mode==='success') assert.match((await h.rpc('detail',{id})).result.contentMarkdown,/# Mock result/);
   else assert.match(s.tasks[0].error,/CODEX_(EXIT|INTERRUPTED)/);
   await sleep(80); assert.equal((await h.rpc('detail',{id})).attempts.length,1); await h.close();
@@ -168,17 +169,18 @@ test('desktop fixture ignores an incomplete appended event until its newline is 
 });
 
 
-test('formal Codex entry refuses absent/Fake settings without silently creating or converting history', () => {
+test('formal Codex entry opens first-run setup without a configured Profile', async () => {
   const root = temp();
   const cb = { session: 'synthetic', async sequence() { return '1'; }, async readImage() {}, async writeText() { return true; }, close() {} };
-  assert.throws(() => new DesktopController(root, cb, undefined, 'codex'), /CODEX_SETUP_REQUIRED/);
-  assert.equal(existsSync(join(root, 'settings.json')), false);
-  saveSettings(root, defaults());
-  const before = readFileSync(join(root, 'settings.json'), 'utf8');
-  assert.throws(() => new DesktopController(root, cb, undefined, 'codex'), /CODEX_PROFILE_REQUIRED/);
-  assert.equal(readFileSync(join(root, 'settings.json'), 'utf8'), before);
-  const injected = { adapter: new FakeAgent(), profile: FAKE_PROFILE };
-  assert.throws(() => new DesktopController(root, cb, injected, 'codex'), /CODEX_PROFILE_REQUIRED/);
+  const desktop = new DesktopController(root, cb, undefined, 'codex', async () => []);
+  try {
+    await desktop.start();
+    const first = await desktop.dispatch({ v: 1, command: 'snapshot' });
+    assert.equal(first.setupRequired, true); assert.equal(first.status, 'setup_required'); assert.equal(first.total, 0);
+    assert.equal(existsSync(join(root, 'settings.json')), true);
+    await assert.rejects(desktop.dispatch({ v: 1, command: 'configure', capture: { enabled: true } }), /AGENT_SETUP_REQUIRED/);
+    assert.equal((await desktop.dispatch({ v: 1, command: 'snapshot' })).settings.enabled, false);
+  } finally { await desktop.close(); }
 });
 
 test('legacy and acceptance entries expose explicit mode with separate durable roots', async () => {
@@ -215,18 +217,21 @@ test('formal mode selects the approved Codex adapter and acceptance refuses it',
 });
 
 
-test('native formal startup refusal exits and releases its clipboard helper', { skip: process.platform !== 'win32' }, async t => {
+test('native formal startup presents first-run setup without a Profile', { skip: process.platform !== 'win32' }, async t => {
   const root = temp();
   const child = spawn(process.execPath, ['--experimental-strip-types', fileURLToPath(new URL('../src/main.ts', import.meta.url)), root, '--codex'], { stdio: ['pipe', 'pipe', 'pipe'], shell: false });
   t.after(() => { if (child.exitCode === null) child.kill(); });
-  let stderr = ''; child.stderr.on('data', chunk => { stderr += chunk; }); child.stdout.resume();
-  child.stdin.write('SHOT2AGENT/1\n');
-  const code = await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(Error('STARTUP_REFUSAL_DID_NOT_EXIT')), 10000);
-    child.once('close', code => { clearTimeout(timer); resolve(code); }); child.once('error', reject);
-  });
-  assert.equal(code, 1); assert.match(stderr, /CODEX_SETUP_REQUIRED/);
-  assert.equal(existsSync(join(root, 'settings.json')), false);
+  const lines = createInterface({ input: child.stdout }); const pending = []; let receive;
+  lines.on('line', line => { if (receive) { const current = receive; receive = undefined; current.resolve(JSON.parse(line)); } else pending.push(JSON.parse(line)); });
+  const next = () => pending.length ? Promise.resolve(pending.shift()) : new Promise(resolve => { receive = { resolve }; });
+  const closed = new Promise(resolve => child.once('close', resolve)); child.once('error', error => { throw error; });
+  child.stdin.write('SHOT2AGENT/1\n' + JSON.stringify({ v: 1, command: 'snapshot' }) + '\n');
+  let timer;
+  const response = await Promise.race([next(), new Promise((_, reject) => { timer = setTimeout(() => reject(Error('FIRST_RUN_SETUP_DID_NOT_OPEN')), 15000); })]).finally(() => clearTimeout(timer));
+  assert.equal(response.ok, true, response.error); assert.equal(response.value.setupRequired, true); assert.equal(response.value.status, 'setup_required');
+  child.stdin.write(JSON.stringify({ v: 1, command: 'quit' }) + '\n');
+  const code = await closed;
+  assert.equal(code, 0); assert.equal(existsSync(join(root, 'settings.json')), true);
 });
 
 test('global action process: pause atomic toggle, no startup image, no result, persistence and allowlist', async t => {

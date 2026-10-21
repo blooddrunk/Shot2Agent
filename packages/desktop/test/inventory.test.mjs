@@ -8,6 +8,7 @@ test('inventory merges approved Node runtime and npm shim by actual CLI entry wi
  const before = JSON.parse(JSON.stringify([approved, detected]));
  const rows = displayInventory([approved, detected]);
  assert.equal(rows.length, 1); assert.equal(rows[0].path, entry);
+ assert.equal(rows[0].selectionPath, approved.path);
  assert.deepEqual(rows[0].program, approved.program); assert.equal(rows[0].digest, 'approved');
  assert.deepEqual([approved, detected], before);
 });

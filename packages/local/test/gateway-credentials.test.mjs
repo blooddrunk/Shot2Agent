@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { credentialCommand, readGatewayToken } from '../../worker/src/gateway.ts';
 const gateway = () => ({ credentialRef: `Shot2Agent-Gateway-${randomUUID()}` });
+test('credential helper uses only a process-scoped policy for the downloaded packaged script', { skip: process.platform !== 'win32' }, () => {
+  const command = credentialCommand('add', gateway().credentialRef);
+  assert.deepEqual(command.args.slice(0, 4), ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File']);
+});
 test('Windows secure store refuses absent disposable reference; no personal credentials accessed', { skip: process.platform !== 'win32' }, async () => {
   await assert.rejects(readGatewayToken(gateway().credentialRef), /GATEWAY_CREDENTIAL_UNAVAILABLE/);
 });

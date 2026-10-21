@@ -8,7 +8,7 @@ import { boundedProcess } from './process.ts';
 import type { Program } from './process.ts';
 export type Provider = 'codex' | 'claude';
 export type Availability = 'not_found' | 'invalid' | 'unsupported' | 'version_changed' | 'unverified_auth' | 'scan_incomplete';
-export interface Candidate { provider: Provider; path: string; program?: Program; version?: string; status: Availability; digest?: string }
+export interface Candidate { provider: Provider; path: string; selectionPath?: string; program?: Program; version?: string; status: Availability; digest?: string }
 const packageNames = { codex: '@openai/codex', claude: '@anthropic-ai/claude-code' };
 const entries = { codex: 'bin/codex.js', claude: 'cli.js' };
 function regular(path: string): string {

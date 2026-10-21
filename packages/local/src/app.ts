@@ -20,7 +20,7 @@ export class LocalApp {
   lastCaptureStatus: 'queued' | 'no_image' | 'duplicate' | 'capture_in_progress' = 'no_image';
   private cleanupBlocked = false;
   private working = false; private capturing = false; private lastSequence?: string;
-  readonly adapter: AgentAdapter; private selected: ExecutionEntry; readonly registry: readonly ExecutionEntry[];
+  adapter: AgentAdapter; private selected: ExecutionEntry; registry: readonly ExecutionEntry[];
   get profile(): Profile { return this.selected.profile; }
   select(id: string, version: string): void {
     const entry = this.registry.find(e => e.profile.id === id && e.profile.version === version);
@@ -33,6 +33,15 @@ export class LocalApp {
     this.selected = this.registry.find(e => e.profile.id === profile.id && e.profile.version === profile.version)!;
     requireValue(this.selected, 'UNAPPROVED_PROFILE'); this.config = config; this.clipboard = clipboard;
     this.core = openCore(root); this.state = new LocalState(root);
+    this.recoverTaskDeletions();
+  }
+  /** Atomically changes the configuration available to future claims; current task bindings stay pinned. */
+  setRegistry(registry: readonly ExecutionEntry[], selectedId: string, selectedVersion: string): void {
+    const next = Object.freeze(registry.map(e => Object.freeze({ adapter: e.adapter, profile: Object.freeze(structuredClone(e.profile)) })));
+    requireValue(new Set(next.map(e => `${e.profile.id}:${e.profile.version}`)).size === next.length, 'DUPLICATE_PROFILE');
+    const selected = next.find(e => e.profile.id === selectedId && e.profile.version === selectedVersion);
+    requireValue(selected, 'UNAPPROVED_PROFILE');
+    this.registry = next; this.selected = selected; this.adapter = selected.adapter;
   }
   get pending() { return this.pendingImage; }
   discard(): void { this.pendingImage = undefined; }
@@ -116,6 +125,37 @@ export class LocalApp {
     }
   }
   async retryDelivery(id: string, channels?: readonly string[]): Promise<void> { await deliver(this.get(id), this.config, this.state, this.clipboard, true, undefined, channels); }
+  get canReviewUnknownHistory(): boolean { return !this.working && !this.cleanupBlocked; }
+  deleteHistory(ids: readonly string[], options: { reviewedUnknown?: boolean } = {}): string[] {
+    requireValue(ids.length > 0 && ids.length <= 10_000 && new Set(ids).size === ids.length, 'INVALID_TASK_DELETE');
+    let includesUnknown = false;
+    for (const id of ids) {
+      const task = this.get(id);
+      if (task.status === 'execution_unknown') {
+        requireValue(options.reviewedUnknown === true, 'TASK_EXECUTION_UNKNOWN_REQUIRES_REVIEW', 409);
+        includesUnknown = true;
+      }
+      requireValue(['succeeded', 'failed', 'timed_out', 'canceled', 'execution_unknown'].includes(task.status), 'TASK_NOT_TERMINAL', 409);
+    }
+    if (includesUnknown) {
+      requireValue(this.canReviewUnknownHistory, 'HISTORY_AGENT_STOP_PENDING', 409);
+      this.state.acquireWorker(); // Another live Local Worker must not race this review.
+    }
+    // The durable intent is written only after review and stop checks pass.
+    this.state.beginTaskDeletion(ids);
+    this.core.deleteTasks(LOCAL_IDENTITY.ownerId, ids, options);
+    this.core.recoverBlobCleanup();
+    this.state.finishTaskDeletion(ids);
+    return ids.slice();
+  }
+  private recoverTaskDeletions(): void {
+    const pending = this.state.pendingTaskDeletions();
+    if (!pending.length) return;
+    // Journal entries already passed the review/stop checks before the crash.
+    this.core.deleteTasks(LOCAL_IDENTITY.ownerId, pending, { allowMissing: true, reviewedUnknown: true });
+    this.core.recoverBlobCleanup();
+    this.state.finishTaskDeletion(pending);
+  }
   close(): void { this.pendingImage = undefined; this.core.close(); this.state.close(); this.clipboard?.close(); }
 }
 export function readImageFile(path: string): Buffer {

@@ -28,6 +28,15 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: pnpm
+      - name: Emulate downloaded Windows native helpers
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Set-Content -LiteralPath packages/worker/src/gateway-credential.ps1 -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3"
+          Set-Content -LiteralPath packages/worker/src/claude-policy.ps1 -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3"
+      - name: Downloaded Claude policy helper preflight (no model request)
+        if: runner.os == 'Windows'
+        run: node --experimental-strip-types scripts/windows/claude-policy-smoke.mjs packages/worker/src/process.ts
       - name: Isolated Windows secure-store preflight
         if: runner.os == 'Windows'
         run: node --experimental-strip-types --test packages/local/test/gateway-credentials.test.mjs

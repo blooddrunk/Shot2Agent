@@ -3,6 +3,7 @@ import { chmodSync, lstatSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { Attempt, Mode, Task } from './model.ts';
 import { requireValue } from './model.ts';
+import type { FileReference } from '../../contracts/src/index.ts';
 export interface TaskStore {
   transaction<T>(operation: () => T): T;
   tasks(): Task[];
@@ -10,6 +11,9 @@ export interface TaskStore {
   put(task: Task): void;
   attempts(taskId: string): Attempt[];
   putAttempt(attempt: Attempt): void;
+  deleteTasks(ids: readonly string[]): void;
+  pendingBlobCleanup(): FileReference[];
+  finishBlobCleanup(fileId: string): void;
   close(): void;
 }
 export function privateDirectory(path: string): void {
@@ -30,13 +34,17 @@ export class SqliteTaskStore implements TaskStore {
     try {
       this.transaction(() => {
         const version = (this.db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
-        requireValue(version <= 1, 'NEWER_DATABASE_SCHEMA');
+        requireValue(version <= 2, 'NEWER_DATABASE_SCHEMA');
         if (version === 0) this.db.exec(`
           CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
           CREATE TABLE tasks (id TEXT PRIMARY KEY, owner TEXT NOT NULL, idem TEXT NOT NULL, record TEXT NOT NULL, UNIQUE(owner, idem));
           CREATE TABLE attempts (id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id), record TEXT NOT NULL);
           CREATE INDEX attempt_task ON attempts(task_id);
           PRAGMA user_version=1;
+        `);
+        if (version < 2) this.db.exec(`
+          CREATE TABLE blob_cleanup (file_id TEXT PRIMARY KEY, record TEXT NOT NULL);
+          PRAGMA user_version=2;
         `);
         this.db.prepare('INSERT OR IGNORE INTO settings VALUES (?, ?)').run('mode', mode);
         requireValue(this.db.prepare('SELECT value FROM settings WHERE key=?').get('mode')?.value === mode, 'MODE_STORAGE_MISMATCH', 409);
@@ -64,5 +72,22 @@ export class SqliteTaskStore implements TaskStore {
     this.db.prepare('INSERT INTO attempts VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET record=excluded.record')
       .run(attempt.attemptId, attempt.taskId, JSON.stringify(attempt));
   }
+  /** Must be called in a store transaction. The journal lets file removal resume after a crash. */
+  deleteTasks(ids: readonly string[]): void {
+    const enqueue = this.db.prepare('INSERT OR IGNORE INTO blob_cleanup VALUES (?, ?)');
+    const deleteAttempts = this.db.prepare('DELETE FROM attempts WHERE task_id=?');
+    const deleteTask = this.db.prepare('DELETE FROM tasks WHERE id=?');
+    for (const id of ids) {
+      const task = this.get(id);
+      if (!task) continue;
+      for (const file of [...task.inputs, ...(task.result?.artifacts ?? [])]) enqueue.run(file.fileId, JSON.stringify(file));
+      deleteAttempts.run(id);
+      deleteTask.run(id);
+    }
+  }
+  pendingBlobCleanup(): FileReference[] {
+    return this.db.prepare('SELECT record FROM blob_cleanup ORDER BY rowid').all().map(row => JSON.parse(row.record as string));
+  }
+  finishBlobCleanup(fileId: string): void { this.db.prepare('DELETE FROM blob_cleanup WHERE file_id=?').run(fileId); }
   close(): void { this.db.close(); }
 }

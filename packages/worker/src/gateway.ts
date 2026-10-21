@@ -5,7 +5,7 @@ import { requireValue } from '../../core/src/model.ts';
 export interface GatewayConfig {
   kind: 'claude-compatible-endpoint'; baseUrl: string; model: string;
   models: { sonnet: string; opus: string; haiku: string };
-  credentialRef: string; vision: 'not-verified' | 'operator-attested';
+  credentialRef: string; vision: 'not-verified' | 'operator-attested' | 'synthetic-test-passed';
 }
 const keys = ['kind', 'baseUrl', 'model', 'models', 'credentialRef', 'vision'];
 export function validateGateway(g: GatewayConfig): void {
@@ -16,7 +16,7 @@ export function validateGateway(g: GatewayConfig): void {
   const model = (v: unknown) => typeof v === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(v);
   requireValue(model(g.model) && g.models && Object.keys(g.models).sort().join(',') === 'haiku,opus,sonnet' && Object.values(g.models).every(model), 'INVALID_GATEWAY_MODEL');
   requireValue(/^Shot2Agent-Gateway-[0-9a-f-]{36}$/.test(g.credentialRef), 'INVALID_CREDENTIAL_REF');
-  requireValue(['not-verified', 'operator-attested'].includes(g.vision), 'INVALID_VISION_QUALIFICATION');
+  requireValue(['not-verified', 'operator-attested', 'synthetic-test-passed'].includes(g.vision), 'INVALID_VISION_QUALIFICATION');
 }
 export function assertGatewayVision(g: GatewayConfig): void {
   validateGateway(g);
@@ -24,14 +24,17 @@ export function assertGatewayVision(g: GatewayConfig): void {
   // https://docs.bigmodel.cn/cn/guide/models/vlm/glm-5.3-flash
   // Do not use MCP/tools as a vision substitute.
   requireValue([g.model, ...Object.values(g.models)].every(v => /^(?:glm-4\.6v(?:-flashx|-flash)?|glm-5\.3-flash)$/i.test(v)), 'GATEWAY_MODEL_VISION_UNSUPPORTED');
-  requireValue(g.vision === 'operator-attested', 'GATEWAY_VISION_NOT_VERIFIED');
+  requireValue(g.vision === 'operator-attested' || g.vision === 'synthetic-test-passed', 'GATEWAY_VISION_NOT_VERIFIED');
 }
 export const credentialScript = fileURLToPath(new URL('./gateway-credential.ps1', import.meta.url));
 export function credentialCommand(action: 'add' | 'read' | 'delete', reference: string): { executable: string; args: string[]; env: NodeJS.ProcessEnv } {
   requireValue(process.platform === 'win32', 'WINDOWS_SECURE_STORE_REQUIRED');
   requireValue(/^Shot2Agent-Gateway-[0-9a-f-]{36}$/.test(reference), 'INVALID_CREDENTIAL_REF');
   return { executable: join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
-    args: ['-NoProfile', '-File', credentialScript, '-Action', action, '-Reference', reference],
+    // This is a fixed, app-bundled helper. Downloaded ZIPs carry Mark-of-the-Web,
+    // so RemoteSigned would otherwise refuse it for some Windows users. Scope the
+    // override to this child process; never change the user's machine policy.
+    args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', credentialScript, '-Action', action, '-Reference', reference],
     // This fixed OS helper needs the normal Windows host environment (as does the
     // fixed policy helper). Provider credentials never enter it; model processes
     // independently keep their strict environment allowlist.
@@ -52,6 +55,36 @@ export async function readGatewayToken(reference: string): Promise<string> {
       else reject(new Error('GATEWAY_CREDENTIAL_UNAVAILABLE'));
       output = '';
     });
+  });
+}
+
+/** Store a GUI-entered Token through the existing private pipe into Credential Manager. */
+export async function saveGatewayToken(reference: string, token: string): Promise<void> {
+  requireValue(typeof token === 'string' && /^[\x21-\x7e]{8,2048}$/.test(token), 'INVALID_GATEWAY_TOKEN');
+  const command = credentialCommand('add', reference);
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(command.executable, [...command.args, '-TokenFromPipe'], { env: command.env, shell: false, windowsHide: true, stdio: ['pipe', 'ignore', 'ignore'] });
+    let finished = false;
+    const timer = setTimeout(() => { if (!finished) child.kill(); }, 30000);
+    child.on('error', () => {});
+    child.on('close', code => {
+      finished = true; clearTimeout(timer);
+      if (code === 0) resolve(); else reject(new Error('GATEWAY_SECURE_STORE_OPERATION_FAILED'));
+    });
+    child.stdin.on('error', () => {});
+    child.stdin.end(`${token}\n`);
+  });
+}
+
+/** Delete is idempotent so an interrupted unused-profile cleanup can safely resume. */
+export async function deleteGatewayToken(reference: string): Promise<void> {
+  const command = credentialCommand('delete', reference);
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(command.executable, command.args, { env: command.env, shell: false, windowsHide: true, stdio: ['ignore', 'ignore', 'ignore'] });
+    let finished = false;
+    const timer = setTimeout(() => { if (!finished) child.kill(); }, 10000);
+    child.on('error', () => {});
+    child.on('close', code => { finished = true; clearTimeout(timer); if (code === 0) resolve(); else reject(new Error('GATEWAY_SECURE_STORE_OPERATION_FAILED')); });
   });
 }
 

@@ -1,12 +1,12 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Shot2Agent",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "identifier": "dev.shot2agent.local",
   "build": { "frontendDist": "../ui-dist" },
   "app": {
     "windows": [{ "label": "main", "title": "Shot2Agent · Local", "width": 1040, "height": 760, "minWidth": 720, "minHeight": 560 }],
-    "security": { "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost; object-src 'none'; frame-src 'none'", "capabilities": [] }
+    "security": { "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost; object-src 'none'; frame-src 'none'", "capabilities": ["main"] }
   },
   "bundle": { "active": false }
 }

@@ -5,7 +5,7 @@ try {
     $base = [Microsoft.Win32.RegistryKey]::OpenBaseKey($hive, [Microsoft.Win32.RegistryView]::Registry64)
     try {
       $key = $base.OpenSubKey('SOFTWARE\Policies\ClaudeCode')
-      if ($null -ne $key) { $key.Dispose(); exit 1 }
+      if ($null -ne $key) { $key.Dispose(); Write-Output 'present'; exit 1 }
     } finally { $base.Dispose() }
   }
   Write-Output 'absent'

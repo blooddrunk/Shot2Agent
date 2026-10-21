@@ -44,7 +44,10 @@ export class PrivateBlobStore implements BlobStore {
     requireValue(bytes.length === reference.byteSize && sha256(bytes) === reference.sha256, 'BLOB_INTEGRITY', 409);
     return bytes;
   }
-  remove(reference: FileReference): void { unlinkSync(this.path(reference.fileId)); }
+  remove(reference: FileReference): void {
+    try { unlinkSync(this.path(reference.fileId)); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+  }
 }
 // Serialize native decodes across concurrent Local/Remote submissions, not only within a batch.
 sharp.cache({ memory: 32, files: 0, items: 16 });

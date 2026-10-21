@@ -19,7 +19,11 @@ export class WindowsClipboard implements ClipboardPort {
   private chunks: Buffer[] = []; private buffered = 0; private dead = false;
   constructor() {
     requireValue(process.platform === 'win32', 'WINDOWS_INTERACTIVE_SESSION_REQUIRED');
-    this.child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Sta', '-WindowStyle', 'Hidden', '-File', fileURLToPath(new URL('./clipboard.ps1', import.meta.url))],
+    // Files extracted from a downloaded portable ZIP carry Mark-of-the-Web.
+    // RemoteSigned otherwise prevents this fixed, app-bundled helper from starting.
+    // The process-scoped setting does not change the user's or machine's policy.
+    this.child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Sta', '-WindowStyle', 'Hidden',
+      '-ExecutionPolicy', 'Bypass', '-File', fileURLToPath(new URL('./clipboard.ps1', import.meta.url))],
       { shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     this.child.stdout.on('data', (chunk: Buffer) => {
       this.buffered += chunk.length;

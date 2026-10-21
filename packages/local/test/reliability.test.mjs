@@ -106,7 +106,10 @@ test('path traversal and symlink/junction roots refuse without modifying destina
 test('invalid retry policies refused before any side effect', () => {
   for (const value of [null, {}, { maxRetries: 11, backoffMs: 10, budgetMs: 100 }, { ...config.retry, budgetMs: Infinity }, { ...config.retry, maxRetries: 1.5 }]) assert.throws(() => validateRetry(value), /INVALID_DELIVERY_RETRY/);
 });
-test('save transient retry is independent, bounded and does not repeat successful clipboard', () => scenario(async ({ state, t, id, clip, dir }) => {
+test('save transient retry is independent, bounded and does not repeat successful clipboard', context => scenario(async ({ state, t, id, clip, dir }) => {
+  // This case tests retry count/independence. Slow hosted SQLite writes must not
+  // turn it into the separate elapsed-budget refusal test above.
+  context.mock.method(globalThis.performance, 'now', () => 0);
   let saves = 0;
   await deliver(t, { ...config, saveDirectory: join(dir, 'out') }, state, clip, false, () => {
     if (++saves < 3) throw Object.assign(Error('busy'), { code: 'EBUSY' });
