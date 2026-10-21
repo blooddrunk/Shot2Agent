@@ -218,3 +218,78 @@ test('history controls delete one task, clear success history, persist after res
     assert.notEqual(second, third);
   } finally { await desktop.close(); rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('M7 UX local Gateway save never requests a model; optional test versions only future tasks and Token change resets vision', async () => {
+  const dir = root(); const workspace = join(dir, 'workspace'); mkdirSync(workspace); const executable = makeCli(dir, 'claude');
+  const credentials = credentialStore(); const requests = []; const desktop = makeDesktop(dir, { credentials, testGateway: testGateway(requests) });
+  try {
+    await desktop.start();
+    const fields = { provider: 'claude-compatible-endpoint', id: 'glm-personal', path: executable, workspace: realpathSync(workspace),
+      prompt: 'Explain image.', endpoint: 'https://open.bigmodel.cn/api/anthropic', model: 'glm-5.3-flash' };
+    let saved = await desktop.dispatch({ v: 1, command: 'create-profile', ...fields, token: 'valid-token-123' });
+    const first = saved.agents[0];
+    assert.equal(requests.length, 0); assert.equal(first.gateway.vision, 'not-verified');
+    assert.equal(first.gateway.connectionStatus, 'not_tested');
+    const queued = await desktop.app.submit(await image(), undefined, true);
+    await assert.rejects(desktop.dispatch({ v: 1, command: 'test-agent', id: first.id, version: first.version }), /GATEWAY_TEST_CONFIRMATION_REQUIRED/);
+    saved = await desktop.dispatch({ v: 1, command: 'test-agent', id: first.id, version: first.version, confirm: true });
+    const second = saved.agents.find(a => !a.historical);
+    assert.equal(requests.length, 1); assert.equal(second.gateway.vision, 'synthetic-test-passed');
+    assert.notEqual(second.version, first.version);
+    assert.equal(desktop.app.get(queued).submission.profileVersion, first.version);
+    assert.equal(desktop.app.get(queued).status, 'queued');
+    saved = await desktop.dispatch({ v: 1, command: 'create-profile', ...fields, editId: second.id, editVersion: second.version, reuseExisting: true });
+    assert.equal(saved.agents.find(a => !a.historical).gateway.vision, 'synthetic-test-passed');
+    const third = saved.agents.find(a => !a.historical);
+    saved = await desktop.dispatch({ v: 1, command: 'create-profile', ...fields, token: 'wrong-token-123', editId: third.id, editVersion: third.version, reuseExisting: true });
+    const fourth = saved.agents.find(a => !a.historical);
+    assert.equal(requests.length, 1); assert.equal(fourth.gateway.vision, 'not-verified');
+    await assert.rejects(desktop.dispatch({ v: 1, command: 'test-agent', id: fourth.id, version: fourth.version, confirm: true }), /GATEWAY_AUTH_FAILED/);
+    assert.equal(desktop.app.get(queued).submission.profileVersion, first.version);
+    assert.equal(readFileSync(join(dir, 'settings.json'), 'utf8').includes('wrong-token-123'), false);
+  } finally { await desktop.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('M7 UX editing another assistant preserves default and a running task keeps its original policy', async () => {
+  const dir = root(); const workspace = join(dir, 'workspace'); mkdirSync(workspace); const executable = makeCli(dir, 'codex');
+  const desktop = makeDesktop(dir); let release; let work;
+  try {
+    await desktop.start();
+    const fields = { provider: 'codex', path: executable, workspace: realpathSync(workspace), prompt: 'Original prompt.' };
+    await desktop.dispatch({ v: 1, command: 'create-profile', ...fields, id: 'first-codex' });
+    const original = desktop.app.profile;
+    let announceStarted; const started = new Promise(resolve => { announceStarted = resolve; });
+    const gate = new Promise(resolve => { release = resolve; });
+    const adapter = { name: 'fake', version: '1', async execute(...args) { announceStarted(); await gate; return new FakeAgent().execute(...args); } };
+    desktop.app.setRegistry([{ profile: original, adapter }], original.id, original.version);
+    const id = await desktop.app.submit(await image(), undefined, true);
+    work = desktop.app.work(); await started;
+    assert.equal(desktop.app.get(id).status, 'running');
+    await desktop.dispatch({ v: 1, command: 'create-profile', ...fields, id: 'second-codex' });
+    const selectedVersion = desktop.app.profile.version;
+    const result = await desktop.dispatch({ v: 1, command: 'create-profile', ...fields, id: 'first-codex', prompt: 'Updated prompt.',
+      editId: original.id, editVersion: original.version, reuseExisting: true });
+    assert.equal(result.profile.id, 'second-codex'); assert.equal(result.profile.profileVersion, selectedVersion);
+    assert.equal(desktop.app.get(id).submission.profileVersion, original.version);
+    assert.equal(desktop.app.get(id).submission.profileFingerprint, original.fingerprint);
+    release(); await work;
+    assert.equal(desktop.app.get(id).status, 'succeeded');
+    assert.equal(desktop.app.get(id).submission.profileVersion, original.version);
+  } finally { release?.(); await work; await desktop.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('history pagination refuses malformed requests and duplicate assistant names cannot shadow the selected profile', async () => {
+  const dir = root(); const workspace = join(dir, 'workspace'); mkdirSync(workspace); const executable = makeCli(dir, 'codex'); const desktop = makeDesktop(dir);
+  try {
+    await desktop.start();
+    await assert.rejects(desktop.dispatch({ v: 1, command: 'snapshot', offset: -1 }), /INVALID_HISTORY_PAGE/);
+    await assert.rejects(desktop.dispatch({ v: 1, command: 'snapshot', offset: 1.5 }), /INVALID_HISTORY_PAGE/);
+    await assert.rejects(desktop.dispatch({ v: 1, command: 'snapshot', query: 'a'.repeat(201) }), /INVALID_HISTORY_QUERY/);
+    const fields = { provider: 'codex', id: 'my-codex', path: executable, workspace: realpathSync(workspace), prompt: 'Explain image.' };
+    const before = await desktop.dispatch({ v: 1, command: 'create-profile', ...fields });
+    await assert.rejects(desktop.dispatch({ v: 1, command: 'create-profile', ...fields }), /PROFILE_NAME_EXISTS/);
+    const after = await desktop.dispatch({ v: 1, command: 'snapshot', offset: 500, query: 'nothing' });
+    assert.equal(after.profile.profileVersion, before.profile.profileVersion); assert.equal(after.agents.length, 1);
+    assert.equal(after.historyOffset, 0); assert.equal(after.historyTotal, 0);
+  } finally { await desktop.close(); rmSync(dir, { recursive: true, force: true }); }
+});

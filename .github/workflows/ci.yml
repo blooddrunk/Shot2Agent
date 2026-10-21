@@ -44,3 +44,27 @@ jobs:
       - run: npm run check
         env:
           SHOT2AGENT_NATIVE_CLIPBOARD_TEST: ${{ runner.os == 'Windows' && '1' || '0' }}
+
+  desktop-ui:
+    name: Vue interaction and responsive evidence
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: npm run desktop:test-ui
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: M7-UX-browser-evidence
+          path: |
+            build/ui-evidence
+            build/ui-report
+            build/ui-test-results

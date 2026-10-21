@@ -22,7 +22,8 @@
     "desktop:ui": "vite build --config apps/desktop/vite.config.mjs",
     "desktop:typecheck": "vue-tsc -p apps/desktop/tsconfig.json --noEmit",
     "desktop:build": "npm run build && npm run desktop:ui && cd apps/desktop && tauri build --no-bundle",
-    "desktop:package": "node scripts/desktop-package.mjs"
+    "desktop:package": "node scripts/desktop-package.mjs",
+    "desktop:test-ui": "playwright test"
   },
   "dependencies": {
     "@fastify/multipart": "10.1.4",
@@ -31,6 +32,7 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@playwright/test": "^1.64.1",
     "@tauri-apps/api": "^2.12.4",
     "@tauri-apps/cli": "^2.12.3",
     "@tauri-apps/plugin-dialog": "^2.8.3",
