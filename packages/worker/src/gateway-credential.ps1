@@ -1,7 +1,9 @@
 param([ValidateSet('add','read','delete')][string]$Action, [string]$Reference)
 $ErrorActionPreference = 'Stop'
+$stage = 'INPUT'
 try {
   if ($Reference -notmatch '^Shot2Agent-Gateway-[0-9a-f-]{36}$') { exit 2 }
+  $stage = 'NATIVE_TYPE'
   Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
@@ -26,6 +28,7 @@ public static class ShotCredential {
     if ($code -ne 0) { [Console]::Error.WriteLine('GATEWAY_SECURE_STORE_ERROR_' + $code); exit 3 }; exit 0
   }
   $ptr = [IntPtr]::Zero
+  $stage = 'READ'
   $readError = [ShotCredential]::ReadStatus($Reference,[ref]$ptr)
   $exists = $readError -eq 0
   if ($Action -eq 'read') {
@@ -40,10 +43,13 @@ public static class ShotCredential {
   # References are immutable. Replace by adding a NEW reference and approving a NEW Profile.
   if ($exists) { [ShotCredential]::CredFree($ptr); exit 4 }
   if ($readError -ne 1168) { [Console]::Error.WriteLine('GATEWAY_SECURE_STORE_ERROR_' + $readError); exit 3 }
+  $stage = 'PROMPT'
   $secure = Read-Host 'Gateway API Token (hidden; never saved as plaintext)' -AsSecureString
+  $stage = 'SECURE_BUFFER'
   $blob = [Runtime.InteropServices.Marshal]::SecureStringToCoTaskMemUnicode($secure)
   try {
     if ($secure.Length -lt 8 -or $secure.Length -gt 2048) { exit 2 }
+    $stage = 'WRITE'
     $credential = New-Object ShotCredential+CREDENTIAL
     $credential.Type=1; $credential.TargetName=$Reference; $credential.UserName='Shot2Agent'; $credential.Persist=2
     $credential.CredentialBlob=$blob; $credential.CredentialBlobSize=$secure.Length*2
@@ -51,4 +57,4 @@ public static class ShotCredential {
     if ($code -ne 0) { [Console]::Error.WriteLine('GATEWAY_SECURE_STORE_ERROR_' + $code); exit 3 }
   } finally { [Runtime.InteropServices.Marshal]::ZeroFreeCoTaskMemUnicode($blob); $secure.Dispose() }
   exit 0
-} catch { [Console]::Error.WriteLine('GATEWAY_SECURE_STORE_EXCEPTION'); exit 3 }
+} catch { [Console]::Error.WriteLine('GATEWAY_SECURE_STORE_EXCEPTION_' + $stage + '_' + $_.Exception.HResult); exit 3 }

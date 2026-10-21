@@ -115,7 +115,7 @@ export function validateSubmissionMetadata(input: unknown): ValidationResult {
     !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(input.profileVersion)) {
     errors.push('profileVersion must be a nonempty version token');
   }
-  if (input.provider !== undefined && (typeof input.provider !== 'string' || !['codex', 'claude', 'fake'].includes(input.provider))) errors.push('invalid provider');
+  if (input.provider !== undefined && (typeof input.provider !== 'string' || !['codex', 'claude', 'fake', 'claude-compatible-endpoint'].includes(input.provider))) errors.push('invalid provider');
   if (input.profileFingerprint !== undefined && (typeof input.profileFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(input.profileFingerprint))) errors.push('invalid profile fingerprint');
   if (input.taskInstructions !== undefined &&
     (typeof input.taskInstructions !== 'string' ||

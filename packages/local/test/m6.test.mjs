@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
+import { LocalApp } from '../src/app.ts';
 import { mkdtempSync, realpathSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -32,6 +33,15 @@ test('gateway setup never invokes CLI/model until vision is qualified; provenanc
   const agent = new ClaudeAgent([policy], { machinePolicy: async () => { throw Error('unexpected'); }, token: async () => { secrets++; return 'synthetic'; } });
   const result = await agent.execute({ profileId: policy.id, profileVersion: policy.version, images: [] }, claudeProfile(policy), [], new AbortController().signal);
   assert.equal(result.errorCode, 'GATEWAY_VISION_NOT_VERIFIED'); assert.equal(result.status, 'failed'); assert.equal(secrets, 0);
+  const app = new LocalApp(root, agent, claudeProfile(policy), { clipboard: 'off' });
+  try {
+    const image = await sharp({ create: { width: 12, height: 12, channels: 3, background: '#abc123' } }).png().toBuffer();
+    const id = await app.submit(image); await app.work(); const stored = app.get(id);
+    assert.equal(stored.submission.provider, 'claude-compatible-endpoint');
+    assert.equal(stored.result.adapterName, 'claude-compatible-endpoint');
+    assert.equal(stored.result.errorCode, 'GATEWAY_VISION_NOT_VERIFIED');
+    assert.equal(stored.attempts.length, 1); assert.equal(await app.work(), false);
+  } finally { app.close(); }
   assert.equal(existsSync(join(root, 'mock-gateway.json')), false); rmSync(root, { recursive: true, force: true });
 });
 for (const mode of ['success', 'auth', 'echo-secret', 'malformed', 'credential-missing', 'policy-refused']) test(`isolated Gateway CLI + local Mock API: ${mode}`, async () => {
