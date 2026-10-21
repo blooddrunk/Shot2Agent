@@ -6,6 +6,7 @@ import { sha256, withImageDecode } from '../../core/src/blobs.ts';
 import { requireValue } from '../../core/src/model.ts';
 import type { AgentAdapter, ImageContentType, Profile } from '../../contracts/src/index.ts';
 import { IMAGE_LIMITS } from '../../contracts/src/index.ts';
+import type { ExecutionEntry } from '../../worker/src/worker.ts';
 import { runOnce } from '../../worker/src/worker.ts';
 import type { ClipboardImage, ClipboardPort } from './clipboard.ts';
 import { LocalState } from './state.ts';
@@ -19,10 +20,18 @@ export class LocalApp {
   lastCaptureStatus: 'queued' | 'no_image' | 'duplicate' | 'capture_in_progress' = 'no_image';
   private cleanupBlocked = false;
   private working = false; private capturing = false; private lastSequence?: string;
-  readonly adapter: AgentAdapter; readonly profile: Profile; readonly config: DeliveryConfig; readonly clipboard?: ClipboardPort;
+  readonly adapter: AgentAdapter; private selected: ExecutionEntry; readonly registry: readonly ExecutionEntry[];
+  get profile(): Profile { return this.selected.profile; }
+  select(id: string, version: string): void {
+    const entry = this.registry.find(e => e.profile.id === id && e.profile.version === version);
+    requireValue(entry, 'UNAPPROVED_PROFILE'); this.selected = entry;
+  } readonly config: DeliveryConfig; readonly clipboard?: ClipboardPort;
   constructor(root: string, adapter: AgentAdapter, profile: Profile,
-    config: DeliveryConfig, clipboard?: ClipboardPort) {
-    this.adapter = adapter; this.profile = profile; this.config = config; this.clipboard = clipboard;
+    config: DeliveryConfig, clipboard?: ClipboardPort, registry?: readonly ExecutionEntry[]) {
+    this.adapter = adapter; this.registry = Object.freeze((registry ?? [{ adapter, profile }]).map(e => Object.freeze({ adapter: e.adapter, profile: Object.freeze(structuredClone(e.profile)) })));
+    requireValue(new Set(this.registry.map(e => `${e.profile.id}:${e.profile.version}`)).size === this.registry.length, 'DUPLICATE_PROFILE');
+    this.selected = this.registry.find(e => e.profile.id === profile.id && e.profile.version === profile.version)!;
+    requireValue(this.selected, 'UNAPPROVED_PROFILE'); this.config = config; this.clipboard = clipboard;
     this.core = openCore(root); this.state = new LocalState(root);
   }
   get pending() { return this.pendingImage; }
@@ -34,6 +43,7 @@ export class LocalApp {
     this.lastSequence = await this.clipboard.sequence();
   }
   async submit(bytes: Buffer, baseline?: Baseline, force = false): Promise<string | undefined> {
+    const selected = this.selected; // Bind before any asynchronous image processing or UI selection.
     const originalHash = sha256(bytes);
     const prepared = await prepareImage(bytes); bytes = prepared.bytes;
     const hash = sha256(bytes);
@@ -43,7 +53,8 @@ export class LocalApp {
     const taskId = randomUUID();
     // Persist baseline first. A crash cannot publish a task with an unsafe guessed baseline.
     if (!this.state.capture(taskId, hash, baseline, { originalHash, sentHash: hash, transformation: prepared.transformation, width: info.width, height: info.height }, force)) { this.lastCaptureStatus = 'duplicate'; return undefined; }
-    try { await this.core.submit(LOCAL_IDENTITY, taskId, { taskId, profileId: this.profile.id, profileVersion: this.profile.version,
+    try { await this.core.submit(LOCAL_IDENTITY, taskId, { taskId, profileId: selected.profile.id, profileVersion: selected.profile.version,
+      provider: selected.adapter.name, profileFingerprint: selected.profile.fingerprint,
       images: [{ fileName: `screenshot.${info.format}`, contentType, byteSize: bytes.length, sha256: hash }] }, [bytes]); } catch (error) { this.state.forgetCapture(taskId); throw error; }
     this.lastCaptureStatus = 'queued'; return taskId;
   }
@@ -77,7 +88,7 @@ export class LocalApp {
   async work(signal?: AbortSignal): Promise<boolean> {
     if (this.working || this.cleanupBlocked) return false; this.state.acquireWorker(); this.working = true;
     try {
-      const worked = await runOnce(this.core.worker(LOCAL_IDENTITY), this.adapter, [this.profile], 5000, signal);
+      const worked = await runOnce(this.core.worker(LOCAL_IDENTITY), this.adapter, this.registry.map(e => e.profile), 5000, signal, this.registry);
       for (const task of this.list()) await deliver(task, this.config, this.state, this.clipboard);
       return worked;
     } catch (error) {

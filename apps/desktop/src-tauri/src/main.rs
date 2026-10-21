@@ -126,7 +126,7 @@ fn mode_label(mode: &str) -> &'static str {
     match mode {
         "staging" => "Fake acceptance",
         "legacy" => "Legacy Local",
-        _ => "Codex",
+        _ => "Local",
     }
 }
 impl Bridge {

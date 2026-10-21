@@ -1,3 +1,5 @@
+> **M5-L 0.5.0 candidate:** Local Codex/Claude discovery, stopped-Worker explicit approval and immutable new-task Agent selection. Claude native transport qualified only at 2.1.306, personal Pro/Max only; actual model/GUI gates remain separate. See [Windows controls and restrictions](M5_WINDOWS_ACCEPTANCE.md) and [executed validation](M5_VALIDATION.md).
+
 # Implementation roadmap: thin vertical slices and gates
 
 M3-L bounded Windows Local desktop is implemented; see [run guide](M3_WINDOWS_RUN.md) and [evidence](M3_VALIDATION.md). The six requested desktop observations are operator-reported PASS on 2026-10-21, with a Smart/input-method caveat; other native claims remain separately scoped. The broader M3–M5 lists below remain deferred V1 scope.

@@ -100,3 +100,7 @@ Agent rerun UI is deferred: existing preflight `failed`, launched failures and `
 WeChat Input Method synchronization is an operator-observed correlation. These diagnostics do not establish which component changed/emptied the clipboard or certify input-method compatibility. See [M4 scope](M4_LOCAL_RELIABILITY.md), [validation](M4_VALIDATION.md) and the retained [M3 observations](M3_VALIDATION.md#operator-acceptance--2026-10-21).
 
 Smart protection is sticky in each task delivery receipt: changing current settings to Always cannot bypass an original Smart guard on explicit delivery retry. Legacy failed receipts with an original baseline conservatively keep that guard. Manual **复制结果** remains the explicit overwrite action.
+
+## M5-L Agent binding
+
+Provider selection applies to new submissions only. Execution uses the approved immutable provider/Profile version/fingerprint and stores actual adapter provenance. Existing Smart guards, no-clobber saves and independent delivery retries remain provider-independent; retrying delivery never calls either Agent. Unknown execution never switches providers or automatically reruns. See [M5 Windows acceptance](M5_WINDOWS_ACCEPTANCE.md).

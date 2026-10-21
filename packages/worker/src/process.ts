@@ -7,7 +7,7 @@ export interface ProcessResult {
 }
 /** Never forwards child logs. A detached POSIX process group / taskkill tree owns descendants. */
 export async function boundedProcess(program: Program, args: string[], options: {
-  cwd: string; input?: string; signal?: AbortSignal; timeoutMs: number; maxBytes?: number;
+  cwd: string; provider?: 'claude'; input?: string; signal?: AbortSignal; timeoutMs: number; maxBytes?: number;
 }): Promise<ProcessResult> {
   if (options.signal?.aborted) return { code: null, output: '', stopped: true, launched: false, overflow: false, settled: Promise.resolve() };
   return new Promise(resolve => {
@@ -17,7 +17,9 @@ export async function boundedProcess(program: Program, args: string[], options: 
     let onSettled!: () => void;
     const settled = new Promise<void>(resolve => { onSettled = resolve; });
     const allowed = new Set(['path', 'home', 'userprofile', 'localappdata', 'appdata', 'temp', 'tmp', 'tmpdir', 'systemroot', 'windir', 'comspec', 'pathext', 'username', 'user', 'codex_home', 'openai_api_key', 'codex_api_key', 'ssl_cert_file', 'ssl_cert_dir', 'https_proxy', 'http_proxy', 'all_proxy', 'no_proxy']);
+    if (options.provider === 'claude') for (const key of ['anthropic_api_key', 'claude_code_oauth_token', 'claude_code_git_bash_path', 'programfiles', 'programdata']) allowed.add(key);
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => allowed.has(key.toLowerCase())));
+    if (options.provider === 'claude') Object.assign(env, { CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1', DISABLE_AUTOUPDATER: '1' });
     const child = spawn(program.executable, [...program.args, ...args], {
       cwd: options.cwd, env, shell: false, windowsHide: true, detached: process.platform !== 'win32',
       stdio: ['pipe', 'pipe', 'pipe'],
