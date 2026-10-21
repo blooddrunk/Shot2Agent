@@ -1,6 +1,14 @@
-import { resolve, join, isAbsolute, dirname } from 'node:path';
+import { resolve, join, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
-import { existsSync, readFileSync, realpathSync, writeFileSync, lstatSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, writeFileSync, lstatSync, copyFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { discover, resolveProgram } from '../../../packages/worker/src/discovery.ts';
+import type { Provider } from '../../../packages/worker/src/discovery.ts';
+import { executionRegistry } from '../../../packages/worker/src/registry.ts';
+import { claudeProfile } from '../../../packages/worker/src/claude.ts';
+import type { ApprovedPolicy } from '../../../packages/worker/src/registry.ts';
+import { LocalState } from '../../../packages/local/src/state.ts';
+import { loadSettings, saveSettings } from '../../../packages/desktop/src/settings.ts';
 import { parseArgs } from 'node:util';
 import { createInterface } from 'node:readline';
 import { privateDirectory } from '../../../packages/core/src/store.ts';
@@ -14,26 +22,56 @@ import type { DeliveryConfig } from '../../../packages/local/src/delivery.ts';
 const { positionals, values } = parseArgs({ allowPositionals: true, options: {
   root: { type: 'string' }, adapter: { type: 'string' }, workspace: { type: 'string' }, codex: { type: 'string' },
   'codex-script': { type: 'string' }, clipboard: { type: 'string' }, save: { type: 'string' }, auto: { type: 'boolean', default: false },
+  provider: { type: 'string' }, path: { type: 'string' },
   force: { type: 'boolean', default: false },
 } });
 const [command = 'help', argument] = positionals;
 const root = resolve(values.root ?? join(process.env.LOCALAPPDATA ?? homedir(), 'Shot2Agent'));
-interface Settings { adapter: 'fake' | 'codex'; delivery: DeliveryConfig; codex?: CodexPolicy }
+interface Settings { adapter: 'fake' | 'codex'; delivery: DeliveryConfig; codex?: CodexPolicy; agents?: { version: 1; selected: { id: string; version: string }; profiles: ApprovedPolicy[] } }
 function log(value: unknown) { process.stdout.write(typeof value === 'string' ? value + '\n' : JSON.stringify(value) + '\n'); }
 function program(path: string, script?: string) {
-  // npm's Windows .cmd shim cannot be spawned with shell:false. Invoke its JS entry using Node.
-  if (/\.cmd$/i.test(path) && !script) {
-    const entry = join(dirname(path), 'node_modules', '@openai', 'codex', 'bin', 'codex.js');
-    requireValue(existsSync(entry), 'USE_CODEX_EXE_OR_NPM_CMD_WITH_ADJACENT_PACKAGE');
-    return { executable: process.execPath, args: [realpathSync(entry)] };
-  }
-  return { executable: realpathSync(path), args: script ? [realpathSync(script)] : [] };
+  return script ? { executable: realpathSync(path), args: [realpathSync(script)] } : resolveProgram('codex', path);
 }
 async function main() {
   if (command === 'help') {
+    log('M5: discover-agents [--provider codex|claude] [--path <absolute>] | approve-agent --provider codex|claude [--path <absolute>] --root <existing-Codex-root> (stop desktop first). Explicit approval pins a new immutable profile; prior profiles remain.');
     log('Shot2Agent Local: init | doctor | submit | file <image> | work | watch | list | show <id> | copy <id> | delivery <id> | retry-delivery <id>\nOptions: --root <private-dir> (all commands); init: --adapter fake|codex --workspace <dir> --codex <exe-or-npm-cmd> [--codex-script <js>] --clipboard off|manual|smart|always --save <directory>; watch: --auto (explicit cloud upload opt-in); submit/file: --force (intentional duplicate).\nwatch commands: submit, current, list, show <id>, copy <id>, delivery <id>, quit. Defaults: confirmation required, manual clipboard, history always on.'); return;
   }
+  if (command === 'discover-agents') {
+    const workspace = realpathSync(values.workspace ? resolve(values.workspace) : process.cwd());
+    const providers: Provider[] = values.provider ? [values.provider as Provider] : ['codex', 'claude'];
+    requireValue(providers.every(p => ['codex', 'claude'].includes(p)), 'INVALID_PROVIDER');
+    for (const provider of providers) log(await discover(provider, workspace, { manual: values.path })); return;
+  }
   privateDirectory(root); const configPath = join(root, 'settings.json');
+  if (command === 'approve-agent') {
+    requireValue(values.provider === 'codex' || values.provider === 'claude', 'PROVIDER_REQUIRED');
+    requireValue(existsSync(configPath), 'ORIGINAL_CODEX_PROFILE_REQUIRED');
+    const state = new LocalState(root);
+    try {
+      state.acquireWorker(); // A running desktop/Worker prevents any approval mutation.
+      const next = loadSettings(root); requireValue(next.adapter === 'codex' && next.codex, 'ORIGINAL_CODEX_PROFILE_REQUIRED');
+      const provider = values.provider;
+      const workspace = values.workspace ? realpathSync(resolve(values.workspace)) : next.codex.workspace;
+      const candidates = await discover(provider, workspace, { manual: values.path });
+      const viable = candidates.filter(c => c.status === 'unverified_auth');
+      requireValue(candidates.every(c => c.status !== 'scan_incomplete') && viable.length === 1 && (!values.path || isAbsolute(values.path)), 'EXPLICIT_UNIQUE_CLI_REQUIRED');
+      const candidate = viable[0];
+      const policy = { id: `${provider}-readonly`, version: `m5-${candidate.digest!.slice(0, 16)}-${randomUUID().slice(0, 8)}`, workspace,
+        digest: candidate.digest!, program: candidate.program!, cliVersion: candidate.version!, timeoutMs: 180000, prompt: next.codex.prompt };
+      const approved: ApprovedPolicy = provider === 'codex' ? { provider, policy } : { provider, policy: { ...policy, digest: candidate.digest!,
+        // Native stdin/image/completion qualified against native Windows 2.1.305/2.1.306 only.
+        ...(['2.1.305 (Claude Code)', '2.1.306 (Claude Code)'].includes(candidate.version!) ? { imageProtocol: 'windows-jsonl-v1' as const } : {}) } };
+      const profiles: ApprovedPolicy[] = next.agents?.profiles ?? [{ provider: 'codex', policy: next.codex }];
+      if (approved.provider === 'codex') codexProfile(approved.policy); else claudeProfile(approved.policy);
+      profiles.push(approved); executionRegistry(profiles);
+      copyFileSync(configPath, join(root, `settings.m5-backup-${randomUUID()}.json`));
+      next.agents = { version: 1, selected: { id: policy.id, version: policy.version }, profiles };
+      saveSettings(root, next);
+      log({ approved: provider, path: candidate.path, version: candidate.version, profileId: policy.id, profileVersion: policy.version, modelAuthentication: 'unverified', imageProtocol: provider === 'claude' ? ('imageProtocol' in approved.policy ? 'qualified_transport_only' : 'not_verified_execution_refused') : 'existing_codex_protocol' });
+    } finally { state.close(); }
+    return;
+  }
   if (command === 'init') {
     requireValue(!existsSync(configPath), 'ALREADY_INITIALIZED_EDIT_PRIVATE_SETTINGS');
     const adapter = values.adapter ?? 'fake'; const clipboard = values.clipboard ?? 'manual';
@@ -41,8 +79,13 @@ async function main() {
     const settings: Settings = { adapter: adapter as Settings['adapter'], delivery: { clipboard: clipboard as DeliveryConfig['clipboard'],
       ...(values.save ? { saveDirectory: resolve(values.save) } : {}) } };
     if (adapter === 'codex') {
-      requireValue(values.workspace && values.codex, 'WORKSPACE_AND_CODEX_PATH_REQUIRED');
-      const workspace = realpathSync(resolve(values.workspace)); const approvedProgram = program(resolve(values.codex), values['codex-script']);
+      requireValue(values.workspace, 'WORKSPACE_REQUIRED');
+      const workspace = realpathSync(resolve(values.workspace));
+      const inventory = values.codex ? undefined : await discover('codex', workspace);
+      requireValue(!inventory?.some(c => c.status === 'scan_incomplete'), 'EXPLICIT_CLI_PATH_REQUIRED');
+      const found = inventory?.filter(c => c.status === 'unverified_auth');
+      requireValue(values.codex || found?.length === 1, 'EXPLICIT_UNIQUE_CLI_REQUIRED');
+      const approvedProgram = values.codex ? program(resolve(values.codex), values['codex-script']) : found![0].program!;
       settings.codex = { id: 'codex-readonly', version: 'v1', workspace, program: approvedProgram,
         cliVersion: await inspectCodex(approvedProgram, workspace), timeoutMs: 180_000,
         prompt: 'Analyze the screenshot. Transcribe relevant text accurately and explain the content concisely in Markdown.' };
@@ -57,14 +100,22 @@ async function main() {
     (!settings.delivery.saveDirectory || isAbsolute(settings.delivery.saveDirectory)), 'INVALID_SETTINGS');
   const policy = settings.codex;
   if (command === 'doctor') {
+    if (settings.agents) {
+      const results = [];
+      for (const entry of settings.agents.profiles) results.push(...await discover(entry.provider, entry.policy.workspace, { approved: { program: entry.policy.program, version: entry.policy.cliVersion, digest: entry.policy.digest } }));
+      log({ selected: settings.agents.selected, profiles: results, modelExecution: 'not_tested' }); return;
+    }
     if (settings.adapter === 'codex') { requireValue(policy, 'MISSING_CODEX_POLICY'); requireValue(await inspectCodex(policy.program, policy.workspace) === policy.cliVersion, 'CODEX_VERSION_CHANGED_REVIEW_AND_REPIN'); }
     log({ adapter: settings.adapter, version: policy?.cliVersion, platform: process.platform, nativeClipboard: process.platform === 'win32' ? 'requires interactive session acceptance' : 'unavailable', root }); return;
   }
   requireValue(settings.adapter !== 'codex' || policy, 'MISSING_CODEX_POLICY');
   const needsClipboard = ['submit', 'copy', 'watch'].includes(command) || (['work', 'file'].includes(command) && ['smart', 'always'].includes(settings.delivery.clipboard));
   const clipboard = needsClipboard ? new WindowsClipboard() : undefined;
-  const adapter = settings.adapter === 'codex' ? new CodexAgent([policy!]) : new FakeAgent();
-  const app = new LocalApp(root, adapter, settings.adapter === 'codex' ? codexProfile(policy!) : FAKE_PROFILE, settings.delivery, clipboard);
+  const registry = settings.agents ? executionRegistry(settings.agents.profiles) : undefined;
+  const selected = registry?.find(e => e.profile.id === settings.agents!.selected.id && e.profile.version === settings.agents!.selected.version);
+  requireValue(!registry || selected, 'UNAPPROVED_PROFILE');
+  const adapter = selected?.adapter ?? (settings.adapter === 'codex' ? new CodexAgent([policy!]) : new FakeAgent());
+  const app = new LocalApp(root, adapter, selected?.profile ?? (settings.adapter === 'codex' ? codexProfile(policy!) : FAKE_PROFILE), settings.delivery, clipboard, registry);
   const controller = new AbortController();
   const stop = () => controller.abort(); process.once('SIGINT', stop); process.once('SIGTERM', stop);
   const actions = async (action: string, id?: string) => {

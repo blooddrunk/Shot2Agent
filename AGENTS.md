@@ -41,3 +41,7 @@ The operator reported PASS for automatic submit, Notepad focus, actual Smart pas
 ## M4-L reliability handoff
 
 M4-L 0.4.0 adds no-clobber Markdown publication, independent bounded delivery retries and safe phase/error diagnostics. See `docs/M4_LOCAL_RELIABILITY.md` and `docs/M4_VALIDATION.md` for behavior and actual gate evidence. Smart retains original capture session/sequence on every attempt; ambiguous writes and interrupted delivery never auto-replay. Default 0 extra attempts; native writes have no hidden retries. Agent rerun UI is deferred; no possibly launched execution is automatically rerun. Keep the existing M3 operator scope and input-method caveat. New packaged smoke uses a unique disposable root, not operator history. Do not open a larger milestone solely for an unverified non-core desktop interaction.
+
+## M5-L implementation candidate
+
+Worker-owned provider/Profile registry, CLI discovery, explicit stopped-Worker `approve-agent` and new-task-only desktop selection are implemented for 0.5.0. Preserve old Codex/Fake/legacy roots and Profiles. Native Claude 2.1.305/2.1.306 JSONL image transport was probed against a synthetic local API; this is not real Claude model/authentication proof. Personal Pro/Max only; managed policy, API-key/Token/Team/unknown auth and unqualified versions refuse execution. Do not expand this boundary or use bare/permission bypass. Follow docs/M5_WINDOWS_ACCEPTANCE.md and docs/M5_VALIDATION.md; no failover or Agent auto-rerun. Final PR and merged main require independent gates.

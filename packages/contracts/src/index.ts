@@ -73,6 +73,8 @@ export interface SubmissionMetadata {
   profileId: string;
   profileVersion: string;
   images: ImageMetadata[];
+  provider?: string;
+  profileFingerprint?: string;
   taskInstructions?: string;
 }
 
@@ -113,6 +115,8 @@ export function validateSubmissionMetadata(input: unknown): ValidationResult {
     !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(input.profileVersion)) {
     errors.push('profileVersion must be a nonempty version token');
   }
+  if (input.provider !== undefined && (typeof input.provider !== 'string' || !['codex', 'claude', 'fake'].includes(input.provider))) errors.push('invalid provider');
+  if (input.profileFingerprint !== undefined && (typeof input.profileFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(input.profileFingerprint))) errors.push('invalid profile fingerprint');
   if (input.taskInstructions !== undefined &&
     (typeof input.taskInstructions !== 'string' ||
       input.taskInstructions.length > IMAGE_LIMITS.maxInstructionsLength)) {
@@ -155,6 +159,8 @@ export function validateSubmissionMetadata(input: unknown): ValidationResult {
       taskId: input.taskId as string,
       profileId: input.profileId as string,
       profileVersion: input.profileVersion as string,
+      ...(input.provider === undefined ? {} : { provider: input.provider as string }),
+      ...(input.profileFingerprint === undefined ? {} : { profileFingerprint: input.profileFingerprint as string }),
       images: (input.images as ImageMetadata[]).map((image) => ({
         fileName: image.fileName,
         contentType: image.contentType,

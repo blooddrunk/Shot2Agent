@@ -6,6 +6,9 @@ import { requireValue } from '../../core/src/model.ts';
 import { LocalApp } from '../../local/src/app.ts';
 import type { ClipboardPort } from '../../local/src/clipboard.ts';
 import { CodexAgent, codexProfile } from '../../worker/src/codex.ts';
+import { executionRegistry } from '../../worker/src/registry.ts';
+import { discover } from '../../worker/src/discovery.ts';
+import type { Candidate } from '../../worker/src/discovery.ts';
 import { FAKE_PROFILE, FakeAgent } from '../../worker/src/fake.ts';
 import { loadSettings, saveSettings, validate } from './settings.ts';
 import type { Settings } from './settings.ts';
@@ -16,19 +19,41 @@ export class DesktopController {
   readonly root: string; readonly app: LocalApp; settings: Settings;
   private controller = new AbortController(); private worker?: Promise<unknown>;
   private closed = false; private armed = false; private workerError?: string; private captureError?: string;
+  private readonly inventory: typeof discover;
+  private discovery: Candidate[] = []; private discovering?: Promise<void>;
   private preview?: string; private previewImage?: object;
-  constructor(root: string, clipboard: ClipboardPort, injected?: { adapter: AgentAdapter; profile: Profile }, launchMode: 'codex' | 'staging' | 'legacy' = 'legacy') {
-    this.launchMode = launchMode;
+  constructor(root: string, clipboard: ClipboardPort, injected?: { adapter: AgentAdapter; profile: Profile }, launchMode: 'codex' | 'staging' | 'legacy' = 'legacy', inventory: typeof discover = discover) {
+    this.launchMode = launchMode; this.inventory = inventory;
     requireValue(launchMode !== 'codex' || existsSync(join(root, 'settings.json')), 'CODEX_SETUP_REQUIRED');
     this.root = root; this.settings = loadSettings(root);
     requireValue(launchMode !== 'codex' || (this.settings.adapter === 'codex' && !injected), 'CODEX_PROFILE_REQUIRED');
     requireValue(launchMode !== 'staging' || this.settings.adapter === 'fake', 'FAKE_ACCEPTANCE_PROFILE_REQUIRED');
     const policy = this.settings.codex;
     requireValue(this.settings.adapter !== 'codex' || policy, 'MISSING_CODEX_POLICY');
-    this.app = new LocalApp(root, injected?.adapter ?? (this.settings.adapter === 'codex' ? new CodexAgent([policy!]) : new FakeAgent()),
-      injected?.profile ?? (this.settings.adapter === 'codex' ? codexProfile(policy!) : FAKE_PROFILE), this.settings.delivery, clipboard);
+    const entries = !injected && this.settings.agents ? executionRegistry(this.settings.agents.profiles) : undefined;
+    const selected = entries?.find(e => e.profile.id === this.settings.agents!.selected.id && e.profile.version === this.settings.agents!.selected.version);
+    this.app = new LocalApp(root, injected?.adapter ?? selected?.adapter ?? (this.settings.adapter === 'codex' ? new CodexAgent([policy!]) : new FakeAgent()),
+      injected?.profile ?? selected?.profile ?? (this.settings.adapter === 'codex' ? codexProfile(policy!, false) : FAKE_PROFILE), this.settings.delivery, clipboard, entries);
   }
-  async start() { this.app.state.acquireWorker(); await this.app.arm(); this.armed = true; }
+  private async refreshDiscovery() {
+    if (this.discovering) return this.discovering;
+    if (this.settings.adapter !== 'codex') return;
+    this.discovering = (async () => {
+      const results = await Promise.allSettled((['codex', 'claude'] as const).map(async provider => {
+        const policies = this.settings.agents?.profiles.filter(p => p.provider === provider).map(p => p.policy) ?? (provider === 'codex' ? [this.settings.codex!] : []);
+        const approved: Candidate[] = []; const seen = new Set<string>(); const deadline = Date.now() + 8000;
+        for (const policy of policies) {
+          const key = JSON.stringify([policy.program, policy.cliVersion]); if (seen.has(key)) continue; seen.add(key);
+          if (Date.now() > deadline) { approved.push({ provider, path: '', status: 'scan_incomplete' }); break; }
+          approved.push(...await this.inventory(provider, policy.workspace, { approved: { program: policy.program, version: policy.cliVersion, digest: policy.digest } }));
+        }
+        return [...approved, ...await this.inventory(provider, this.settings.codex!.workspace)];
+      }));
+      this.discovery = results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
+    })().finally(() => { this.discovering = undefined; });
+    return this.discovering;
+  }
+  async start() { this.app.state.acquireWorker(); await this.app.arm(); this.armed = true; void this.refreshDiscovery(); }
   async tick() {
     if (this.closed) return;
     if (!this.captureError && this.armed && this.settings.desktop.enabled && !this.settings.desktop.paused) {
@@ -45,10 +70,22 @@ export class DesktopController {
     const r = raw as Record<string, unknown>;
     requireValue(r.v === 1 && typeof r.command === 'string', 'INVALID_PROTOCOL');
     const allowed: Record<string, string[]> = { snapshot: [], configure: ['capture', 'delivery', 'autoConsent', 'alwaysConsent'],
-      submit: [], current: [], discard: [], pause: ['paused'], copy: ['id'], detail: ['id'], 'retry-delivery': ['id'], recover: [], quit: [] };
+      submit: [], current: [], discard: [], pause: ['paused'], copy: ['id'], detail: ['id'], 'retry-delivery': ['id'], recover: [], 'select-agent': ['id', 'version'], 'discover-agents': [], quit: [] };
     requireValue(Object.hasOwn(allowed, r.command) && Object.keys(r).every(k => ['v', 'command', ...allowed[r.command as string]].includes(k)), 'COMMAND_REFUSED');
     const id = () => { requireValue(typeof r.id === 'string' && /^[0-9a-f-]{36}$/.test(r.id), 'INVALID_TASK_ID'); return r.id; };
     switch (r.command) {
+      case 'discover-agents': {
+        requireValue(this.launchMode !== 'staging' && this.settings.adapter === 'codex', 'FORMAL_PROFILE_REQUIRED');
+        // Inventory never changes an approved choice or performs a model request.
+        await this.refreshDiscovery();
+        break;
+      }
+      case 'select-agent': {
+        requireValue(this.settings.agents && typeof r.id === 'string' && typeof r.version === 'string', 'UNAPPROVED_PROFILE');
+        requireValue(this.app.registry.some(e => e.profile.id === r.id && e.profile.version === r.version), 'UNAPPROVED_PROFILE');
+        const next = structuredClone(this.settings); next.agents!.selected = { id: r.id, version: r.version };
+        saveSettings(this.root, next); this.app.select(r.id, r.version); this.settings = next; break;
+      }
       case 'configure': {
         const next = structuredClone(this.settings);
         if (r.capture !== undefined) {
@@ -82,7 +119,7 @@ export class DesktopController {
       case 'copy': await this.app.copy(id()); break;
       case 'retry-delivery': await this.app.retryDelivery(id()); break;
       case 'detail': {
-        const task = this.app.get(id()); return { id: task.submission.taskId, status: task.status, result: task.result ? { contentMarkdown: task.result.contentMarkdown, summary: task.result.summary, errorCode: task.result.errorCode } : undefined, attempts: task.attempts };
+        const task = this.app.get(id()); return { id: task.submission.taskId, status: task.status, provider: task.submission.provider, profileId: task.submission.profileId, profileVersion: task.submission.profileVersion, profileFingerprint: task.submission.profileFingerprint, result: task.result ? { contentMarkdown: task.result.contentMarkdown, summary: task.result.summary, errorCode: task.result.errorCode } : undefined, attempts: task.attempts };
       }
       case 'recover':
         // Explicit re-arm, never blindly restart a dead helper or an unconfirmed Agent.
@@ -99,14 +136,18 @@ export class DesktopController {
     }
     const tasks = this.app.list();
     return { settings: this.settings.desktop, delivery: this.settings.delivery, root: this.root, launchMode: this.launchMode,
-      profile: { adapter: this.settings.adapter, id: this.app.profile.id, workspace: this.settings.codex?.workspace, version: this.settings.codex?.cliVersion, sandbox: 'read-only' },
+      agents: this.app.registry.map(e => {
+        const policy = this.settings.agents?.profiles.find(p => p.policy.id === e.profile.id && p.policy.version === e.profile.version)?.policy ?? this.settings.codex;
+        return { id: e.profile.id, version: e.profile.version, provider: e.adapter.name, fingerprint: e.profile.fingerprint, path: policy?.program.args[0] ?? policy?.program.executable, cliVersion: policy?.cliVersion, status: e.adapter.name === 'claude' && !('imageProtocol' in (policy ?? {})) ? 'image_protocol_not_verified' : 'unverified_auth' };
+      }), discovery: this.discovery,
+      profile: { adapter: this.app.registry.find(e => e.profile === this.app.profile)?.adapter.name ?? this.settings.adapter, id: this.app.profile.id, profileVersion: this.app.profile.version, workspace: this.settings.agents?.profiles.find(p => p.policy.id === this.app.profile.id && p.policy.version === this.app.profile.version)?.policy.workspace ?? this.settings.codex?.workspace, version: this.settings.agents?.profiles.find(p => p.policy.id === this.app.profile.id && p.policy.version === this.app.profile.version)?.policy.cliVersion ?? this.settings.codex?.cliVersion, sandbox: 'read-only' },
       status: this.workerError ? 'worker_error' : this.captureError ? 'capture_error' : this.settings.desktop.paused ? 'paused' : !this.settings.desktop.enabled ? 'capture_off' : 'monitoring',
       error: this.workerError ?? this.captureError, pending: this.preview ?? null, captureStatus: this.app.lastCaptureStatus,
-      total: tasks.length, tasks: tasks.slice(-50).reverse().map(t => ({ id: t.submission.taskId, status: t.status, summary: t.result?.summary, error: t.result?.errorCode,
+      total: tasks.length, tasks: tasks.slice(-50).reverse().map(t => ({ id: t.submission.taskId, status: t.status, provider: t.submission.provider ?? t.attempts[0]?.adapterName, profileId: t.submission.profileId, profileVersion: t.submission.profileVersion, summary: t.result?.summary, error: t.result?.errorCode ?? (t.status === 'queued' && !this.app.registry.some(e => e.profile.id === t.submission.profileId && e.profile.version === t.submission.profileVersion) ? 'PROFILE_UNAVAILABLE' : undefined),
         save: this.app.state.get(t.submission.taskId, 'save'), clipboard: this.app.state.get(t.submission.taskId, 'clipboard') })) };
   }
   async close() {
     if (this.closed) return; this.closed = true; this.controller.abort();
-    await this.worker; this.app.close();
+    await this.worker; await this.discovering; this.app.close();
   }
 }

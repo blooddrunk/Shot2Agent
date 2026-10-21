@@ -1,3 +1,5 @@
+> **M5-L 0.5.0 candidate:** Local Codex/Claude discovery, stopped-Worker explicit approval and immutable new-task Agent selection. Claude native transport qualified only at 2.1.305/2.1.306, personal Pro/Max only; actual model/GUI gates remain separate. See [Windows controls and restrictions](docs/M5_WINDOWS_ACCEPTANCE.md) and [executed validation](docs/M5_VALIDATION.md).
+
 > **Desktop 0.4.1:** `Shot2Agent.exe` / `Start Codex.cmd` opens the existing approved `Shot2Agent-Codex` Profile; missing configuration fails visibly. `Start acceptance.cmd` stays Fake, and `Start legacy Local.cmd` preserves the original Local history. See [Windows startup](docs/M3_WINDOWS_RUN.md) and [verification boundaries](docs/DESKTOP_CODEX_ENTRY_VALIDATION.md).
 
 > **M4-L 0.4.0:** Local delivery now has no-clobber Markdown publication, independently bounded retries and safe failure/IPC diagnostics. Smart retains its original baseline; Agent execution never auto-replays. See [reliability scope](docs/M4_LOCAL_RELIABILITY.md) and [executed Windows/CI evidence](docs/M4_VALIDATION.md).

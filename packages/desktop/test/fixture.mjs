@@ -34,7 +34,7 @@ const injected = mode ? { profile: { ...FAKE_PROFILE, timeoutMs: 5000 }, adapter
   if (args[3].aborted) throw Error('synthetic stop');
   return fake.execute(...args);
 } } } : undefined;
-const desktop = new DesktopController(root, clipboard, injected);
+const desktop = new DesktopController(root, clipboard, injected, 'legacy', async () => []);
 await desktop.start();
 await waitForParent(process.stdin);
 // Return writes only in the test's snapshot extension, never in production API.

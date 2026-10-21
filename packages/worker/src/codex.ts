@@ -5,16 +5,18 @@ import type { AgentAdapter, AgentResult, Profile, SubmissionMetadata } from '../
 import { sha256, verifyImage } from '../../core/src/blobs.ts';
 import { requireValue } from '../../core/src/model.ts';
 import { removeOwnedDirectory } from './cleanup.ts';
+import { programDigest } from './discovery.ts';
 import { boundedProcess } from './process.ts';
 import type { Program } from './process.ts';
 export interface CodexPolicy {
-  id: string; version: string; workspace: string; program: Program; cliVersion: string; timeoutMs: number; prompt: string;
+  id: string; version: string; workspace: string; program: Program; cliVersion: string; digest?: string; timeoutMs: number; prompt: string;
 }
-export function codexProfile(policy: CodexPolicy): Profile {
+export function codexProfile(policy: CodexPolicy, checkFiles = true): Profile {
   requireValue(/^[a-z][a-z0-9-]{0,63}$/.test(policy.id) && /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(policy.version), 'INVALID_PROFILE');
-  requireValue(isAbsolute(policy.workspace) && realpathSync(policy.workspace) === policy.workspace && lstatSync(policy.workspace).isDirectory(), 'UNAPPROVED_WORKSPACE');
-  requireValue(isAbsolute(policy.program.executable) && !/\.(cmd|bat|ps1)$/i.test(policy.program.executable) && lstatSync(policy.program.executable).isFile(), 'NATIVE_CODEX_REQUIRED');
-  requireValue(Array.isArray(policy.program.args) && policy.program.args.every(a => typeof a === 'string') && policy.program.args.length <= 1 && policy.program.args.every(a => isAbsolute(a) && /\.m?js$/i.test(a) && lstatSync(a).isFile()), 'INVALID_PROGRAM');
+  requireValue(isAbsolute(policy.workspace) && (!checkFiles || (realpathSync(policy.workspace) === policy.workspace && lstatSync(policy.workspace).isDirectory())), 'UNAPPROVED_WORKSPACE');
+  requireValue(isAbsolute(policy.program.executable) && !/\.(cmd|bat|ps1)$/i.test(policy.program.executable) && (!checkFiles || lstatSync(policy.program.executable).isFile()), 'NATIVE_CODEX_REQUIRED');
+  requireValue(Array.isArray(policy.program.args) && policy.program.args.every(a => typeof a === 'string') && policy.program.args.length <= 1 && policy.program.args.every(a => isAbsolute(a) && /\.m?js$/i.test(a) && (!checkFiles || lstatSync(a).isFile())), 'INVALID_PROGRAM');
+  requireValue(policy.digest === undefined || (typeof policy.digest === 'string' && /^[a-f0-9]{64}$/.test(policy.digest)), 'INVALID_PROGRAM_DIGEST');
   requireValue(Number.isInteger(policy.timeoutMs) && policy.timeoutMs >= 5000 && policy.timeoutMs <= 3_600_000 &&
     typeof policy.prompt === 'string' && policy.prompt.length <= 10_000 && /^codex-cli [a-zA-Z0-9.+-]+$/.test(policy.cliVersion), 'INVALID_CODEX_POLICY');
   return { id: policy.id, version: policy.version, sandbox: 'read-only', timeoutMs: policy.timeoutMs, fingerprint: sha256(JSON.stringify(policy)) };
@@ -33,12 +35,12 @@ export async function inspectCodex(program: Program, workspace: string): Promise
 }
 /** Registry is constructed by the Worker from local operator config, never from task data. */
 export class CodexAgent implements AgentAdapter {
-  readonly name = 'codex'; readonly version = 'm2-2';
+  readonly name = 'codex'; readonly version = 'm5-1';
   private active = new Set<Promise<unknown>>();
   private policies: ReadonlyMap<string, { policy: CodexPolicy; profile: Profile }>;
   constructor(policies: readonly CodexPolicy[]) {
     this.policies = new Map(policies.map(original => {
-      const policy = structuredClone(original); const profile = codexProfile(policy);
+      const policy = structuredClone(original); const profile = codexProfile(policy, false);
       return [`${profile.id}:${profile.version}`, { policy, profile }];
     }));
     requireValue(this.policies.size === policies.length, 'DUPLICATE_PROFILE');
@@ -64,7 +66,7 @@ export class CodexAgent implements AgentAdapter {
     const { policy } = approved;
     if (signal.aborted) return failure('ABORTED_BEFORE_LAUNCH');
     try {
-      if (codexProfile(policy).fingerprint !== profile.fingerprint || await inspectCodex(policy.program, policy.workspace) !== policy.cliVersion) return failure('CODEX_VERSION_CHANGED');
+      if ((policy.digest && programDigest(policy.program) !== policy.digest) || codexProfile(policy).fingerprint !== profile.fingerprint || await inspectCodex(policy.program, policy.workspace) !== policy.cliVersion) return failure('CODEX_VERSION_CHANGED');
       requireValue(images.length === task.images.length, 'IMAGE_COUNT');
       for (let i = 0; i < images.length; i++) await verifyImage(Buffer.from(images[i]), task.images[i]);
     } catch { return failure('CODEX_PREFLIGHT'); }

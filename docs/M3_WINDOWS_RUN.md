@@ -1,3 +1,5 @@
+> **M5-L 0.5.0 candidate:** Local Codex/Claude discovery, stopped-Worker explicit approval and immutable new-task Agent selection. Claude native transport qualified only at 2.1.305/2.1.306, personal Pro/Max only; actual model/GUI gates remain separate. See [Windows controls and restrictions](M5_WINDOWS_ACCEPTANCE.md) and [executed validation](M5_VALIDATION.md).
+
 # Windows Local desktop 0.4.1
 
 Portable developer build, Windows 11 x64, logged-in non-elevated session. WebView2 must be installed (included with normal Windows 11). No WSL, Node install, VPS or Relay needed. Keep the whole extracted folder together; the executable needs its adjacent `runtime` directory.

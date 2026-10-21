@@ -3,11 +3,14 @@ import { join, isAbsolute } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { privateDirectory } from '../../core/src/store.ts';
 import { requireValue } from '../../core/src/model.ts';
+import type { ApprovedPolicy } from '../../worker/src/registry.ts';
+import { executionRegistry } from '../../worker/src/registry.ts';
 import type { CodexPolicy } from '../../worker/src/codex.ts';
 import { validateRetry } from '../../local/src/delivery.ts';
 import type { DeliveryConfig } from '../../local/src/delivery.ts';
 export interface Settings {
   adapter: 'fake' | 'codex'; delivery: DeliveryConfig; codex?: CodexPolicy;
+  agents?: { version: 1; selected: { id: string; version: string }; profiles: ApprovedPolicy[] };
   desktop: { version: 1; enabled: boolean; mode: 'confirm' | 'auto'; paused: boolean; autoConsent: boolean; alwaysConsent: boolean };
 }
 export const defaults = (): Settings => ({ adapter: 'fake', delivery: { clipboard: 'manual' },
@@ -17,6 +20,12 @@ export function validate(settings: Settings): void {
     ['off', 'manual', 'smart', 'always'].includes(settings.delivery.clipboard) &&
     (settings.delivery.saveDirectory === undefined || (typeof settings.delivery.saveDirectory === 'string' && isAbsolute(settings.delivery.saveDirectory))), 'INVALID_SETTINGS');
   validateRetry(settings.delivery.retry);
+  if (settings.agents) {
+    const a = settings.agents; requireValue(a.version === 1 && settings.adapter === 'codex' && Array.isArray(a.profiles), 'INVALID_AGENT_SETTINGS');
+    const entries = executionRegistry(a.profiles);
+    requireValue(entries.some(e => e.profile.id === a.selected?.id && e.profile.version === a.selected?.version), 'UNAPPROVED_PROFILE');
+    requireValue(settings.codex && a.profiles.some(p => p.provider === 'codex' && JSON.stringify(p.policy) === JSON.stringify(settings.codex)), 'ORIGINAL_CODEX_PROFILE_REQUIRED');
+  }
   const c = settings.desktop;
   requireValue(c && c.version === 1 && ['confirm', 'auto'].includes(c.mode) &&
     [c.enabled, c.paused, c.autoConsent, c.alwaysConsent].every(v => typeof v === 'boolean'), 'INVALID_DESKTOP_SETTINGS');
