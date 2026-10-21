@@ -29,6 +29,7 @@ test('GLM 5.3 Flash is image-capable but still requires separate vision qualific
   const base = { ...gateway(), model: 'glm-5.3-flash', models: { opus: 'glm-5.3-flash', sonnet: 'glm-5.3-flash', haiku: 'glm-5.3-flash' } };
   assert.throws(() => assertGatewayVision(base), /GATEWAY_VISION_NOT_VERIFIED/);
   assert.doesNotThrow(() => assertGatewayVision({ ...base, vision: 'operator-attested' }));
+  assert.doesNotThrow(() => assertGatewayVision({ ...base, vision: 'synthetic-test-passed' }));
   for (const alias of ['opus', 'sonnet', 'haiku']) {
     assert.throws(() => assertGatewayVision({ ...base, vision: 'operator-attested', models: { ...base.models, [alias]: 'glm-5' } }), /GATEWAY_MODEL_VISION_UNSUPPORTED/);
   }

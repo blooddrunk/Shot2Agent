@@ -456,6 +456,7 @@ fn main() {
         std::process::exit(if result.is_ok() { 0 } else { 1 });
     }
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(State {
             hotkey_transaction: Mutex::new(()),
             bridge: Mutex::new(Bridge::start()),

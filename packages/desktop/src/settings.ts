@@ -12,6 +12,8 @@ import { validateRetry } from '../../local/src/delivery.ts';
 import type { DeliveryConfig } from '../../local/src/delivery.ts';
 export interface Settings {
   hotkeys?: Hotkeys;
+  /** Credential Manager references awaiting idempotent cleanup after profile deletion. */
+  credentialCleanup?: string[];
   adapter: 'fake' | 'codex'; delivery: DeliveryConfig; codex?: CodexPolicy;
   agents?: { version: 1; selected: { id: string; version: string }; profiles: ApprovedPolicy[]; archived?: { id: string; version: string }[] };
   desktop: { version: 1; enabled: boolean; mode: 'confirm' | 'auto'; paused: boolean; autoConsent: boolean; alwaysConsent: boolean };
@@ -33,8 +35,10 @@ export function validate(settings: Settings, allowPendingAlways = false): void {
       requireValue(new Set(a.archived.map(p => JSON.stringify([p.id, p.version]))).size === a.archived.length, 'INVALID_ARCHIVED_PROFILES');
       requireValue(!a.archived.some(p => p.id === a.selected.id && p.version === a.selected.version), 'SELECTED_PROFILE_ARCHIVED');
     }
-    requireValue(settings.codex && a.profiles.some(p => p.provider === 'codex' && JSON.stringify(p.policy) === JSON.stringify(settings.codex)), 'ORIGINAL_CODEX_PROFILE_REQUIRED');
+    if (settings.codex) requireValue(a.profiles.some(p => p.provider === 'codex' && JSON.stringify(p.policy) === JSON.stringify(settings.codex)), 'ORIGINAL_CODEX_PROFILE_REQUIRED');
   }
+  requireValue(settings.credentialCleanup === undefined || (Array.isArray(settings.credentialCleanup) && settings.credentialCleanup.length <= 64 &&
+    settings.credentialCleanup.every(ref => typeof ref === 'string' && /^Shot2Agent-Gateway-[0-9a-f-]{36}$/.test(ref)) && new Set(settings.credentialCleanup).size === settings.credentialCleanup.length), 'INVALID_CREDENTIAL_CLEANUP');
   const c = settings.desktop;
   requireValue(c && c.version === 1 && ['confirm', 'auto'].includes(c.mode) &&
     [c.enabled, c.paused, c.autoConsent, c.alwaysConsent].every(v => typeof v === 'boolean'), 'INVALID_DESKTOP_SETTINGS');

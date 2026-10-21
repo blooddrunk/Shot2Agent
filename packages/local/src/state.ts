@@ -23,7 +23,8 @@ export class LocalState {
       CREATE TABLE IF NOT EXISTS local_worker (slot INTEGER PRIMARY KEY, pid INTEGER NOT NULL, token TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS captures (task TEXT PRIMARY KEY, hash TEXT NOT NULL, at INTEGER NOT NULL, baseline TEXT);
       CREATE TABLE IF NOT EXISTS provenance (task TEXT PRIMARY KEY, record TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS delivery (task TEXT NOT NULL, channel TEXT NOT NULL, record TEXT NOT NULL, PRIMARY KEY(task,channel));`);
+      CREATE TABLE IF NOT EXISTS delivery (task TEXT NOT NULL, channel TEXT NOT NULL, record TEXT NOT NULL, PRIMARY KEY(task,channel));
+      CREATE TABLE IF NOT EXISTS task_deletion (task TEXT PRIMARY KEY);`);
   }
   capture(task: string, hash: string, baseline?: Baseline, provenance?: object, force = false): boolean {
     this.db.exec('BEGIN IMMEDIATE');
@@ -48,6 +49,30 @@ export class LocalState {
   }
   put(task: string, channel: string, receipt: Receipt): void {
     this.db.prepare('INSERT INTO delivery VALUES (?,?,?) ON CONFLICT(task,channel) DO UPDATE SET record=excluded.record').run(task, channel, JSON.stringify(receipt));
+  }
+  /** Record user intent before touching the task database or private blobs. */
+  beginTaskDeletion(tasks: readonly string[]): void {
+    requireValue(tasks.length > 0 && tasks.every(task => /^[0-9a-f-]{36}$/.test(task)) && new Set(tasks).size === tasks.length, 'INVALID_TASK_DELETE');
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      const insert = this.db.prepare('INSERT OR IGNORE INTO task_deletion VALUES (?)');
+      for (const task of tasks) insert.run(task);
+      this.db.exec('COMMIT');
+    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
+  }
+  pendingTaskDeletions(): string[] { return this.db.prepare('SELECT task FROM task_deletion ORDER BY rowid').all().map(row => row.task as string); }
+  /** Removes capture baselines, provenance and channel receipts after core/blob cleanup. */
+  finishTaskDeletion(tasks: readonly string[]): void {
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      for (const task of tasks) {
+        this.db.prepare('DELETE FROM captures WHERE task=?').run(task);
+        this.db.prepare('DELETE FROM provenance WHERE task=?').run(task);
+        this.db.prepare('DELETE FROM delivery WHERE task=?').run(task);
+        this.db.prepare('DELETE FROM task_deletion WHERE task=?').run(task);
+      }
+      this.db.exec('COMMIT');
+    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
   /** Atomic reservation prevents two receivers from both writing the clipboard. */
   reserve(task: string, channel: string, retry: boolean): Receipt | undefined {

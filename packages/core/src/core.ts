@@ -23,6 +23,7 @@ export class TaskCore {
     now: () => number = Date.now, leaseMs = 30_000) {
     this.store = store; this.blobs = blobs; this.mode = mode; this.now = now; this.leaseMs = leaseMs;
     requireValue(Number.isSafeInteger(leaseMs) && leaseMs >= 100 && leaseMs <= 300_000, 'INVALID_LEASE_DURATION');
+    this.recoverBlobCleanup();
   }
   private view(task: Task): TaskView {
     const { digest: _digest, idempotencyKey: _key, ...publicTask } = task;
@@ -184,6 +185,35 @@ export class TaskCore {
       const reference = files.find(file => file.fileId === fileId);
       requireValue(reference, 'FILE_NOT_FOUND', 404); return this.blobs.read(reference);
     });
+  }
+  /** Delete only settled, known tasks. execution_unknown remains available for operator review. */
+  deleteTasks(owner: string, ids: readonly string[], allowMissing = false): string[] {
+    requireValue(typeof owner === 'string' && ids.length > 0 && ids.length <= 10_000 &&
+      ids.every(id => typeof id === 'string' && /^[0-9a-f-]{36}$/.test(id)) && new Set(ids).size === ids.length, 'INVALID_TASK_DELETE');
+    const deleted = this.store.transaction(() => {
+      this.recover();
+      const tasks = ids.flatMap(id => {
+        const task = this.store.get(id);
+        if (!task && allowMissing) return [];
+        requireValue(task && task.ownerId === owner, 'TASK_NOT_FOUND', 404);
+        return [task];
+      });
+      for (const task of tasks) {
+        requireValue(task.status !== 'execution_unknown', 'TASK_EXECUTION_UNKNOWN_REQUIRES_REVIEW', 409);
+        requireValue(['succeeded', 'failed', 'timed_out', 'canceled'].includes(task.status), 'TASK_NOT_TERMINAL', 409);
+      }
+      this.store.deleteTasks(ids);
+      return ids.slice();
+    });
+    this.recoverBlobCleanup();
+    return deleted;
+  }
+  /** Idempotent file cleanup resumes from the journal after interruption. */
+  recoverBlobCleanup(): void {
+    for (const reference of this.store.pendingBlobCleanup()) {
+      this.blobs.remove(reference);
+      this.store.transaction(() => this.store.finishBlobCleanup(reference.fileId));
+    }
   }
   worker(identity: Identity): WorkerPort {
     return {

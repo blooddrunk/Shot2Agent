@@ -15,5 +15,5 @@ export function displayInventory(candidates: readonly Candidate[]): Candidate[] 
     const key = JSON.stringify([c.provider, keyPath(installationPath(c)), c.version, c.status]);
     if (seen.has(key)) return false;
     seen.add(key); return true;
-  }).map(c => ({ ...c, path: installationPath(c) }));
+  }).map(c => ({ ...c, selectionPath: c.path, path: installationPath(c) }));
 }
