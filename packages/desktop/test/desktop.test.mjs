@@ -228,3 +228,58 @@ test('native formal startup refusal exits and releases its clipboard helper', { 
   assert.equal(code, 1); assert.match(stderr, /CODEX_SETUP_REQUIRED/);
   assert.equal(existsSync(join(root, 'settings.json')), false);
 });
+
+test('global action process: pause atomic toggle, no startup image, no result, persistence and allowlist', async t => {
+  const h = host(); t.after(() => h.child.kill());
+  assert.equal((await h.raw('action', { action: 'copy-latest' })).error, 'NO_COMPLETED_RESULT');
+  assert.equal((await h.raw('action', { action: 'exec' })).error, 'ACTION_REFUSED');
+  assert.equal((await h.raw('action', { action: 'current', executable: 'evil' })).error, 'COMMAND_REFUSED');
+  assert.equal((await h.rpc('action', { action: 'toggle-pause' })).settings.paused, true);
+  assert.equal((await h.rpc('action', { action: 'toggle-pause' })).settings.paused, false);
+  await sleep(100); assert.equal((await h.rpc('snapshot')).total, 0);
+  assert.equal((await h.raw('configure-hotkeys', { hotkeys: { current: 'Win+L' } })).error, 'INVALID_HOTKEY');
+  assert.equal((await h.raw('configure-hotkeys', { hotkeys: { current: 'Ctrl+Alt+X', 'copy-latest': 'Ctrl+Alt+X' } })).error, 'DUPLICATE_HOTKEY');
+  const hotkeys = { 'toggle-pause': 'Ctrl+Alt+P', 'copy-latest': 'Ctrl+Alt+C' };
+  assert.deepEqual((await h.rpc('configure-hotkeys', { hotkeys })).hotkeys, hotkeys);
+  await h.rpc('action', { action: 'current' });
+  await h.until(s => s.tasks[0]?.status === 'succeeded');
+  const s = await h.rpc('action', { action: 'copy-latest' }); assert.equal(s.lastAction.status, 'succeeded');
+  assert.equal((await h.raw('action', { action: 'retry-latest-delivery' })).error, 'NO_ELIGIBLE_FAILED_DELIVERY');
+  assert.equal((await h.raw('action', { action: 'cycle-agent' })).error, 'NO_OTHER_APPROVED_AGENT');
+  await h.close(); const next = host(h.root); t.after(() => next.child.kill());
+  assert.deepEqual((await next.rpc('snapshot')).hotkeys, hotkeys); await next.close();
+});
+
+test('latest completed output ordering excludes newer queued/failed; hotkey retries only safe failed channel', async () => {
+  const { completedResults } = await import('../src/actions.ts');
+  const root = temp(); let writes = 0; let calls = 0;
+  const cb = { session: 'm6', async sequence() { return '1'; }, async readImage() {}, async writeText() { writes++; return true; }, close() {} };
+  const agent = { name: 'fake', version: 'm6', execute: (...args) => { calls++; return new FakeAgent().execute(...args); } };
+  const desktop = new DesktopController(root, cb, { adapter: agent, profile: FAKE_PROFILE });
+  try {
+    const a = await desktop.app.submit(png, undefined, true); await desktop.app.work();
+    await sleep(5); const b = await desktop.app.submit(png2, undefined, true); await desktop.app.work();
+    const queued = await desktop.app.submit(png, undefined, true);
+    assert.equal(completedResults(desktop.app)[0].submission.taskId, b);
+    assert.equal(desktop.app.get(queued).status, 'queued');
+    await desktop.dispatch({ v: 1, command: 'action', action: 'copy-latest' });
+    assert.equal(desktop.app.state.get(a, 'clipboard').status, 'manual'); assert.equal(desktop.app.state.get(b, 'clipboard').status, 'succeeded');
+    desktop.app.config.clipboard = 'always'; desktop.app.config.saveDirectory = join(root, 'safe-output');
+    desktop.app.state.put(b, 'save', { status: 'failed', attempts: 1, classification: 'transient' });
+    desktop.app.state.put(b, 'clipboard', { status: 'interrupted', attempts: 1, classification: 'ambiguous' });
+    const before = calls; await desktop.dispatch({ v: 1, command: 'action', action: 'retry-latest-delivery' });
+    assert.equal(calls, before); assert.equal(writes, 1); assert.equal(desktop.app.state.get(b, 'clipboard').status, 'interrupted');
+    assert.equal(desktop.app.state.get(b, 'save').status, 'succeeded');
+    await assert.rejects(desktop.dispatch({ v: 1, command: 'action', action: 'retry-latest-delivery' }), /NO_ELIGIBLE/);
+  } finally { await desktop.close(); }
+});
+
+test('completion ordering uses durable finish time over submission order and excludes failed/running output', async () => {
+  const { completedResults } = await import('../src/actions.ts');
+  const tasks = Array.from({ length: 70 }, (_, n) => ({ status: 'succeeded', submission: { taskId: String(n).padStart(4, '0') }, createdAt: 1000 - n, result: { status: 'succeeded', finishedAt: n } }));
+  tasks.push({ status: 'failed', submission: { taskId: 'failed' }, result: { status: 'failed', finishedAt: 9999 } });
+  tasks.push({ status: 'running', submission: { taskId: 'running' } });
+  assert.equal(completedResults({ list: () => tasks })[0].submission.taskId, '0069');
+  tasks[0].result.finishedAt = 10000;
+  assert.equal(completedResults({ list: () => tasks })[0].submission.taskId, '0000');
+});

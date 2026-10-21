@@ -1,3 +1,4 @@
+import { ACTIONS, completedResults, retryableDelivery, retryableChannels, validateHotkeys } from './actions.ts';
 import sharp from 'sharp';
 import { effectiveDelivery } from '../../local/src/delivery.ts';
 import { existsSync } from 'node:fs';
@@ -22,6 +23,8 @@ export class DesktopController {
   private closed = false; private armed = false; private workerError?: string; private captureError?: string;
   private readonly inventory: typeof discover;
   private discovery: Candidate[] = []; private discovering?: Promise<void>;
+  private lastAction?: { action: string; status: string; at: number };
+  private actionBusy = false;
   private preview?: string; private previewImage?: object;
   constructor(root: string, clipboard: ClipboardPort, injected?: { adapter: AgentAdapter; profile: Profile }, launchMode: 'codex' | 'staging' | 'legacy' = 'legacy', inventory: typeof discover = discover) {
     this.launchMode = launchMode; this.inventory = inventory;
@@ -43,7 +46,7 @@ export class DesktopController {
     if (this.settings.adapter !== 'codex') return;
     this.discovering = (async () => {
       const results = await Promise.allSettled((['codex', 'claude'] as const).map(async provider => {
-        const policies = this.settings.agents?.profiles.filter(p => p.provider === provider).map(p => p.policy) ?? (provider === 'codex' ? [this.settings.codex!] : []);
+        const policies = this.settings.agents?.profiles.filter(p => (p.provider === provider || (provider === 'claude' && p.provider === 'claude-compatible-endpoint'))).map(p => p.policy) ?? (provider === 'codex' ? [this.settings.codex!] : []);
         const approved: Candidate[] = []; const seen = new Set<string>(); const deadline = Date.now() + 8000;
         for (const policy of policies) {
           const key = JSON.stringify([policy.program, policy.cliVersion]); if (seen.has(key)) continue; seen.add(key);
@@ -72,11 +75,45 @@ export class DesktopController {
     requireValue(raw && typeof raw === 'object' && !Array.isArray(raw), 'INVALID_REQUEST');
     const r = raw as Record<string, unknown>;
     requireValue(r.v === 1 && typeof r.command === 'string', 'INVALID_PROTOCOL');
-    const allowed: Record<string, string[]> = { snapshot: [], configure: ['capture', 'delivery', 'autoConsent', 'alwaysConsent'],
+    const allowed: Record<string, string[]> = { snapshot: [], 'configure-hotkeys': ['hotkeys'], action: ['action'], configure: ['capture', 'delivery', 'autoConsent', 'alwaysConsent'],
       submit: [], current: [], discard: [], pause: ['paused'], copy: ['id'], detail: ['id'], 'retry-delivery': ['id'], recover: [], 'select-agent': ['id', 'version'], 'discover-agents': [], quit: [] };
     requireValue(Object.hasOwn(allowed, r.command) && Object.keys(r).every(k => ['v', 'command', ...allowed[r.command as string]].includes(k)), 'COMMAND_REFUSED');
     const id = () => { requireValue(typeof r.id === 'string' && /^[0-9a-f-]{36}$/.test(r.id), 'INVALID_TASK_ID'); return r.id; };
     switch (r.command) {
+      case 'configure-hotkeys': {
+        validateHotkeys(r.hotkeys);
+        const next = structuredClone(this.settings); next.hotkeys = r.hotkeys;
+        saveSettings(this.root, next); this.settings = next; break;
+      }
+      case 'action': {
+        requireValue(ACTIONS.includes(r.action as typeof ACTIONS[number]), 'ACTION_REFUSED');
+        requireValue(!this.actionBusy, 'ACTION_IN_PROGRESS'); this.actionBusy = true;
+        try {
+          switch (r.action) {
+            case 'toggle-pause': await this.dispatch({ v: 1, command: 'pause', paused: !this.settings.desktop.paused }); break;
+            case 'copy-latest': {
+              const task = completedResults(this.app)[0]; requireValue(task, 'NO_COMPLETED_RESULT');
+              await this.app.copy(task.submission.taskId); break;
+            }
+            case 'retry-latest-delivery': {
+              const task = completedResults(this.app).find(t => retryableDelivery(this.app, t));
+              requireValue(task, 'NO_ELIGIBLE_FAILED_DELIVERY');
+              await this.app.retryDelivery(task.submission.taskId, retryableChannels(this.app, task));
+              requireValue(!retryableDelivery(this.app, this.app.get(task.submission.taskId)), 'DELIVERY_STILL_FAILED'); break;
+            }
+            case 'cycle-agent': {
+              requireValue(this.settings.agents && this.app.registry.length > 1, 'NO_OTHER_APPROVED_AGENT');
+              const index = this.app.registry.findIndex(e => e.profile.id === this.app.profile.id && e.profile.version === this.app.profile.version);
+              const next = this.app.registry[(index + 1) % this.app.registry.length].profile;
+              await this.dispatch({ v: 1, command: 'select-agent', id: next.id, version: next.version }); break;
+            }
+            case 'current': await this.app.capture(false, true); requireValue(this.app.lastCaptureStatus === 'queued', this.app.lastCaptureStatus === 'duplicate' ? 'DUPLICATE_IMAGE' : 'NO_CURRENT_IMAGE'); break;
+          }
+          this.lastAction = { action: String(r.action), status: 'succeeded', at: Date.now() };
+        } catch (error) { this.lastAction = { action: String(r.action), status: safeError(error), at: Date.now() }; throw error; }
+        finally { this.actionBusy = false; }
+        break;
+      }
       case 'discover-agents': {
         requireValue(this.launchMode !== 'staging' && this.settings.adapter === 'codex', 'FORMAL_PROFILE_REQUIRED');
         // Inventory never changes an approved choice or performs a model request.
@@ -122,7 +159,10 @@ export class DesktopController {
       case 'copy': await this.app.copy(id()); break;
       case 'retry-delivery': await this.app.retryDelivery(id()); break;
       case 'detail': {
-        const task = this.app.get(id()); return { id: task.submission.taskId, status: task.status, provider: task.submission.provider, profileId: task.submission.profileId, profileVersion: task.submission.profileVersion, profileFingerprint: task.submission.profileFingerprint, result: task.result ? { contentMarkdown: task.result.contentMarkdown, summary: task.result.summary, errorCode: task.result.errorCode } : undefined, attempts: task.attempts };
+        const task = this.app.get(id());
+        const approved = this.settings.agents?.profiles.find(p => p.policy.id === task.submission.profileId && p.policy.version === task.submission.profileVersion);
+        const gateway = approved && approved.provider !== 'codex' ? approved.policy.gateway : undefined;
+        return { gateway: gateway ? { endpoint: gateway.baseUrl, model: gateway.model, vision: gateway.vision } : undefined, id: task.submission.taskId, status: task.status, provider: task.submission.provider, profileId: task.submission.profileId, profileVersion: task.submission.profileVersion, profileFingerprint: task.submission.profileFingerprint, result: task.result ? { contentMarkdown: task.result.contentMarkdown, summary: task.result.summary, errorCode: task.result.errorCode } : undefined, attempts: task.attempts };
       }
       case 'recover':
         // Explicit re-arm, never blindly restart a dead helper or an unconfirmed Agent.
@@ -138,15 +178,17 @@ export class DesktopController {
       this.preview = image ? `data:image/png;base64,${(await sharp(image.bytes).resize({ width: 420, height: 220, fit: 'inside', withoutEnlargement: true }).png().toBuffer()).toString('base64')}` : undefined;
     }
     const tasks = this.app.list();
-    return { settings: this.settings.desktop, delivery: this.settings.delivery, root: this.root, launchMode: this.launchMode,
+    return { hotkeys: this.settings.hotkeys ?? {}, lastAction: this.lastAction, settings: this.settings.desktop, delivery: this.settings.delivery, root: this.root, launchMode: this.launchMode,
       agents: this.app.registry.map(e => {
         const policy = this.settings.agents?.profiles.find(p => p.policy.id === e.profile.id && p.policy.version === e.profile.version)?.policy ?? this.settings.codex;
-        return { id: e.profile.id, version: e.profile.version, provider: e.adapter.name, fingerprint: e.profile.fingerprint, path: policy?.program.args[0] ?? policy?.program.executable, cliVersion: policy?.cliVersion, status: e.adapter.name === 'claude' && !('imageProtocol' in (policy ?? {})) ? 'image_protocol_not_verified' : 'unverified_auth' };
+        const approved = this.settings.agents?.profiles.find(p => p.policy.id === e.profile.id && p.policy.version === e.profile.version);
+        const gateway = approved && approved.provider !== 'codex' ? approved.policy.gateway : undefined;
+        return { gateway: gateway ? { endpoint: gateway.baseUrl, model: gateway.model, models: gateway.models, vision: gateway.vision, credentialStatus: 'bound_os_reference' } : undefined, id: e.profile.id, version: e.profile.version, provider: e.adapter.name, fingerprint: e.profile.fingerprint, path: policy?.program.args[0] ?? policy?.program.executable, cliVersion: policy?.cliVersion, status: e.adapter.name === 'claude' && !('imageProtocol' in (policy ?? {})) ? 'image_protocol_not_verified' : 'unverified_auth' };
       }), discovery: this.discovery,
       profile: { adapter: this.app.registry.find(e => e.profile === this.app.profile)?.adapter.name ?? this.settings.adapter, id: this.app.profile.id, profileVersion: this.app.profile.version, workspace: this.settings.agents?.profiles.find(p => p.policy.id === this.app.profile.id && p.policy.version === this.app.profile.version)?.policy.workspace ?? this.settings.codex?.workspace, version: this.settings.agents?.profiles.find(p => p.policy.id === this.app.profile.id && p.policy.version === this.app.profile.version)?.policy.cliVersion ?? this.settings.codex?.cliVersion, sandbox: 'read-only' },
       status: this.workerError ? 'worker_error' : this.captureError ? 'capture_error' : this.settings.desktop.paused ? 'paused' : !this.settings.desktop.enabled ? 'capture_off' : 'monitoring',
       error: this.workerError ?? this.captureError, pending: this.preview ?? null, captureStatus: this.app.lastCaptureStatus,
-      total: tasks.length, tasks: tasks.slice(-50).reverse().map(t => ({ id: t.submission.taskId, status: t.status, provider: t.submission.provider ?? t.attempts[0]?.adapterName, profileId: t.submission.profileId, profileVersion: t.submission.profileVersion, summary: t.result?.summary, error: t.result?.errorCode ?? (t.status === 'queued' && !this.app.registry.some(e => e.profile.id === t.submission.profileId && e.profile.version === t.submission.profileVersion) ? 'PROFILE_UNAVAILABLE' : undefined),
+      total: tasks.length, tasks: tasks.sort((a, b) => b.createdAt - a.createdAt || b.submission.taskId.localeCompare(a.submission.taskId)).slice(0, 50).map(t => ({ id: t.submission.taskId, status: t.status, provider: t.submission.provider ?? t.attempts[0]?.adapterName, profileId: t.submission.profileId, profileVersion: t.submission.profileVersion, summary: t.result?.summary, error: t.result?.errorCode ?? (t.status === 'queued' && !this.app.registry.some(e => e.profile.id === t.submission.profileId && e.profile.version === t.submission.profileVersion) ? 'PROFILE_UNAVAILABLE' : undefined),
         save: this.app.state.get(t.submission.taskId, 'save'), clipboard: this.app.state.get(t.submission.taskId, 'clipboard') })) };
   }
   async close() {

@@ -102,7 +102,10 @@ test('desktop selects only registered profiles; original Codex config is retaine
   const original = JSON.stringify(settings.codex);
   settings.agents = { version: 1, selected: { id: 'codex-readonly', version: 'v1' }, profiles: [{ provider: 'codex', policy: settings.codex }, { provider: 'claude', policy: { id: 'claude-readonly', version: 'v1', workspace, program, cliVersion: '2.1.306 (Claude Code)', digest: programDigest(program), timeoutMs: 5000, prompt: 'Synthetic' } }] };
   saveSettings(root, settings); const desktop = new DesktopController(root, cb(), undefined, 'codex');
-  const s = await desktop.dispatch({ v: 1, command: 'select-agent', id: 'claude-readonly', version: 'v1' }); assert.equal(s.profile.adapter, 'claude');
+  const queued = await desktop.app.submit(image);
+  const s = await desktop.dispatch({ v: 1, command: 'action', action: 'cycle-agent' }); assert.equal(s.profile.adapter, 'claude');
+  assert.equal(desktop.app.get(queued).submission.provider, 'codex');
+  assert.equal(desktop.app.get(queued).submission.profileId, 'codex-readonly');
   for (const raw of [{ id: 'evil', version: 'v1' }, { id: 'claude-readonly', version: 'v1', path: 'evil.exe' }]) await assert.rejects(desktop.dispatch({ v: 1, command: 'select-agent', ...raw }));
   assert.equal(JSON.stringify(loadSettings(root).codex), original); await desktop.close();
   const next = new DesktopController(root, cb(), undefined, 'codex'); assert.equal((await next.dispatch({ v: 1, command: 'snapshot' })).profile.adapter, 'claude'); await next.close();

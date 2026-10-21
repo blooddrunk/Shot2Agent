@@ -1,3 +1,5 @@
+import { validateHotkeys } from './actions.ts';
+import type { Hotkeys } from './actions.ts';
 import { existsSync, lstatSync, readFileSync, writeFileSync, renameSync, copyFileSync, openSync, fsyncSync, closeSync } from 'node:fs';
 import { join, isAbsolute } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -9,6 +11,7 @@ import type { CodexPolicy } from '../../worker/src/codex.ts';
 import { validateRetry } from '../../local/src/delivery.ts';
 import type { DeliveryConfig } from '../../local/src/delivery.ts';
 export interface Settings {
+  hotkeys?: Hotkeys;
   adapter: 'fake' | 'codex'; delivery: DeliveryConfig; codex?: CodexPolicy;
   agents?: { version: 1; selected: { id: string; version: string }; profiles: ApprovedPolicy[] };
   desktop: { version: 1; enabled: boolean; mode: 'confirm' | 'auto'; paused: boolean; autoConsent: boolean; alwaysConsent: boolean };
@@ -20,6 +23,7 @@ export function validate(settings: Settings, allowPendingAlways = false): void {
     ['off', 'manual', 'smart', 'always'].includes(settings.delivery.clipboard) &&
     (settings.delivery.saveDirectory === undefined || (typeof settings.delivery.saveDirectory === 'string' && isAbsolute(settings.delivery.saveDirectory))), 'INVALID_SETTINGS');
   validateRetry(settings.delivery.retry);
+  if (settings.hotkeys !== undefined) validateHotkeys(settings.hotkeys);
   if (settings.agents) {
     const a = settings.agents; requireValue(a.version === 1 && settings.adapter === 'codex' && Array.isArray(a.profiles), 'INVALID_AGENT_SETTINGS');
     const entries = executionRegistry(a.profiles);

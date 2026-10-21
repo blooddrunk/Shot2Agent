@@ -3,8 +3,11 @@ import { onMounted, onUnmounted, ref } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 type Receipt = { status: string; code?: string; attempts: number; classification?: string; stopReason?: string };
 type Task = { id: string; status: string; provider?: string; profileId?: string; profileVersion?: string; summary?: string; error?: string; clipboard?: Receipt; save?: Receipt };
-type Agent = { id: string; version: string; provider: string; path?: string; cliVersion?: string; status: string };
-type Snapshot = { launchMode: string; root: string; status: string; error?: string; total: number; pending: string | null; captureStatus: string;
+type Hotkeys = Record<string, string>;
+const globalActions = [{ id: 'toggle-pause', label: '暂停 / 恢复捕获' }, { id: 'copy-latest', label: '复制最新成功结果' }, { id: 'retry-latest-delivery', label: '重试最新失败投递' }, { id: 'cycle-agent', label: '循环切换已批准 Agent' }, { id: 'current', label: '提交当前剪贴板图片' }];
+const hotkeys = ref<Hotkeys>({}); const hotkeyDirty = ref(false);
+type Agent = { gateway?: { endpoint: string; model: string; vision: string; credentialStatus: string };  id: string; version: string; provider: string; path?: string; cliVersion?: string; status: string };
+type Snapshot = { hotkeys: Hotkeys; hotkeyStatus?: string; lastAction?: { action: string; status: string };  launchMode: string; root: string; status: string; error?: string; total: number; pending: string | null; captureStatus: string;
   settings: { enabled: boolean; mode: string; paused: boolean; autoConsent: boolean; alwaysConsent: boolean };
   delivery: { clipboard: string; saveDirectory?: string; retry?: { maxRetries: number; backoffMs: number; budgetMs: number } };
   agents: Agent[]; discovery: { provider: string; path: string; version?: string; status: string }[];
@@ -20,6 +23,7 @@ const cliStatusText: Record<string, string> = { not_found: '未安装', invalid:
 const statusText: Record<string, string> = { monitoring: '正在监听新图片', paused: '捕获已暂停', capture_off: '剪贴板捕获已关闭', worker_error: 'Worker 已停止 · 请检查后重启', capture_error: '剪贴板读取暂停 · 可重新连接' };
 function hydrate(s: Snapshot) {
   data.value = s;
+  if (!hotkeyDirty.value) hotkeys.value = { ...s.hotkeys };
   if (!dirty.value) { enabled.value = s.settings.enabled; mode.value = s.settings.mode; clipboard.value = s.delivery.clipboard;
     maxRetries.value = s.delivery.retry?.maxRetries ?? 0; backoffMs.value = s.delivery.retry?.backoffMs ?? 100; budgetMs.value = s.delivery.retry?.budgetMs ?? 3000;
     save.value = !!s.delivery.saveDirectory; directory.value = s.delivery.saveDirectory ?? ''; autoConsent.value = s.settings.autoConsent; alwaysConsent.value = s.settings.alwaysConsent; }
@@ -44,6 +48,10 @@ async function action(command: string, args: Record<string, unknown> = {}) {
     if (command === 'discard') message.value = '已丢弃预览，没有创建任务。';
     if (command === 'submit' || command === 'current') message.value = data.value?.captureStatus === 'duplicate' ? '5 秒内的相同图片已忽略。' : data.value?.captureStatus === 'no_image' ? '当前剪贴板没有图片。' : '图片已提交到本地队列。';
   } catch (e) { error.value = String(e); } finally { busy.value = false; }
+}
+async function applyHotkeys() {
+  await action('configure-hotkeys', { hotkeys: Object.fromEntries(Object.entries(hotkeys.value).filter(([, key]) => key)) });
+  if (!error.value) { hotkeyDirty.value = false; message.value = '快捷键已保存。隐藏到托盘后仍有效。'; await refresh(); }
 }
 async function apply() {
   if (save.value && !directory.value.trim()) { error.value = '请填写完整的本地保存目录。'; return; }
@@ -72,6 +80,17 @@ onUnmounted(() => clearInterval(timer));
     <div class="columns"><section class="controls" aria-label="捕获及输出设置">
       <label v-if="data && data.agents.length > 1">新任务 Agent<select :value="data.profile.id + ':' + data.profile.profileVersion" :disabled="busy" @change="(event) => { const agent = data?.agents.find(a => a.id + ':' + a.version === (event.target as HTMLSelectElement).value); if (agent) action('select-agent', { id: agent.id, version: agent.version }); }"><option v-for="agent in data.agents" :key="agent.id + agent.version" :value="agent.id + ':' + agent.version">{{ agent.provider }} · {{ agent.id }} / {{ agent.version }}</option></select></label>
         <p class="hint">切换只影响之后提交的新图片。排队任务和历史保留原 Agent。</p>
+      <details class="hotkeys"><summary>全局快捷键与操作</summary>
+        <p class="hint">默认关闭。填写 Ctrl+Alt+字母/数字、Ctrl+Shift+字母/数字或 Alt+Shift+字母/数字；清空即停用。占用时保留原绑定。</p>
+        <form @submit.prevent="applyHotkeys">
+          <label v-for="item in globalActions" :key="item.id">{{ item.label }}<input type="text" v-model="hotkeys[item.id]" @input="hotkeyDirty = true" placeholder="未启用" spellcheck="false" :aria-label="item.label + '快捷键'"></label>
+          <button type="submit" :disabled="busy || !data">保存快捷键</button>
+          <button type="button" :disabled="busy || !data" @click="hotkeys = {}; hotkeyDirty = true; applyHotkeys()">全部停用</button>
+        </form>
+        <p class="hint" role="status">注册状态：{{ data?.hotkeyStatus || '尚未连接原生快捷键' }} <span v-if="hotkeyDirty">· 尚未保存</span></p>
+        <div v-for="item in globalActions" :key="item.id"><button :disabled="busy || !data" @click="action('action', { action: item.id })">{{ item.label }}</button></div>
+        <p v-if="data?.lastAction" class="notice" role="status">{{ globalActions.find(a => a.id === data?.lastAction?.action)?.label }}：{{ data.lastAction.status }}</p>
+      </details>
       <h2>捕获</h2>
       <form @submit.prevent="apply" @change="dirty = true" @input="dirty = true">
         <label class="check"><input type="checkbox" v-model="enabled">监听剪贴板中的新图片</label>
@@ -92,7 +111,7 @@ onUnmounted(() => clearInterval(timer));
         </details>
         <button class="primary" type="submit" :disabled="busy || !data">{{ busy ? '处理中…' : '应用设置' }}</button><span v-if="dirty" class="hint unsaved">尚未保存</span>
       </form>
-      <div class="profile" v-if="data"><h2>执行配置</h2><p><strong>{{ data.profile.adapter === 'fake' ? 'Fake · 合成测试' : data.profile.adapter === 'claude' ? 'Claude Code · 云模型' : 'Codex CLI · 云模型' }}</strong> / {{ data.profile.sandbox }}</p><p class="path">{{ data.profile.workspace || 'Fake 不访问工作区。仅 Fake 验收入口延迟 8 秒。' }}</p><details><summary>CLI 路径与状态</summary><div v-for="agent in data.agents" :key="agent.id + agent.version"><strong>{{ agent.provider }} · {{ agent.cliVersion }}</strong><p class="path">{{ agent.path }}</p><p class="hint">{{ agent.status === 'image_protocol_not_verified' ? '此版本图片协议尚未验证，执行将被拒绝' : 'CLI 已批准；真实认证与识图须单独验证' }}</p></div>
+      <div class="profile" v-if="data"><h2>执行配置</h2><p><strong>{{ data.profile.adapter === 'fake' ? 'Fake · 合成测试' : data.profile.adapter === 'claude' ? 'Claude Code · 云模型' : 'Codex CLI · 云模型' }}</strong> / {{ data.profile.sandbox }}</p><p class="path">{{ data.profile.workspace || 'Fake 不访问工作区。仅 Fake 验收入口延迟 8 秒。' }}</p><details><summary>CLI 路径与状态</summary><div v-for="agent in data.agents" :key="agent.id + agent.version"><strong>{{ agent.provider }} · {{ agent.cliVersion }}</strong><p v-if="agent.gateway" class="hint">{{ agent.gateway.endpoint }} · {{ agent.gateway.model }} · 视觉：{{ agent.gateway.vision }} · 凭据：{{ agent.gateway.credentialStatus }}（执行时检查可用性）</p><p class="path">{{ agent.path }}</p><p class="hint">{{ agent.status === 'image_protocol_not_verified' ? '此版本图片协议尚未验证，执行将被拒绝' : 'CLI 已批准；真实认证与识图须单独验证' }}</p></div>
         <button v-if="data.profile.adapter !== 'fake'" @click="action('discover-agents')" :disabled="busy">刷新安装检测</button><p class="hint">检测不会批准或替换 CLI。手动路径及多安装选择请退出应用后按 Windows 手册配置。</p><div v-for="(candidate, index) in data.discovery" :key="index"><p class="hint">{{ candidate.provider }} · {{ candidate.version }} · {{ cliStatusText[candidate.status] || candidate.status }}</p><p class="path">{{ candidate.path }}</p></div></details>
         <p class="hint">{{ data.profile.version || data.profile.id }}。配置由本机 Worker 管理；更换配置须退出后重新启动，不会修改排队任务。</p><details><summary>本地数据位置</summary><p class="path">{{ data.root }}</p></details></div>
     </section><section class="workspace" aria-label="预览和历史">

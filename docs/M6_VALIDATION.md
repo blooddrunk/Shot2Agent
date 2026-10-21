@@ -1,0 +1,39 @@
+# M6-L validation — 2026-10-21
+
+Implementation candidate 0.6.0. The final source SHA, remote matrix/package run IDs and artifact hash are published in the implementation PR and final report. Only completed successful runs for that exact source establish a gate. This file records observed boundaries, not unexecuted acceptance as PASS.
+
+## Prerequisite repaired independently
+
+PR #9's consent gap was repaired at `dfc0571c1d7e0cdb972d934e86260cdf491fe399`: one shared `effectiveDelivery()` is used by CLI clipboard creation/LocalApp and desktop construction/reconfiguration. Desktop-created Always without consent becomes manual. Explicit legacy M2 CLI Always remains intact; old Smart guards remain sticky. A real CLI child processes a Fake task in a disposable root; simulated clipboard covers unconsented/consented/legacy and Smart receipt cases.
+
+Corrected-head PR checks: [matrix 39572288833](https://github.com/blooddrunk/Shot2Agent/actions/runs/39572288833) and [Windows package 39572288742](https://github.com/blooddrunk/Shot2Agent/actions/runs/39572288742) succeeded. Duplicate push-triggered runs were cancelled by concurrency, not test failures. PR #9 merged as `e038827c573ec42234d7377b8f72d386d975f055`; independent post-merge [main matrix 39572983167](https://github.com/blooddrunk/Shot2Agent/actions/runs/39572983167) and [main Windows package 39572983269](https://github.com/blooddrunk/Shot2Agent/actions/runs/39572983269) succeeded. M6 remains a separate candidate.
+
+The initial local PR #9 full check failed because the new regression's cleanup closed its own SQLite handles twice. Fixed that test cleanup; its targeted rerun passed before commit. Remote final-head and post-merge checks above independently passed; the failed local run is not relabeled successful.
+
+## Added automated coverage
+
+- Native hotkey parser: fixed action allowlist, limited modifier/key grammar, duplicate rejection; registrar transaction tests retain old keys on conflict and release all. Windows test uses two native owner threads to check actual RegisterHotKey conflict/release/re-registration, without injecting keystrokes or reading personal clipboard.
+- Coordinator subprocess actions: atomic pause toggle, historical startup image suppression, missing result/Agent/no eligible retry, bad/extra command refusal, hotkey persistence across restart, explicit submit, latest successful copy.
+- Latest result uses persisted `result.finishedAt`, deterministic UUID tie break and all pages. Newer queued/failed tasks cannot hide the completed output. History explicitly sorts persisted creation time.
+- Delivery action retries only enabled failed channels; skips succeeded/manual/disabled/pending/interrupted/ambiguous/conflict channels. A sibling interrupted clipboard receipt remains untouched while save retries. Agent call count remains unchanged. Existing independent Smart and no-clobber suites remain required.
+- Gateway validates explicit HTTPS host/path allowlist, no URL credentials/query/port, bounded models/mappings and credential reference; preserves distinct provider/fingerprint on failure, rejects unverified vision before secret/model access, rejects text-only aliases, auth-kind mismatch and changed bindings.
+- Mock CLI -> loopback Mock API asserts exact token env and selected endpoint/model/mappings, no inherited OAuth/API key/proxy, private home, unchanged restricted/safe-mode/tools/MCP flags, typed image block byte equality and text/image order. Mock HTTP 401, malformed final, secret echo, missing credential and policy refusal remain safe failures. These are synthetic fixtures, not real HTTPS/model evidence.
+- Windows secure-store tests use unique disposable credential targets only: missing-reference refusal, add/read/delete and replacement refusal. No existing personal credentials accessed. Linux deliberately refuses OS storage.
+
+## Independently observed native Claude Gateway transport
+
+Windows Node + installed official native Claude `2.1.305 (Claude Code)` executed `scripts/claude-gateway-windows-probe.mjs` against a synthetic loopback API with an empty disposable HOME/config. Exit 0, `imageSeen:true, modelSeen:true, authSeen:true, calls:1, finalType:result, subtype:success, isError:false, transportMarker:true, secretOnDisk:false`. The native CLI accepted `--setting-sources ''`, explicit GLM model and AUTH_TOKEN; its request contained the exact synthetic typed image and selected model. A file scan of the disposable home did not find the synthetic credential. No actual model or personal authentication was used. Fixture response text is not recognized image text.
+
+The same M6 probe also passed on the official native 2.1.306 executable extracted into a unique temporary Windows path from the existing package archive (temporary copy removed afterward). Both versions have new AUTH_TOKEN/model/setting-sources transport evidence. Other gateway versions refuse. Two earlier copy attempts accidentally selected a text fixture at a similarly named local path and failed to spawn; those were not native CLI failures and are not counted as qualification. Real GLM availability, key region, HTTPS authentication/certificate/redirect policy and model vision remain independent NOT VERIFIED gates.
+
+## Local environment and commands
+
+Required `corepack pnpm install --frozen-lockfile` completed successfully (pnpm 10.19.0, frozen lockfile unchanged). The full candidate local `npm run check` passed at the earlier 166-test candidate (150 PASS / 16 native SKIP / 0 FAIL), including lint, TS/Vue, build/UI and compiled Local smoke. Subsequent final-head verification is reported with its exact remote SHA. Browser rendering was inspected with synthetic IPC data at 1040x760 and 720x560; Impeccable detector returned no findings. Browser tests do not prove native hotkeys/focus/paste. `npm test` baseline was started before changes; full candidate checks run lint, TS/Vue typecheck, all Node tests, build/UI and compiled smoke. See final PR for completed final counts and exit statuses; partial running logs do not count as PASS. `git diff --check` and Rust formatting are required before delivery.
+
+Local WSL `cargo check` was attempted and blocked by missing system development packages (`libdbus-1-dev` / pkg-config); no system packages were installed. Windows Rust compile/tests/package/EXE smoke use CI, not this Linux attempt as proof.
+
+## Boundaries and remaining observations
+
+No operator credential/root/history/screenshot/task was modified; all probes use synthetic data/disposable config. No real paid model request, failover, permission bypass, tools, Hooks or MCP added. Gateway uses a separate approved Profile, credential lookup and empty child home, preserves machine/remote-policy refusal, and never inherits personal subscription auth. The two accepted HTTPS endpoint configurations rely on the pinned native CLI's TLS/network implementation; the live endpoint redirect behavior has not been qualified here. Default vision remains `not-verified` and refuses. `--attest-vision` is an explicit stopped-Worker operator assertion requiring external evidence; it is never automatic proof or task-controlled permission.
+
+M6 hidden-window hotkey events, current foreground focus, actual paste, tray UX and true GLM OCR: NOT VERIFIED. Follow [short executable Windows steps](M6_WINDOWS_ACCEPTANCE.md). Missing cost consent is not a test failure or vision PASS. M3 operator reports and unresolved Smart conflicts retain their original scope; no input-method fix is claimed. No M6 merged-main success unless merged and independently checked later.

@@ -1,3 +1,6 @@
+import { spawn } from 'node:child_process';
+import { credentialCommand, readGatewayToken, validateGateway } from '../../../packages/worker/src/gateway.ts';
+import type { GatewayConfig } from '../../../packages/worker/src/gateway.ts';
 import { resolve, join, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 import { existsSync, readFileSync, realpathSync, writeFileSync, lstatSync, copyFileSync } from 'node:fs';
@@ -23,6 +26,9 @@ import type { DeliveryConfig } from '../../../packages/local/src/delivery.ts';
 const { positionals, values } = parseArgs({ allowPositionals: true, options: {
   root: { type: 'string' }, adapter: { type: 'string' }, workspace: { type: 'string' }, codex: { type: 'string' },
   'codex-script': { type: 'string' }, clipboard: { type: 'string' }, save: { type: 'string' }, auto: { type: 'boolean', default: false },
+  endpoint: { type: 'string' }, model: { type: 'string' }, 'credential-ref': { type: 'string' },
+  'sonnet-model': { type: 'string' }, 'opus-model': { type: 'string' }, 'haiku-model': { type: 'string' },
+  'confirm-delete': { type: 'boolean' }, 'attest-vision': { type: 'boolean' },
   provider: { type: 'string' }, path: { type: 'string' },
   force: { type: 'boolean', default: false },
 } });
@@ -35,6 +41,7 @@ function program(path: string, script?: string) {
 }
 async function main() {
   if (command === 'help') {
+    log('M6: credential-add --root <root> (hidden Windows prompt) | credential-delete --credential-ref <ref> --confirm-delete --root <root> | approve-gateway --path <claude.exe> --endpoint <approved HTTPS URL> --model <model> --credential-ref <ref> [--sonnet-model <model> --opus-model <model> --haiku-model <model>] [--attest-vision: operator asserts separately established image support; not automatic verification]. Stop Worker first.');
     log('M5: discover-agents [--provider codex|claude] [--path <absolute>] | approve-agent --provider codex|claude [--path <absolute>] --root <existing-Codex-root> (stop desktop first). Explicit approval pins a new immutable profile; prior profiles remain.');
     log('Shot2Agent Local: init | doctor | submit | file <image> | work | watch | list | show <id> | copy <id> | delivery <id> | retry-delivery <id>\nOptions: --root <private-dir> (all commands); init: --adapter fake|codex --workspace <dir> --codex <exe-or-npm-cmd> [--codex-script <js>] --clipboard off|manual|smart|always --save <directory>; watch: --auto (explicit cloud upload opt-in); submit/file: --force (intentional duplicate).\nwatch commands: submit, current, list, show <id>, copy <id>, delivery <id>, quit. Defaults: confirmation required, manual clipboard, history always on.'); return;
   }
@@ -45,14 +52,32 @@ async function main() {
     for (const provider of providers) log(await discover(provider, workspace, { manual: values.path })); return;
   }
   privateDirectory(root); const configPath = join(root, 'settings.json');
-  if (command === 'approve-agent') {
-    requireValue(values.provider === 'codex' || values.provider === 'claude', 'PROVIDER_REQUIRED');
+  if (command === 'credential-add' || command === 'credential-delete') {
+    requireValue(existsSync(configPath), 'SETTINGS_REQUIRED');
+    const state = new LocalState(root);
+    try {
+      state.acquireWorker();
+      const reference = command === 'credential-add' ? `Shot2Agent-Gateway-${randomUUID()}` : values['credential-ref'];
+      requireValue(reference && (command !== 'credential-delete' || values['confirm-delete']), 'CREDENTIAL_DELETE_CONFIRMATION_REQUIRED');
+      const native = credentialCommand(command === 'credential-add' ? 'add' : 'delete', reference);
+      const code = await new Promise<number | null>(resolve => {
+        const child = spawn(native.executable, native.args, { shell: false, stdio: 'inherit' });
+        const timer = setTimeout(() => child.kill(), 300000);
+        child.on('error', () => {}); child.on('close', code => { clearTimeout(timer); resolve(code); });
+      });
+      requireValue(code === 0, 'GATEWAY_SECURE_STORE_OPERATION_FAILED');
+      log({ credentialRef: reference, status: command === 'credential-add' ? 'stored_in_windows_credential_manager' : 'deleted_profiles_will_refuse' });
+    } finally { state.close(); }
+    return;
+  }
+  if (command === 'approve-agent' || command === 'approve-gateway') {
+    requireValue(command === 'approve-gateway' || values.provider === 'codex' || values.provider === 'claude', 'PROVIDER_REQUIRED');
     requireValue(existsSync(configPath), 'ORIGINAL_CODEX_PROFILE_REQUIRED');
     const state = new LocalState(root);
     try {
       state.acquireWorker(); // A running desktop/Worker prevents any approval mutation.
       const next = loadSettings(root); requireValue(next.adapter === 'codex' && next.codex, 'ORIGINAL_CODEX_PROFILE_REQUIRED');
-      const provider = values.provider;
+      const provider = command === 'approve-gateway' ? 'claude' : values.provider as Provider;
       const workspace = values.workspace ? realpathSync(resolve(values.workspace)) : next.codex.workspace;
       const candidates = await discover(provider, workspace, { manual: values.path });
       const viable = candidates.filter(c => c.status === 'unverified_auth');
@@ -60,7 +85,16 @@ async function main() {
       const candidate = viable[0];
       const policy = { id: `${provider}-readonly`, version: `m5-${candidate.digest!.slice(0, 16)}-${randomUUID().slice(0, 8)}`, workspace,
         digest: candidate.digest!, program: candidate.program!, cliVersion: candidate.version!, timeoutMs: 180000, prompt: next.codex.prompt };
-      const approved: ApprovedPolicy = provider === 'codex' ? { provider, policy } : { provider, policy: { ...policy, digest: candidate.digest!,
+      let gateway: GatewayConfig | undefined;
+      if (command === 'approve-gateway') {
+        requireValue(values.endpoint && values.model && values['credential-ref'], 'GATEWAY_CONFIGURATION_REQUIRED');
+        gateway = { kind: 'claude-compatible-endpoint', baseUrl: values.endpoint, model: values.model,
+          models: { sonnet: values['sonnet-model'] ?? values.model, opus: values['opus-model'] ?? values.model, haiku: values['haiku-model'] ?? values.model },
+          credentialRef: values['credential-ref'], vision: values['attest-vision'] ? 'operator-attested' : 'not-verified' };
+        validateGateway(gateway); await readGatewayToken(gateway.credentialRef);
+        policy.id = 'claude-gateway-readonly';
+      }
+      const approved: ApprovedPolicy = provider === 'codex' ? { provider, policy } : { provider: gateway ? 'claude-compatible-endpoint' : 'claude', policy: { ...policy, ...(gateway ? { gateway } : {}), digest: candidate.digest!,
         // Native stdin/image/completion qualified against native Windows 2.1.305/2.1.306 only.
         ...(['2.1.305 (Claude Code)', '2.1.306 (Claude Code)'].includes(candidate.version!) ? { imageProtocol: 'windows-jsonl-v1' as const } : {}) } };
       const profiles: ApprovedPolicy[] = next.agents?.profiles ?? [{ provider: 'codex', policy: next.codex }];
@@ -69,7 +103,7 @@ async function main() {
       copyFileSync(configPath, join(root, `settings.m5-backup-${randomUUID()}.json`));
       next.agents = { version: 1, selected: { id: policy.id, version: policy.version }, profiles };
       saveSettings(root, next);
-      log({ approved: provider, path: candidate.path, version: candidate.version, profileId: policy.id, profileVersion: policy.version, modelAuthentication: 'unverified', imageProtocol: provider === 'claude' ? ('imageProtocol' in approved.policy ? 'qualified_transport_only' : 'not_verified_execution_refused') : 'existing_codex_protocol' });
+      log({ approved: approved.provider, gateway: gateway ? { endpoint: gateway.baseUrl, model: gateway.model, vision: gateway.vision, credentials: 'available' } : undefined, path: candidate.path, version: candidate.version, profileId: policy.id, profileVersion: policy.version, modelAuthentication: 'unverified', imageProtocol: provider === 'claude' ? ('imageProtocol' in approved.policy ? 'qualified_transport_only' : 'not_verified_execution_refused') : 'existing_codex_protocol' });
     } finally { state.close(); }
     return;
   }
@@ -103,7 +137,7 @@ async function main() {
   if (command === 'doctor') {
     if (settings.agents) {
       const results = [];
-      for (const entry of settings.agents.profiles) results.push(...await discover(entry.provider, entry.policy.workspace, { approved: { program: entry.policy.program, version: entry.policy.cliVersion, digest: entry.policy.digest } }));
+      for (const entry of settings.agents.profiles) results.push(...await discover(entry.provider === 'claude-compatible-endpoint' ? 'claude' : entry.provider, entry.policy.workspace, { approved: { program: entry.policy.program, version: entry.policy.cliVersion, digest: entry.policy.digest } }));
       log({ selected: settings.agents.selected, profiles: results, modelExecution: 'not_tested' }); return;
     }
     if (settings.adapter === 'codex') { requireValue(policy, 'MISSING_CODEX_POLICY'); requireValue(await inspectCodex(policy.program, policy.workspace) === policy.cliVersion, 'CODEX_VERSION_CHANGED_REVIEW_AND_REPIN'); }

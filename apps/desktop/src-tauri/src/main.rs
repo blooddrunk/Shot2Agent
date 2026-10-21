@@ -1,4 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+mod hotkeys;
 use serde_json::{json, Value};
 use std::{
     io::{BufRead, BufReader, Read, Write},
@@ -288,6 +289,7 @@ impl Drop for Bridge {
     }
 }
 struct State {
+    hotkey_transaction: Mutex<()>,
     bridge: Mutex<Result<Bridge, String>>,
 }
 fn call(state: &State, request: Value) -> Result<Value, String> {
@@ -300,10 +302,52 @@ fn call(state: &State, request: Value) -> Result<Value, String> {
 #[tauri::command]
 async fn rpc(app: tauri::AppHandle, request: Value) -> Result<Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        let transaction_state = app.state::<State>();
+        let _transaction = transaction_state
+            .hotkey_transaction
+            .lock()
+            .map_err(|_| "HOTKEY_TRANSACTION_LOCK")?;
         let is_quit = request.get("command").and_then(Value::as_str) == Some("quit");
-        let response = call(&app.state::<State>(), request);
+        let mut response =
+            if request.get("command").and_then(Value::as_str) == Some("configure-hotkeys") {
+                let state = app.state::<State>();
+                let previous = call(&state, json!({"v":1,"command":"snapshot"}))?;
+                let old = previous
+                    .pointer("/value/hotkeys")
+                    .cloned()
+                    .ok_or("HOTKEY_SETTINGS_UNAVAILABLE")?;
+                let native = app.state::<hotkeys::Hotkeys>();
+                native.configure(request.get("hotkeys").cloned().ok_or("INVALID_HOTKEYS")?)?;
+                let result = call(&state, request);
+                if result
+                    .as_ref()
+                    .map(|r| r.get("ok") != Some(&Value::Bool(true)))
+                    .unwrap_or(true)
+                {
+                    if native.configure(old).is_err() {
+                        let _ = native.configure(json!({}));
+                        return Err("HOTKEY_ROLLBACK_FAILED_DISABLED".into());
+                    }
+                }
+                result
+            } else {
+                call(&app.state::<State>(), request)
+            };
         if is_quit {
             app.exit(0);
+        }
+        if let Ok(value) = response.as_mut() {
+            if let Some(object) = value.get_mut("value").and_then(Value::as_object_mut) {
+                object.insert(
+                    "hotkeyStatus".into(),
+                    json!(app
+                        .state::<hotkeys::Hotkeys>()
+                        .status
+                        .lock()
+                        .map(|v| v.clone())
+                        .unwrap_or("HOTKEY_LOCK".into())),
+                );
+            }
         }
         let response = response?;
         if let Some(status) = response.pointer("/value/status").and_then(Value::as_str) {
@@ -413,10 +457,36 @@ fn main() {
     }
     tauri::Builder::default()
         .manage(State {
+            hotkey_transaction: Mutex::new(()),
             bridge: Mutex::new(Bridge::start()),
         })
         .invoke_handler(tauri::generate_handler![rpc, hide_window])
         .setup(|app| {
+            let handle = app.handle().clone();
+            let busy = Arc::new(std::sync::atomic::AtomicBool::new(false));
+            let native = hotkeys::Hotkeys::start(move |action| {
+                if busy.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                    return;
+                }
+                let handle = handle.clone();
+                let busy = busy.clone();
+                tauri::async_runtime::spawn_blocking(move || {
+                    let _ = call(
+                        &handle.state::<State>(),
+                        json!({"v":1,"command":"action","action":action}),
+                    );
+                    busy.store(false, std::sync::atomic::Ordering::SeqCst);
+                });
+            });
+            if let Ok(snapshot) = call(&app.state::<State>(), json!({"v":1,"command":"snapshot"})) {
+                let _ = native.configure(
+                    snapshot
+                        .pointer("/value/hotkeys")
+                        .cloned()
+                        .unwrap_or(json!({})),
+                );
+            }
+            app.manage(native);
             let mode =
                 launch_mode(&std::env::args().skip(1).collect::<Vec<_>>()).unwrap_or("invalid");
             if let Some(window) = app.get_webview_window("main") {
@@ -426,8 +496,44 @@ fn main() {
             let hide = MenuItem::with_id(app, "hide", "Hide", true, None::<&str>)?;
             let pause = MenuItem::with_id(app, "pause", "Pause capture", true, None::<&str>)?;
             let resume = MenuItem::with_id(app, "resume", "Resume capture", true, None::<&str>)?;
+            let copy_latest =
+                MenuItem::with_id(app, "copy-latest", "Copy latest result", true, None::<&str>)?;
+            let retry_latest = MenuItem::with_id(
+                app,
+                "retry-latest-delivery",
+                "Retry latest failed delivery",
+                true,
+                None::<&str>,
+            )?;
+            let cycle_agent = MenuItem::with_id(
+                app,
+                "cycle-agent",
+                "Cycle approved Agent",
+                true,
+                None::<&str>,
+            )?;
+            let current = MenuItem::with_id(
+                app,
+                "current",
+                "Submit current clipboard image",
+                true,
+                None::<&str>,
+            )?;
             let exit = MenuItem::with_id(app, "quit", "Quit Shot2Agent", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &hide, &pause, &resume, &exit])?;
+            let menu = Menu::with_items(
+                app,
+                &[
+                    &show,
+                    &hide,
+                    &pause,
+                    &resume,
+                    &copy_latest,
+                    &retry_latest,
+                    &cycle_agent,
+                    &current,
+                    &exit,
+                ],
+            )?;
             let mut pixels = vec![0u8; 32 * 32 * 4];
             for y in 4..28 {
                 for x in 4..28 {
@@ -465,6 +571,16 @@ fn main() {
                             );
                         });
                     }
+                    "copy-latest" | "retry-latest-delivery" | "cycle-agent" | "current" => {
+                        let handle = app.clone();
+                        let action = event.id.as_ref().to_string();
+                        tauri::async_runtime::spawn_blocking(move || {
+                            let _ = call(
+                                &handle.state::<State>(),
+                                json!({"v":1,"command":"action","action":action}),
+                            );
+                        });
+                    }
                     "quit" => quit(app.clone()),
                     _ => {}
                 })
@@ -483,9 +599,15 @@ fn main() {
                     .and_then(|r| r.pointer("/value/status"))
                     .and_then(Value::as_str)
                     .unwrap_or("coordinator unavailable; quit and restart");
+                let action_status = response
+                    .as_ref()
+                    .ok()
+                    .and_then(|r| r.pointer("/value/lastAction/status"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
                 if let Some(tray) = handle.tray_by_id("local") {
                     let _ = tray.set_tooltip(Some(format!(
-                        "Shot2Agent · {} · {status}",
+                        "Shot2Agent · {} · {status} · {action_status}",
                         mode_label(
                             launch_mode(&std::env::args().skip(1).collect::<Vec<_>>())
                                 .unwrap_or("invalid")
@@ -504,6 +626,10 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("Shot2Agent startup failed")
         .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                let _ = app.state::<hotkeys::Hotkeys>().configure(json!({}));
+            }
+
             if let tauri::RunEvent::ExitRequested {
                 code: None, api, ..
             } = event
