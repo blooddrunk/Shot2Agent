@@ -49,3 +49,7 @@ Worker-owned provider/Profile registry, CLI discovery, explicit stopped-Worker `
 ## Operator follow-up — Always default and custom GLM
 
 The operator reports other checked items PASS, but Smart still blocks new and historical tasks even after WeChat Input Method clipboard synchronization is disabled. Do not claim a Smart fix or attribute the cause to that input method. Fresh desktop settings preselect Always with capture disabled and overwrite consent unchecked; effective delivery stays manual until consent. Preserve existing modes and sticky Smart receipts. Custom GLM/token authentication is not supported by the current personal Pro/Max Claude adapter; the operator's working standalone CLI configuration is not Shot2Agent image-analysis proof. See docs/M5_VALIDATION.md.
+
+## M6-L candidate
+
+M6 adds native Windows RegisterHotKey actions and separate `claude-compatible-endpoint` Profiles. Follow docs/M6_WINDOWS_ACCEPTANCE.md and docs/M6_VALIDATION.md. Default bindings are disabled; Gateway vision defaults to NOT VERIFIED/refusal. Windows Credential Manager stores immutable token references, never plaintext settings. `--attest-vision` records operator-owned external evidence, not software qualification. Native CLI-to-Mock transport is not real GLM vision; TLS/redirect and endpoint availability require separate qualification before live use. Preserve shared effective desktop/CLI consent, sticky Smart guards, immutable queued Profile bindings and no execution replay.

@@ -35,7 +35,7 @@ export function resolveProgram(provider: Provider, path: string, node = process.
   return { executable: path, args: [] };
 }
 export function programDigest(program: Program): string {
-  const hash = createHash('sha256'); const buffer = Buffer.alloc(65536); const deadline = Date.now() + 3000;
+  const hash = createHash('sha256'); const buffer = Buffer.alloc(1024 * 1024); const deadline = Date.now() + 3000;
   for (const path of [program.executable, ...program.args]) {
     hash.update(regular(path)); requireValue(lstatSync(path).size <= 512 * 1024 * 1024, 'CLI_FILE_LIMIT'); const fd = openSync(path, 'r');
     try { let count: number; while ((count = readSync(fd, buffer)) > 0) { requireValue(Date.now() <= deadline, 'CLI_HASH_TIMEOUT'); hash.update(buffer.subarray(0, count)); } }
@@ -47,7 +47,7 @@ async function discoveryDigest(program: Program): Promise<string> {
   const hash = createHash('sha256'); const deadline = Date.now() + 3000;
   for (const path of [program.executable, ...program.args]) {
     hash.update(regular(path)); requireValue(lstatSync(path).size <= 512 * 1024 * 1024, 'CLI_FILE_LIMIT');
-    for await (const bytes of createReadStream(path, { highWaterMark: 65536 })) {
+    for await (const bytes of createReadStream(path, { highWaterMark: 1024 * 1024 })) {
       requireValue(Date.now() <= deadline, 'CLI_HASH_TIMEOUT'); hash.update(bytes);
     }
   }

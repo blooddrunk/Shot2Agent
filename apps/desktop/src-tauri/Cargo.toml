@@ -1,6 +1,6 @@
 [package]
 name = "shot2agent-desktop"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 
 [build-dependencies]
@@ -11,4 +11,4 @@ tauri = { version = "2", features = ["tray-icon"] }
 serde_json = "1"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse"] }

@@ -115,7 +115,7 @@ export class LocalApp {
       this.state.put(id, 'clipboard', { status: 'failed', code: 'COPY_FAILED', attempts: (old?.attempts ?? 0) + 1, history: old?.history, smartGuard: old?.smartGuard }); throw new Error('COPY_FAILED');
     }
   }
-  async retryDelivery(id: string): Promise<void> { await deliver(this.get(id), this.config, this.state, this.clipboard, true); }
+  async retryDelivery(id: string, channels?: readonly string[]): Promise<void> { await deliver(this.get(id), this.config, this.state, this.clipboard, true, undefined, channels); }
   close(): void { this.pendingImage = undefined; this.core.close(); this.state.close(); this.clipboard?.close(); }
 }
 export function readImageFile(path: string): Buffer {

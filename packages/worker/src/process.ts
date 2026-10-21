@@ -1,3 +1,5 @@
+import { validateGateway } from './gateway.ts';
+import type { GatewayConfig } from './gateway.ts';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
@@ -9,6 +11,7 @@ export interface ProcessResult {
 }
 /** Never forwards child logs. A detached POSIX process group / taskkill tree owns descendants. */
 export async function boundedProcess(program: Program, args: string[], options: {
+  gateway?: { config: GatewayConfig; token: string; home: string };
   cwd: string; provider?: 'claude'; nativePolicy?: true; input?: string; signal?: AbortSignal; timeoutMs: number; maxBytes?: number;
 }): Promise<ProcessResult> {
   if (options.nativePolicy && (process.platform !== 'win32' || program.executable !== join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe') || program.args.length || JSON.stringify(args) !== JSON.stringify(['-NoProfile', '-NonInteractive', '-File', fileURLToPath(new URL('./claude-policy.ps1', import.meta.url))]))) throw new Error('SYSTEM_POLICY_PROGRAM_REQUIRED');
@@ -25,6 +28,15 @@ export async function boundedProcess(program: Program, args: string[], options: 
     // Model CLIs always retain the provider allowlist; no Profile/task can enable this path.
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => options.nativePolicy || allowed.has(key.toLowerCase())));
     if (options.provider === 'claude') Object.assign(env, { CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1', DISABLE_AUTOUPDATER: '1' });
+    if (options.gateway) {
+      const { config, token, home } = options.gateway; validateGateway(config);
+      // No inherited credentials, proxies, project/user settings or TLS overrides.
+      for (const key of Object.keys(env)) if (!['path', 'systemroot', 'windir', 'temp', 'tmp', 'programfiles', 'programdata', 'claude_code_git_bash_path'].includes(key.toLowerCase())) delete env[key];
+      Object.assign(env, { HOME: home, USERPROFILE: home, APPDATA: home, LOCALAPPDATA: home, CLAUDE_CONFIG_DIR: join(home, '.claude'),
+        ANTHROPIC_BASE_URL: config.baseUrl, ANTHROPIC_AUTH_TOKEN: token, ANTHROPIC_MODEL: config.model,
+        ANTHROPIC_DEFAULT_SONNET_MODEL: config.models.sonnet, ANTHROPIC_DEFAULT_OPUS_MODEL: config.models.opus, ANTHROPIC_DEFAULT_HAIKU_MODEL: config.models.haiku,
+        DISABLE_AUTOUPDATER: '1', CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1', CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: '1' });
+    }
     const child = spawn(program.executable, [...program.args, ...args], {
       cwd: options.cwd, env, shell: false, windowsHide: true, detached: process.platform !== 'win32',
       stdio: ['pipe', 'pipe', 'pipe'],

@@ -11,7 +11,7 @@ export interface DeliveryConfig { clipboard: 'off' | 'manual' | 'smart' | 'alway
 /** Shared entry-point policy. Legacy M2 CLI configs have no desktop consent boundary. */
 export function effectiveDelivery(settings: { delivery: DeliveryConfig; desktop?: { alwaysConsent?: boolean } }): DeliveryConfig {
   const config = structuredClone(settings.delivery);
-  if (settings.desktop && config.clipboard === 'always' && settings.desktop.alwaysConsent !== true) config.clipboard = 'manual';
+  if (Object.hasOwn(settings, 'desktop') && config.clipboard === 'always' && settings.desktop?.alwaysConsent !== true) config.clipboard = 'manual';
   return config;
 }
 export function validateRetry(policy?: RetryPolicy): void {
@@ -60,7 +60,7 @@ export function deliveryFailure(error: unknown, channel: string): { code: string
   if (['EBUSY', 'EAGAIN', 'EMFILE', 'ENFILE'].includes(code)) return { code: `SAVE_${code}`, classification: 'transient' };
   return { code: ['EACCES', 'EPERM', 'ENOSPC', 'ENOENT', 'ENOTSUP'].includes(code) ? `SAVE_${code}` : 'SAVE_FAILED', classification: 'permanent' };
 }
-export async function deliver(task: TaskView, config: DeliveryConfig, state: LocalState, clipboard?: ClipboardPort, retry = false, save: typeof atomicSave = atomicSave): Promise<void> {
+export async function deliver(task: TaskView, config: DeliveryConfig, state: LocalState, clipboard?: ClipboardPort, retry = false, save: typeof atomicSave = atomicSave, channels: readonly string[] = ['save', 'clipboard']): Promise<void> {
   if (task.status !== 'succeeded' || !task.result) return;
   validateRetry(config.retry);
   // Snapshot settings and ORIGINAL capture baseline for the whole bounded operation.
@@ -68,7 +68,7 @@ export async function deliver(task: TaskView, config: DeliveryConfig, state: Loc
   const policy = settings.retry ?? { maxRetries: 0, backoffMs: 100, budgetMs: 3000 };
   const id = task.submission.taskId; const text = task.result.contentMarkdown;
   const baseline = state.baseline(id);
-  await Promise.all(['save', 'clipboard'].map(async channel => {
+  await Promise.all(['save', 'clipboard'].filter(channel => channels.includes(channel)).map(async channel => {
     const reservation = state.reserve(id, channel, retry); if (!reservation) return;
     const smart = settings.clipboard === 'smart' || reservation.smartGuard === true;
     if (channel === 'clipboard') reservation.smartGuard = smart;

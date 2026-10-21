@@ -28,6 +28,9 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: pnpm
+      - name: Isolated Windows secure-store preflight
+        if: runner.os == 'Windows'
+        run: node --experimental-strip-types --test packages/local/test/gateway-credentials.test.mjs
       - run: pnpm install --frozen-lockfile
       - run: npm run check
         env:

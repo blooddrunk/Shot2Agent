@@ -390,10 +390,10 @@ test('CLI process reads fresh desktop Always as manual without starting native c
     assert.equal(app.get(id).status, 'succeeded');
     assert.equal(app.state.get(id, 'clipboard').status, 'manual');
     app.close(); app = undefined;
-    for (const config of [settings, { ...settings, desktop: { ...settings.desktop, alwaysConsent: true } }, { adapter: 'fake', delivery: { clipboard: 'always' } }]) {
+    for (const config of [settings, { ...settings, desktop: null }, { ...settings, desktop: { ...settings.desktop, alwaysConsent: true } }, { adapter: 'fake', delivery: { clipboard: 'always' } }]) {
       const cb = new Clipboard(); app = new LocalApp(dir, new FakeAgent(), FAKE_PROFILE, effectiveDelivery(config), cb);
       const taskId = await app.submit(await fixture(), { session: 'old-session', sequence: '1' }, true);
-      await app.work(); assert.equal(cb.writes, config.desktop?.alwaysConsent === false ? 0 : 1);
+      await app.work(); assert.equal(cb.writes, Object.hasOwn(config, 'desktop') && config.desktop?.alwaysConsent !== true ? 0 : 1);
       // Old blocked Smart guard cannot be cleared by a current Always config.
       app.state.put(taskId, 'clipboard', { status: 'blocked_by_clipboard_change', smartGuard: true, attempts: 1 });
       const before = cb.writes; await app.retryDelivery(taskId); assert.equal(cb.writes, before);
