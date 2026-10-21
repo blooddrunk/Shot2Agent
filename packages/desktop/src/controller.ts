@@ -36,8 +36,10 @@ export type GatewayVisionTest = (gateway: GatewayConfig, token: string) => Promi
 function profileKey(id: string, version: string) { return `${id}:${version}`; }
 function validateWorkspace(path: string): string {
   requireValue(typeof path === 'string' && path.length <= 2048 && !path.startsWith('\\\\') && !path.startsWith('//'), 'UNAPPROVED_WORKSPACE');
-  const actual = realpathSync(path);
-  requireValue(actual === path && lstatSync(actual).isDirectory() && !lstatSync(actual).isSymbolicLink(), 'UNAPPROVED_WORKSPACE');
+  let actual: string; let info;
+  try { actual = realpathSync(path); info = lstatSync(actual); }
+  catch { throw new Error('WORKSPACE_PATH_UNAVAILABLE'); }
+  requireValue(actual === path && info.isDirectory() && !info.isSymbolicLink(), 'UNAPPROVED_WORKSPACE');
   return actual;
 }
 /** The exact allowlisted interface used by Tauri and the process E2E tests. */
@@ -136,7 +138,10 @@ export class DesktopController {
     const reuseExisting = request.reuseExisting === true;
     requireValue(!reuseExisting || (!!editing && (editing.provider === provider || (editing.provider !== 'codex' && provider !== 'codex'))), 'PROFILE_NOT_FOUND');
     const requestedWorkspace = String(request.workspace ?? '');
-    if (requestedWorkspace === this.workspaceSuggestion() && !existsSync(requestedWorkspace)) mkdirSync(requestedWorkspace, { recursive: true });
+    if (requestedWorkspace === this.workspaceSuggestion() && !existsSync(requestedWorkspace)) {
+      try { mkdirSync(requestedWorkspace, { recursive: true }); }
+      catch { throw new Error('WORKSPACE_CREATE_FAILED'); }
+    }
     const workspace = validateWorkspace(requestedWorkspace);
     requireValue(reuseExisting || (typeof request.path === 'string' && request.path.length <= 2048), 'CLI_PATH_REQUIRED');
     const candidate = reuseExisting
@@ -154,6 +159,7 @@ export class DesktopController {
     let credentialRef: string | undefined;
     let credentialSaved = false;
     let syntheticTestPassed = false;
+    let operationStage = 'PROFILE_SETTINGS_SAVE_FAILED';
     try {
       if (provider === 'claude-compatible-endpoint') {
         requireValue(['2.1.305 (Claude Code)', '2.1.306 (Claude Code)'].includes(candidate.version), 'GATEWAY_CLI_NOT_QUALIFIED');
@@ -166,21 +172,24 @@ export class DesktopController {
         const tokenInput = typeof request.token === 'string' ? request.token.trim() : '';
         credentialRef = tokenInput ? `Shot2Agent-Gateway-${randomUUID()}` : existingGateway?.credentialRef;
         requireValue(credentialRef, 'GATEWAY_TOKEN_REQUIRED');
-        const token = tokenInput || await this.credentials.read(credentialRef);
+        operationStage = 'GATEWAY_CREDENTIAL_STORE_FAILED';
+        let token: string;
+        if (tokenInput) {
+          // Verify the local secure store before making the potentially billable request.
+          await this.credentials.save(credentialRef, tokenInput);
+          credentialSaved = true;
+          token = await this.credentials.read(credentialRef);
+          requireValue(token === tokenInput, 'GATEWAY_CREDENTIAL_VERIFY_FAILED');
+        } else token = await this.credentials.read(credentialRef);
         const gateway: GatewayConfig = { kind: 'claude-compatible-endpoint', baseUrl: endpoint, model,
           models: { sonnet: model, opus: model, haiku: model }, credentialRef, vision: 'not-verified' };
         validateGateway(gateway);
+        operationStage = 'GATEWAY_SYNTHETIC_TEST_FAILED';
         await this.testGateway(gateway, token);
         syntheticTestPassed = true;
         // The operator explicitly confirms the potentially billable synthetic image test in the GUI.
         // Persist that exact result; do not label it as a general or CLI qualification.
         gateway.vision = 'synthetic-test-passed';
-        if (tokenInput) {
-          await this.credentials.save(credentialRef, tokenInput);
-          credentialSaved = true;
-          const saved = await this.credentials.read(credentialRef);
-          requireValue(saved === tokenInput, 'GATEWAY_CREDENTIAL_VERIFY_FAILED');
-        }
         const policy: ClaudePolicy = { ...common, gateway,
           ...(['2.1.305 (Claude Code)', '2.1.306 (Claude Code)'].includes(candidate.version) ? { imageProtocol: 'windows-jsonl-v1' } : {}) };
         claudeProfile(policy);
@@ -202,6 +211,7 @@ export class DesktopController {
       const registry = executionRegistry(profiles);
       // Fresh installs preselect Always, but leave capture disabled and require consent before writing.
       validate(next, true);
+      operationStage = 'PROFILE_SETTINGS_SAVE_FAILED';
       saveSettings(this.root, next);
       this.settings = next; this.app.setRegistry(registry, id, version);
       if (credentialRef) {
@@ -212,7 +222,8 @@ export class DesktopController {
       return { provider, id, version, gateway: syntheticTestPassed ? 'synthetic_test_passed' : undefined };
     } catch (error) {
       if (credentialSaved && credentialRef) await this.credentials.delete(credentialRef).catch(() => {});
-      throw error;
+      if (error instanceof Error && /^[A-Z0-9_]+$/.test(error.message)) throw error;
+      throw new Error(operationStage, { cause: error });
     }
   }
   private async removeProfiles(keys: readonly string[]) {

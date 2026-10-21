@@ -20,6 +20,20 @@ const providerText: Record<string, string> = { fake: 'Fake · 合成测试', cod
 const modeText: Record<string, string> = { codex: 'Local', staging: 'Fake 验收', legacy: '旧 Local 历史' };
 const cliStatusText: Record<string, string> = { not_found: '未安装', invalid: '路径无效', unsupported: '功能不兼容', version_changed: '版本或文件已变化', unverified_auth: '已发现', scan_incomplete: '检测未完成' };
 const statusText: Record<string, string> = { monitoring: '正在监听新图片', paused: '捕获已暂停', capture_off: '捕获已关闭', setup_required: '先选择或配置一个 Agent', worker_error: 'Worker 已停止 · 请检查后重启', capture_error: '剪贴板读取暂停 · 可重新连接' };
+const errorText: Record<string, string> = {
+  LOCAL_OPERATION_FAILED: '本地操作未完成。若刚确认了 GLM 合成图片测试，请先不要重复提交，以免重复请求。',
+  WORKSPACE_PATH_UNAVAILABLE: '所选工作区不存在或无法访问，请用“选择文件夹…”选一个本机上可访问的文件夹。',
+  WORKSPACE_CREATE_FAILED: '无法创建默认工作区，请改选一个有权限访问的本机文件夹。',
+  GATEWAY_CREDENTIAL_STORE_FAILED: 'Windows 凭据管理器未能保存或读回 Token；尚未发送 GLM 测试请求。',
+  GATEWAY_SECURE_STORE_OPERATION_FAILED: 'Windows 凭据管理器操作失败；Agent 配置未保存。',
+  GATEWAY_CREDENTIAL_VERIFY_FAILED: 'Token 保存后无法从 Windows 凭据管理器读回；Agent 配置未保存。',
+  GATEWAY_AUTH_FAILED: 'GLM 拒绝了这个 Token，请检查后在此窗口重新输入。',
+  GATEWAY_ENDPOINT_FAILED: 'GLM 端点或模型返回错误，请检查所选地区和模型名称。',
+  GATEWAY_REQUEST_FAILED: '无法完成 GLM 请求。若刚确认测试，请先不要连续重试；服务端可能已经收到请求。',
+  GATEWAY_SYNTHETIC_VISION_FAILED: 'GLM 未能识别测试图片中的标记；请检查模型是否支持图片输入。',
+  GATEWAY_SYNTHETIC_TEST_FAILED: 'GLM 合成图片测试未完成。若刚确认测试，请先不要重复提交；服务端可能已经收到请求。',
+  PROFILE_SETTINGS_SAVE_FAILED: 'Agent 配置无法保存到本机设置。请确认应用数据目录可写。',
+};
 const data = ref<Snapshot>(); const transportError = ref(''); const error = ref(''); const message = ref(''); const busy = ref(false);
 const enabled = ref(false); const mode = ref('confirm'); const clipboard = ref('always'); const save = ref(false); const directory = ref('');
 const maxRetries = ref(0); const backoffMs = ref(100); const budgetMs = ref(3000); const autoConsent = ref(false); const alwaysConsent = ref(false); const dirty = ref(false);
@@ -81,7 +95,10 @@ async function action(command: string, args: Record<string, unknown> = {}) {
     if (command === 'copy') message.value = '已复制结果，可以粘贴。';
     if (command === 'discard') message.value = '已丢弃预览，没有创建任务。';
     if (command === 'submit' || command === 'current') message.value = data.value?.captureStatus === 'duplicate' ? '5 秒内的相同图片已忽略。' : data.value?.captureStatus === 'no_image' ? '当前剪贴板没有图片。' : '图片已提交到本地队列。';
-  } catch (e) { error.value = String(e); }
+  } catch (e) {
+    const code = e instanceof Error ? e.message : String(e);
+    error.value = errorText[code] ? `${code}：${errorText[code]}` : code;
+  }
   finally { busy.value = false; }
 }
 async function pickExecutable() {

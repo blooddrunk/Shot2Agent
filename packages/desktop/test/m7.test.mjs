@@ -89,7 +89,9 @@ test('Gateway GUI setup keeps wrong Token out of disk, supports correction, and 
       prompt: 'Explain the screenshot.', endpoint: 'https://open.bigmodel.cn/api/anthropic', model: 'glm-5.3-flash', enableAfterTest: true };
     await assert.rejects(desktop.dispatch({ v: 1, command: 'create-profile', ...fields, token: 'wrong-token-123' }), /GATEWAY_AUTH_FAILED/);
     assert.equal(credentials.values.size, 0); assert.equal(desktop.settings.agents, undefined);
+    assert.equal(credentials.deleted.length, 1, 'failed authentication removes its temporary Credential Manager entry');
     assert.equal(readFileSync(join(dir, 'settings.json'), 'utf8').includes('wrong-token-123'), false);
+    credentials.deleted.length = 0;
 
     await desktop.dispatch({ v: 1, command: 'create-profile', ...fields, token: 'valid-token-123' });
     let snapshot = await desktop.dispatch({ v: 1, command: 'snapshot' });
@@ -112,6 +114,21 @@ test('Gateway GUI setup keeps wrong Token out of disk, supports correction, and 
     assert.deepEqual(credentials.deleted, [firstRef]);
     assert.equal(credentials.values.get(secondRef), 'valid-token-123');
     assert.equal(requests.length, 3); // Fake transport only; no model request was made by this test.
+  } finally { await desktop.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('Gateway credential-store refusal happens before the potentially billable synthetic test', async () => {
+  const dir = root(); const workspace = join(dir, 'workspace'); mkdirSync(workspace); const executable = makeCli(dir, 'claude');
+  let tests = 0;
+  const credentials = { async save() { throw new Error('GATEWAY_SECURE_STORE_OPERATION_FAILED'); }, async read() { throw new Error('GATEWAY_CREDENTIAL_UNAVAILABLE'); }, async delete() {} };
+  const desktop = makeDesktop(dir, { credentials, testGateway: async () => { tests++; return { status: 'synthetic_image_passed', requestsSent: 1, model: 'glm-5.3-flash' }; } });
+  try {
+    await desktop.start();
+    await assert.rejects(desktop.dispatch({ v: 1, command: 'create-profile', provider: 'claude-compatible-endpoint', id: 'glm-personal', path: executable,
+      workspace: realpathSync(workspace), prompt: 'Explain the screenshot.', endpoint: 'https://open.bigmodel.cn/api/anthropic', model: 'glm-5.3-flash',
+      token: 'valid-token-123', enableAfterTest: true }), /GATEWAY_SECURE_STORE_OPERATION_FAILED/);
+    assert.equal(tests, 0);
+    assert.equal(desktop.settings.agents, undefined);
   } finally { await desktop.close(); rmSync(dir, { recursive: true, force: true }); }
 });
 

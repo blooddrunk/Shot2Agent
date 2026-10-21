@@ -31,7 +31,10 @@ export function credentialCommand(action: 'add' | 'read' | 'delete', reference: 
   requireValue(process.platform === 'win32', 'WINDOWS_SECURE_STORE_REQUIRED');
   requireValue(/^Shot2Agent-Gateway-[0-9a-f-]{36}$/.test(reference), 'INVALID_CREDENTIAL_REF');
   return { executable: join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
-    args: ['-NoProfile', '-File', credentialScript, '-Action', action, '-Reference', reference],
+    // This is a fixed, app-bundled helper. Downloaded ZIPs carry Mark-of-the-Web,
+    // so RemoteSigned would otherwise refuse it for some Windows users. Scope the
+    // override to this child process; never change the user's machine policy.
+    args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', credentialScript, '-Action', action, '-Reference', reference],
     // This fixed OS helper needs the normal Windows host environment (as does the
     // fixed policy helper). Provider credentials never enter it; model processes
     // independently keep their strict environment allowlist.
