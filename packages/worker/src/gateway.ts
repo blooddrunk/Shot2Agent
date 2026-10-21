@@ -20,8 +20,10 @@ export function validateGateway(g: GatewayConfig): void {
 }
 export function assertGatewayVision(g: GatewayConfig): void {
   validateGateway(g);
-  // Coding-plan defaults can be text only. Do not use MCP/tools as a vision substitute.
-  requireValue([g.model, ...Object.values(g.models)].every(v => /^glm-4\.6v(?:-flashx|-flash)?$/i.test(v)), 'GATEWAY_MODEL_VISION_UNSUPPORTED');
+  // Explicit documented image-capable models only; endpoint qualification remains separate.
+  // https://docs.bigmodel.cn/cn/guide/models/vlm/glm-5.3-flash
+  // Do not use MCP/tools as a vision substitute.
+  requireValue([g.model, ...Object.values(g.models)].every(v => /^(?:glm-4\.6v(?:-flashx|-flash)?|glm-5\.3-flash)$/i.test(v)), 'GATEWAY_MODEL_VISION_UNSUPPORTED');
   requireValue(g.vision === 'operator-attested', 'GATEWAY_VISION_NOT_VERIFIED');
 }
 export const credentialScript = fileURLToPath(new URL('./gateway-credential.ps1', import.meta.url));

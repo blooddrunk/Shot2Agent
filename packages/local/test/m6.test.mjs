@@ -14,16 +14,25 @@ import { programDigest } from '../../worker/src/discovery.ts';
 import { executionRegistry } from '../../worker/src/registry.ts';
 import { sha256 } from '../../core/src/blobs.ts';
 const temp = () => realpathSync(mkdtempSync(join(tmpdir(), 'shot-m6-gateway-')));
-const gateway = () => ({ kind: 'claude-compatible-endpoint', baseUrl: 'https://open.bigmodel.cn/api/anthropic', model: 'glm-4.6v', models: { opus: 'glm-4.6v', sonnet: 'glm-4.6v', haiku: 'glm-4.6v' }, credentialRef: `Shot2Agent-Gateway-${randomUUID()}`, vision: 'not-verified' });
+const gateway = () => ({ kind: 'claude-compatible-endpoint', baseUrl: 'https://open.bigmodel.cn/api/anthropic', model: 'glm-5.3-flash', models: { opus: 'glm-5.3-flash', sonnet: 'glm-5.3-flash', haiku: 'glm-5.3-flash' }, credentialRef: `Shot2Agent-Gateway-${randomUUID()}`, vision: 'not-verified' });
 const program = { executable: process.execPath, args: [fileURLToPath(new URL('./mock-gateway-cli.mjs', import.meta.url))] };
 const policyFor = workspace => ({ id: 'claude-gateway-readonly', version: 'v1', workspace, program, cliVersion: '2.1.305 (Claude Code)', digest: programDigest(program), timeoutMs: 15000, prompt: 'Synthetic only', imageProtocol: 'windows-jsonl-v1', gateway: gateway() });
 test('gateway endpoints, mapping, credential reference and vision refuse unsafe configurations', () => {
   const base = gateway(); validateGateway(base);
   for (const baseUrl of ['http://open.bigmodel.cn/api/anthropic', 'https://token@open.bigmodel.cn/api/anthropic', 'https://open.bigmodel.cn/api/anthropic?token=private', 'https://evil.invalid', 'https://open.bigmodel.cn:443/api/anthropic', 'https://127.0.0.1/api/anthropic']) assert.throws(() => validateGateway({ ...base, baseUrl }));
-  for (const override of [{ credentialRef: 'plaintext-token' }, { model: '../bad' }, { models: { sonnet: 'glm-4.6v' } }, { token: 'synthetic' }]) assert.throws(() => validateGateway({ ...base, ...override }));
+  for (const override of [{ credentialRef: 'plaintext-token' }, { model: '../bad' }, { models: { sonnet: 'glm-5.3-flash' } }, { token: 'synthetic' }]) assert.throws(() => validateGateway({ ...base, ...override }));
   assert.throws(() => assertGatewayVision(base), /GATEWAY_VISION_NOT_VERIFIED/);
   assert.throws(() => assertGatewayVision({ ...base, model: 'glm-4.6', vision: 'operator-attested' }), /VISION_UNSUPPORTED/);
   if (process.platform !== 'win32') assert.throws(() => credentialCommand('read', base.credentialRef), /WINDOWS_SECURE_STORE_REQUIRED/);
+});
+test('GLM 5.3 Flash is image-capable but still requires separate vision qualification', () => {
+  const base = { ...gateway(), model: 'glm-5.3-flash', models: { opus: 'glm-5.3-flash', sonnet: 'glm-5.3-flash', haiku: 'glm-5.3-flash' } };
+  assert.throws(() => assertGatewayVision(base), /GATEWAY_VISION_NOT_VERIFIED/);
+  assert.doesNotThrow(() => assertGatewayVision({ ...base, vision: 'operator-attested' }));
+  for (const alias of ['opus', 'sonnet', 'haiku']) {
+    assert.throws(() => assertGatewayVision({ ...base, vision: 'operator-attested', models: { ...base.models, [alias]: 'glm-5' } }), /GATEWAY_MODEL_VISION_UNSUPPORTED/);
+  }
+  assert.throws(() => assertGatewayVision({ ...base, vision: 'operator-attested', model: 'glm-5.3-flash-unknown' }), /GATEWAY_MODEL_VISION_UNSUPPORTED/);
 });
 test('gateway setup never invokes CLI/model until vision is qualified; provenance remains gateway', async () => {
   const root = temp(); const policy = policyFor(root); const registry = executionRegistry([{ provider: 'claude-compatible-endpoint', policy }]);
@@ -70,7 +79,7 @@ for (const mode of ['success', 'auth', 'echo-secret', 'malformed', 'credential-m
       assert.equal(request.authorization, `Bearer ${secret}`); assert.equal(request.model, policy.gateway.model);
       assert.equal(request.evidence.endpoint, policy.gateway.baseUrl);
       assert.equal(request.evidence.homeIsolated, true); assert.equal(request.evidence.apiKeyAbsent, true); assert.equal(request.evidence.oauthAbsent, true); assert.equal(request.evidence.proxyAbsent, true);
-      assert.deepEqual(request.evidence.models, ['glm-4.6v', 'glm-4.6v', 'glm-4.6v']);
+      assert.deepEqual(request.evidence.models, ['glm-5.3-flash', 'glm-5.3-flash', 'glm-5.3-flash']);
       assert.ok(request.evidence.args.includes('--restricted')); assert.ok(request.evidence.args.includes('--safe-mode'));
       assert.equal(request.evidence.args[request.evidence.args.indexOf('--tools') + 1], '');
       assert.ok(request.evidence.args.includes('--strict-mcp-config')); assert.equal(request.evidence.args.includes('--bare'), false);

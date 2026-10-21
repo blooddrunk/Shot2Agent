@@ -36,7 +36,7 @@ Local WSL `cargo check` was attempted and blocked by missing system development 
 
 No operator credential/root/history/screenshot/task was modified; all probes use synthetic data/disposable config. No real paid model request, failover, permission bypass, tools, Hooks or MCP added. Gateway uses a separate approved Profile, credential lookup and empty child home, preserves machine/remote-policy refusal, and never inherits personal subscription auth. The two accepted HTTPS endpoint configurations rely on the pinned native CLI's TLS/network implementation; the live endpoint redirect behavior has not been qualified here. Default vision remains `not-verified` and refuses. `--attest-vision` is an explicit stopped-Worker operator assertion requiring external evidence; it is never automatic proof or task-controlled permission.
 
-M6 hidden-window hotkey events, current foreground focus, actual paste, tray UX and true GLM OCR: NOT VERIFIED. Follow [short executable Windows steps](M6_WINDOWS_ACCEPTANCE.md). Missing cost consent is not a test failure or vision PASS. M3 operator reports and unresolved Smart conflicts retain their original scope; no input-method fix is claimed. No M6 merged-main success unless merged and independently checked later.
+M6 global-action acceptance steps 1–6 are operator-reported PASS; see the scoped record below. True GLM OCR and Gateway live authentication remain NOT VERIFIED. Follow [short executable Windows steps](M6_WINDOWS_ACCEPTANCE.md). Missing cost consent is not a test failure or vision PASS. M3 operator reports and unresolved Smart conflicts retain their original scope; no input-method fix is claimed. No M6 merged-main success unless merged and independently checked later.
 
 ## Evidence-driven Windows stabilization
 
@@ -57,3 +57,28 @@ The early preflight at `5c8a6d1` identified `PIPE_CONVERT / CommandNotFoundExcep
 Pinning the helper module path alone (`fcf9a98`) removed the prior explicit cmdlet error but hit the existing startup deadline in hosted CI, so it was not counted as a pass. The final helper environment retains the full standard Windows startup variables (including ComSpec/SystemDrive/architecture) while excluding unrelated credential variables and caller module paths. Private-pipe input now constructs a .NET SecureString character-by-character with an ASCII/length bound, eliminating both ConvertTo-SecureString autoload and the temporary full plaintext StringBuilder. The production masked prompt and native CredWrite/Read/Delete behavior remain unchanged; no timeout or permission limit is widened.
 
 The restricted helper-environment attempt at `8c99abd` also exceeded the unchanged hosted startup deadline. The final fixed OS helper therefore preserves the normal Windows host environment, matching the existing fixed native policy-helper exception, while excluding provider credential variables and Node injection variables. It no longer overrides PowerShell module discovery; pipe mode no longer needs the Security cmdlet at all. This exception applies only to the fixed credential script with validated actions/reference. Claude model children still get their independent strict environment allowlist and empty home. The unsuccessful restricted-environment attempts are not accepted as release evidence; the final native lifecycle and complete matrix must pass.
+
+## 操作人员验收反馈 — 2026-10-21
+
+操作人员按 [M6 Windows 中文验收步骤](M6_WINDOWS_ACCEPTANCE.md)中“使用 Fake 验收全局操作”的编号反馈：1、2、3、4、5、6 均为 **PASS（操作人员报告）**。这为对应的 Windows 交互行为补充人工观察证据，不作为开发代理独立复测或新增 CI 证据。
+
+| 步骤 | 验收范围 | 反馈 |
+| --- | --- | --- |
+| 1 | 全局快捷键配置、注册及单独启停 | PASS |
+| 2 | 隐藏到托盘后复制最新成功结果、实际粘贴及前台焦点保持 | PASS |
+| 3 | 暂停/恢复捕获及旧剪贴板图片不重新触发 | PASS |
+| 4 | 仅重试符合条件的失败投递，不再次调用 Agent | PASS |
+| 5 | 配置跨重启保留及退出后解除快捷键注册 | PASS |
+| 6 | 无效或冲突快捷键拒绝，并保留原配置 | PASS |
+
+反馈未另列具体测试环境、程序包 SHA、操作日志或各步骤中可选分支的执行情况，因此不额外推断可选的显式提交、多个已批准 Agent 的循环切换、实际系统冲突占用及特定故障注入分支均已单独观察。步骤整体 PASS 按原反馈记录。
+
+本次反馈仅覆盖上述编号步骤，不包含后续 Gateway 凭据配置、原生传输探测或真实模型验收。真实端点认证、非交互式真实请求、真实图片传输、目标模型视觉能力及合成截图文字识别仍为 **NOT VERIFIED（未验证）**；未获得真实付费模型调用授权。现有 Smart 冲突仍未解决。PR 合并后 main 的独立验证也不能由本次操作人员反馈替代。
+
+## GLM-5.3-Flash model classification correction
+
+The operator configured `glm-5.3-flash` and reported `GATEWAY_MODEL_VISION_UNSUPPORTED`. The local guard only recognized GLM-4.6V variants. [Official GLM-5.3-Flash documentation](https://docs.bigmodel.cn/cn/guide/models/vlm/glm-5.3-flash) explicitly lists image input; the guard now also recognizes the exact `glm-5.3-flash` ID. All three aliases remain individually checked; unknown names still refuse. This is model classification, not endpoint qualification. A `not-verified` Profile continues to refuse with `GATEWAY_VISION_NOT_VERIFIED`; no credential access, real request or operator attestation was performed by this correction. Existing distributed packages do not contain the source correction until rebuilt.
+
+Correction verification: `corepack pnpm install --frozen-lockfile`, full local `npm run check` and `git diff --check` passed. Node tests: 168 total, 152 PASS, 16 native SKIP, 0 FAIL; lint, TS/Vue checks, build/UI and compiled Fake smoke passed. No new Windows CI/package or live endpoint/model evidence is claimed for this uncommitted correction.
+
+Delivery follow-up: acceptance examples, automated Gateway image fixtures and the native-to-Mock probe now target `glm-5.3-flash`. The probe also accepts an explicit model argument and reports the selected model; normal Gateway Profiles already accept explicit model and individual alias parameters. Existing GLM-4.6V compatibility remains for existing Profiles without changing their bindings. The revised targeted Gateway tests passed 10/10; fresh hosted matrix/package checks are required for this delivery.
