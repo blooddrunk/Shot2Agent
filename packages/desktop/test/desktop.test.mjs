@@ -2,7 +2,7 @@ import test from 'node:test';
 import { PassThrough } from 'node:stream';
 import { waitForParent } from '../src/protocol.ts';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, readdirSync, mkdirSync, realpathSync, appendFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, readdirSync, mkdirSync, realpathSync, appendFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -145,4 +145,51 @@ test('desktop fixture ignores an incomplete appended event until its newline is 
   assert.equal((await h.rpc('snapshot')).pending, null);
   appendFileSync(fixture, event.slice(middle) + '\n');
   await h.until(s => !!s.pending); assert.equal((await h.rpc('snapshot')).total, 0); await h.close();
+});
+
+
+test('formal Codex entry refuses absent/Fake settings without silently creating or converting history', () => {
+  const root = temp();
+  const cb = { session: 'synthetic', async sequence() { return '1'; }, async readImage() {}, async writeText() { return true; }, close() {} };
+  assert.throws(() => new DesktopController(root, cb, undefined, 'codex'), /CODEX_SETUP_REQUIRED/);
+  assert.equal(existsSync(join(root, 'settings.json')), false);
+  saveSettings(root, defaults());
+  const before = readFileSync(join(root, 'settings.json'), 'utf8');
+  assert.throws(() => new DesktopController(root, cb, undefined, 'codex'), /CODEX_PROFILE_REQUIRED/);
+  assert.equal(readFileSync(join(root, 'settings.json'), 'utf8'), before);
+  const injected = { adapter: new FakeAgent(), profile: FAKE_PROFILE };
+  assert.throws(() => new DesktopController(root, cb, injected, 'codex'), /CODEX_PROFILE_REQUIRED/);
+});
+
+test('legacy and acceptance entries expose explicit mode with separate durable roots', async () => {
+  const cb = { session: 'synthetic', async sequence() { return '1'; }, async readImage() {}, async writeText() { return true; }, close() {} };
+  const legacy = new DesktopController(temp(), cb);
+  const acceptance = new DesktopController(temp(), cb, { adapter: new FakeAgent(), profile: FAKE_PROFILE }, 'staging');
+  try {
+    const old = await legacy.dispatch({ v: 1, command: 'snapshot' });
+    const stage = await acceptance.dispatch({ v: 1, command: 'snapshot' });
+    assert.equal(old.launchMode, 'legacy'); assert.equal(stage.launchMode, 'staging');
+    assert.equal(stage.profile.adapter, 'fake'); assert.notEqual(old.root, stage.root);
+    assert.equal(old.total, 0); assert.equal(stage.total, 0);
+  } finally { await legacy.close(); await acceptance.close(); }
+});
+
+
+test('formal mode selects the approved Codex adapter and acceptance refuses it', async () => {
+  const root = temp(); const settings = defaults(); settings.adapter = 'codex';
+  settings.codex = { id: 'synthetic-codex', version: '1', workspace: realpathSync(root),
+    program: { executable: process.execPath, args: [fileURLToPath(new URL('../../local/test/mock-codex.mjs', import.meta.url))] },
+    cliVersion: 'codex-cli 0.0.0', timeoutMs: 5000, prompt: 'Synthetic fixture only' };
+  saveSettings(root, settings);
+  const before = readFileSync(join(root, 'settings.json'), 'utf8');
+  const cb = { session: 'synthetic', async sequence() { return '1'; }, async readImage() {}, async writeText() { return true; }, close() {} };
+  assert.throws(() => new DesktopController(root, cb, undefined, 'staging'), /FAKE_ACCEPTANCE_PROFILE_REQUIRED/);
+  const desktop = new DesktopController(root, cb, undefined, 'codex');
+  try {
+    const s = await desktop.dispatch({ v: 1, command: 'snapshot' });
+    assert.equal(s.launchMode, 'codex'); assert.equal(s.profile.adapter, 'codex'); assert.equal(s.profile.sandbox, 'read-only');
+    assert.equal(s.profile.id, settings.codex.id); assert.equal(s.profile.version, settings.codex.cliVersion);
+    assert.equal(readFileSync(join(root, 'settings.json'), 'utf8'), before);
+    await assert.rejects(desktop.dispatch({ v: 1, command: 'snapshot', adapter: 'fake' }), /COMMAND_REFUSED/);
+  } finally { await desktop.close(); }
 });

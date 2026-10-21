@@ -14,7 +14,9 @@ process.stderr.write('PHASE_COORDINATOR_INIT\n');
 let desktop: DesktopController | undefined;
 try {
   const fake = new FakeAgent();
-  const staging = process.argv[3] === '--staging';
+  const mode = process.argv[3];
+  if (!['--codex', '--legacy', '--staging'].includes(mode)) throw new Error('INVALID_LAUNCH_MODE');
+  const staging = mode === '--staging';
   desktop = new DesktopController(root, new WindowsClipboard(), staging ? {
     profile: { ...FAKE_PROFILE, timeoutMs: 30_000 },
     adapter: { name: 'fake', version: 'm3-staging', async execute(task, profile, images, signal) {
@@ -22,7 +24,7 @@ try {
       if (signal.aborted) return { status: 'execution_unknown', summary: 'Staging execution interrupted', contentMarkdown: '', artifacts: [], errorCode: 'STAGING_STOPPED' };
       return fake.execute(task, profile, images, signal);
     } },
-  } : undefined);
+  } : undefined, staging ? 'staging' : mode === '--codex' ? 'codex' : 'legacy');
   process.stderr.write('PHASE_CLIPBOARD_START\n');
   await desktop.start();
   process.stderr.write('PHASE_SERVING\n');

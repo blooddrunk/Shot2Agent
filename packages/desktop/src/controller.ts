@@ -1,4 +1,6 @@
 import sharp from 'sharp';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import type { AgentAdapter, Profile } from '../../contracts/src/index.ts';
 import { requireValue } from '../../core/src/model.ts';
 import { LocalApp } from '../../local/src/app.ts';
@@ -10,12 +12,17 @@ import type { Settings } from './settings.ts';
 export function safeError(error: unknown): string { return error instanceof Error && /^[A-Z0-9_]+$/.test(error.message) ? error.message : 'LOCAL_OPERATION_FAILED'; }
 /** The exact allowlisted interface used by Tauri and the process E2E tests. */
 export class DesktopController {
+  readonly launchMode: 'codex' | 'staging' | 'legacy';
   readonly root: string; readonly app: LocalApp; settings: Settings;
   private controller = new AbortController(); private worker?: Promise<unknown>;
   private closed = false; private armed = false; private workerError?: string; private captureError?: string;
   private preview?: string; private previewImage?: object;
-  constructor(root: string, clipboard: ClipboardPort, injected?: { adapter: AgentAdapter; profile: Profile }) {
+  constructor(root: string, clipboard: ClipboardPort, injected?: { adapter: AgentAdapter; profile: Profile }, launchMode: 'codex' | 'staging' | 'legacy' = 'legacy') {
+    this.launchMode = launchMode;
+    requireValue(launchMode !== 'codex' || existsSync(join(root, 'settings.json')), 'CODEX_SETUP_REQUIRED');
     this.root = root; this.settings = loadSettings(root);
+    requireValue(launchMode !== 'codex' || (this.settings.adapter === 'codex' && !injected), 'CODEX_PROFILE_REQUIRED');
+    requireValue(launchMode !== 'staging' || this.settings.adapter === 'fake', 'FAKE_ACCEPTANCE_PROFILE_REQUIRED');
     const policy = this.settings.codex;
     requireValue(this.settings.adapter !== 'codex' || policy, 'MISSING_CODEX_POLICY');
     this.app = new LocalApp(root, injected?.adapter ?? (this.settings.adapter === 'codex' ? new CodexAgent([policy!]) : new FakeAgent()),
@@ -91,7 +98,7 @@ export class DesktopController {
       this.preview = image ? `data:image/png;base64,${(await sharp(image.bytes).resize({ width: 420, height: 220, fit: 'inside', withoutEnlargement: true }).png().toBuffer()).toString('base64')}` : undefined;
     }
     const tasks = this.app.list();
-    return { settings: this.settings.desktop, delivery: this.settings.delivery, root: this.root,
+    return { settings: this.settings.desktop, delivery: this.settings.delivery, root: this.root, launchMode: this.launchMode,
       profile: { adapter: this.settings.adapter, id: this.app.profile.id, workspace: this.settings.codex?.workspace, version: this.settings.codex?.cliVersion, sandbox: 'read-only' },
       status: this.workerError ? 'worker_error' : this.captureError ? 'capture_error' : this.settings.desktop.paused ? 'paused' : !this.settings.desktop.enabled ? 'capture_off' : 'monitoring',
       error: this.workerError ?? this.captureError, pending: this.preview ?? null, captureStatus: this.app.lastCaptureStatus,

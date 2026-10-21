@@ -1,10 +1,11 @@
-# Windows Local desktop 0.4.0
+# Windows Local desktop 0.4.1
 
 Portable developer build, Windows 11 x64, logged-in non-elevated session. WebView2 must be installed (included with normal Windows 11). No WSL, Node install, VPS or Relay needed. Keep the whole extracted folder together; the executable needs its adjacent `runtime` directory.
 
 ## Start and stop
 
-- Double-click `Shot2Agent.exe` for the existing `%LOCALAPPDATA%\Shot2Agent` data root. Existing M2 SQLite/history and approved profile are reused.
+- Double-click `Shot2Agent.exe` or `Start Codex.cmd` for **real Codex** using the existing approved `%LOCALAPPDATA%\Shot2Agent-Codex` profile/history. Missing or Fake configuration fails closed (`CODEX_SETUP_REQUIRED` / `CODEX_PROFILE_REQUIRED`); it never creates a Fake profile. Codex needs an installed, authenticated Windows CLI and may incur model charges.
+- `Start legacy Local.cmd` opens the original `%LOCALAPPDATA%\Shot2Agent` root and its old history/profile. No settings, queued tasks or history are copied between roots. Each window/title identifies its mode; quit any older instance using the same root before reopening.
 - For isolated synthetic acceptance, double-click `Start acceptance.cmd`. Data root is `%LOCALAPPDATA%\Shot2Agent-M3-Acceptance`; the worker is a deterministic Fake with an **8-second delay**. Never use this test root for Codex configuration.
 - Closing the window or clicking **隐藏到托盘** hides it. Tray menu **Show Shot2Agent** opens it; **Pause capture / Resume capture** change capture only; **Quit Shot2Agent** stops the coordinator and active Agent. UI **退出** also quits. Pausing leaves queued work running.
 - First run defaults: source off, confirmation, manual clipboard, no file save. Enable **监听剪贴板中的新图片**, choose settings and click **应用设置**. Automatic capture needs **自动提交** plus explicit cloud consent. Settings survive intentional restart; startup only arms against *future* changes, never submits the existing clipboard.
@@ -21,11 +22,21 @@ The UI shows the active adapter, approved read-only workspace and pinned CLI ver
 For a new Codex root, initialize once from PowerShell in the extracted `runtime` directory, using your installed Windows Codex `.exe` or npm `.cmd`, authenticated beforehand:
 
 ```powershell
-.\node.exe .\dist\apps\cli\src\mvp.js init --root "$env:LOCALAPPDATA\Shot2Agent" --adapter codex --workspace "D:\ApprovedWorkspace" --codex "C:\absolute\path\to\codex.exe" --clipboard manual
-.\node.exe .\dist\apps\cli\src\mvp.js doctor --root "$env:LOCALAPPDATA\Shot2Agent"
+.\node.exe .\dist\apps\cli\src\mvp.js init --root "$env:LOCALAPPDATA\Shot2Agent-Codex" --adapter codex --workspace "D:\ApprovedWorkspace" --codex "C:\absolute\path\to\codex.exe" --clipboard manual
+.\node.exe .\dist\apps\cli\src\mvp.js doctor --root "$env:LOCALAPPDATA\Shot2Agent-Codex"
 ```
 
-`init` refuses an existing settings file. Existing Fake roots can be changed by editing only the local operator-owned adapter/Codex policy in settings while stopped, following `LOCAL_MVP_USAGE.md`; back up settings first. No queue item is silently retargeted. The MVP provides configuration visibility rather than an execution-profile editor.
+`init` refuses an existing settings file. Keep Fake acceptance and legacy history intact. Initialize the separate Codex root once; do not change adapter or approved Profile of queued tasks. For existing approved policies see `LOCAL_MVP_USAGE.md`. No queue item is silently retargeted. The MVP provides configuration visibility rather than an execution-profile editor.
+
+## Optional real Codex verification (model charges may apply)
+
+With an already authenticated Windows Codex CLI and the approved Codex root configured, run from the portable folder:
+
+```powershell
+.\runtime\node.exe '.\Verify Codex.mjs' --allow-model-cost .
+```
+
+This performs exactly one synthetic `SHOT2AGENT 42` image task using the production desktop controller/Codex adapter and the unchanged approved read-only Profile. It prints only status, attempt count and marker presence, then removes its disposable history. It never reads/writes the Windows clipboard or processes operator tasks. Expect exit 0, `status: succeeded`, `attempts: 1`, `syntheticMarkerObserved: true`. A failure or `execution_unknown` exits 1 and is never automatically replayed. This proves current Windows authentication/model execution/image analysis through the controller, separately from the packaged EXE pipe/cleanup smoke. It does not prove screenshot capture, focus or paste in a real Codex GUI session.
 
 ## Five operator observations (synthetic data only)
 

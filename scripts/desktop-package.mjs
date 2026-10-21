@@ -28,7 +28,10 @@ function copyDependency(name, from, optional = false) {
   for (const dependency of Object.keys(meta.optionalDependencies ?? {})) copyDependency(dependency, manifest, true);
 }
 copyDependency('sharp', resolve('package.json'));
+writeFileSync(join(out, 'Start Codex.cmd'), '@echo off\r\nstart "" "%~dp0Shot2Agent.exe" --codex\r\n');
+writeFileSync(join(out, 'Start legacy Local.cmd'), '@echo off\r\nstart "" "%~dp0Shot2Agent.exe" --legacy\r\n');
 writeFileSync(join(out, 'Start acceptance.cmd'), '@echo off\r\nstart "" "%~dp0Shot2Agent.exe" --staging\r\n');
-writeFileSync(join(out, 'BUILD.txt'), `Shot2Agent M4-L 0.4.0\nCommit: ${execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()}\nNode: ${process.version}\nWindows x64 portable developer build. WebView2 required.\nDouble click Shot2Agent.exe (existing Local root) or Start acceptance.cmd (isolated root, Fake delayed 8s).\nClose hides to tray. Tray > Quit Shot2Agent stops coordinator and Agent.\n`);
+writeFileSync(join(out, 'BUILD.txt'), `Shot2Agent M4-L 0.4.1\nCommit: ${execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()}\nNode: ${process.version}\nWindows x64 portable developer build. WebView2 required.\nShot2Agent.exe / Start Codex.cmd: approved Shot2Agent-Codex root; no Fake fallback.\nStart acceptance.cmd: isolated Fake root, delayed 8s. Start legacy Local.cmd: original Shot2Agent history root.\nClose hides to tray. Tray > Quit Shot2Agent stops coordinator and Agent.\n`);
+copyFileSync('scripts/desktop-codex-verify.mjs', join(out, 'Verify Codex.mjs'));
 cpSync('docs/M3_WINDOWS_RUN.md', join(out, 'Windows instructions.md'));
 process.stdout.write(`PASS portable layout: ${out}\n`);
