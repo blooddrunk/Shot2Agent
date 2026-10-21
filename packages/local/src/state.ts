@@ -7,6 +7,7 @@ import { privateDirectory } from '../../core/src/store.ts';
 export interface Baseline { session: string; sequence: string }
 export type DeliveryStatus = 'pending' | 'succeeded' | 'failed' | 'disabled' | 'manual' | 'blocked_by_clipboard_change' | 'interrupted';
 export interface Receipt { status: DeliveryStatus; attempts: number; code?: string;
+  smartGuard?: boolean;
   classification?: 'transient' | 'permanent' | 'conflict' | 'ambiguous'; stopReason?: string;
   history?: { attempt: number; at: number; elapsedMs: number; code: string; classification: string }[] }
 export class LocalState {
@@ -54,7 +55,8 @@ export class LocalState {
     try {
       const previous = this.get(task, channel);
       if (previous && (!retry || previous.status === 'succeeded' || previous.status === 'pending')) { this.db.exec('COMMIT'); return undefined; }
-      const receipt: Receipt = { status: 'pending', attempts: (previous?.attempts ?? 0) + 1, history: previous?.history };
+      const receipt: Receipt = { status: 'pending', attempts: (previous?.attempts ?? 0) + 1, history: previous?.history,
+        smartGuard: channel === 'clipboard' && previous ? previous.smartGuard ?? !!this.baseline(task) : undefined };
       this.put(task, channel, receipt); this.db.exec('COMMIT'); return receipt;
     } catch (e) { this.db.exec('ROLLBACK'); throw e; }
   }

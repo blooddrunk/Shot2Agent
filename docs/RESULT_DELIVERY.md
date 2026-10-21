@@ -98,3 +98,5 @@ The desktop exposes extra attempts (0–10; default 0), initial backoff (10–10
 Agent rerun UI is deferred: existing preflight `failed`, launched failures and `execution_unknown` stay terminal with immutable evidence. No possibly launched Codex operation automatically reruns. Existing explicit delivery retry and Copy do not incur new model execution. A future rerun must create independent lineage, pin the approved profile and disclose possible extra model cost.
 
 WeChat Input Method synchronization is an operator-observed correlation. These diagnostics do not establish which component changed/emptied the clipboard or certify input-method compatibility. See [M4 scope](M4_LOCAL_RELIABILITY.md), [validation](M4_VALIDATION.md) and the retained [M3 observations](M3_VALIDATION.md#operator-acceptance--2026-10-21).
+
+Smart protection is sticky in each task delivery receipt: changing current settings to Always cannot bypass an original Smart guard on explicit delivery retry. Legacy failed receipts with an original baseline conservatively keep that guard. Manual **复制结果** remains the explicit overwrite action.

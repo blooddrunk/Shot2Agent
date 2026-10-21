@@ -42,3 +42,5 @@ Agent rerun UI is deferred. Preflight/aborted-before-launch `failed`, launched f
 Only phase/allowlisted error codes are diagnosed: Node launch, parent handshake, coordinator initialization, native helper startup, serving, IPC command and disconnection vs timeout. Clipboard errors distinguish contention, sequence/session refusal and possible post-clear write failure. No clipboard content, third-party attribution, exception text or Agent log is persisted. Windows Job termination is unchanged. EXE smoke now uses a unique temporary root, never the operator's acceptance/history root.
 
 See [M4 validation](M4_VALIDATION.md) for commands and current evidence. WeChat Input Method synchronization remains an observed correlation, not an established defect or universal compatibility claim.
+
+Smart protection is sticky in each task delivery receipt: changing current settings to Always cannot bypass an original Smart guard on explicit delivery retry. Legacy failed receipts with an original baseline conservatively keep that guard. Manual **复制结果** remains the explicit overwrite action.

@@ -64,6 +64,8 @@ export async function deliver(task: TaskView, config: DeliveryConfig, state: Loc
   const baseline = state.baseline(id);
   await Promise.all(['save', 'clipboard'].map(async channel => {
     const reservation = state.reserve(id, channel, retry); if (!reservation) return;
+    const smart = settings.clipboard === 'smart' || reservation.smartGuard === true;
+    if (channel === 'clipboard') reservation.smartGuard = smart;
     const started = performance.now();
     for (let attempt = 0; ; attempt++) {
       if (attempt > 0) reservation.attempts++;
@@ -76,12 +78,12 @@ export async function deliver(task: TaskView, config: DeliveryConfig, state: Loc
           if (settings.clipboard === 'off' || settings.clipboard === 'manual') {
             state.put(id, channel, { ...reservation, status: settings.clipboard === 'off' ? 'disabled' : 'manual' }); return;
           }
-          if (settings.clipboard === 'smart' && (!baseline || baseline.session !== clipboard?.session)) {
+          if (smart && (!baseline || baseline.session !== clipboard?.session)) {
             state.put(id, channel, { ...reservation, status: 'blocked_by_clipboard_change', code: 'CLIPBOARD_SESSION_CHANGED', classification: 'conflict' }); return;
           }
           requireValue(clipboard, 'CLIPBOARD_UNAVAILABLE');
           // Native helper compares under the clipboard lock on EVERY write, including retries.
-          const success = await clipboard.writeText(text, settings.clipboard === 'smart' ? baseline?.sequence : undefined, Math.max(1, policy.budgetMs - (performance.now() - started)));
+          const success = await clipboard.writeText(text, smart ? baseline?.sequence : undefined, Math.max(1, policy.budgetMs - (performance.now() - started)));
           if (!success) { state.put(id, channel, { ...reservation, status: 'blocked_by_clipboard_change', code: 'CLIPBOARD_SEQUENCE_CHANGED', classification: 'conflict' }); return; }
         }
         state.put(id, channel, { ...reservation, status: 'succeeded' }); return;

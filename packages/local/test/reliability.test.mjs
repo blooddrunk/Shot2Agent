@@ -117,3 +117,21 @@ test('save permanent refusal leaves clipboard successful, no repeated write', ()
   await deliver(t, { ...config, saveDirectory: join(dir, 'out') }, state, clip, false, () => { throw Object.assign(Error('denied'), { code: 'EACCES' }); });
   assert.equal(state.get(id, 'save').code, 'SAVE_EACCES'); assert.equal(state.get(id, 'save').attempts, 1); assert.equal(clip.written, 1);
 }));
+
+test('Smart protection remains sticky when settings change to Always before explicit delivery retry', () => scenario(async ({ state, t, id, clip }) => {
+  clip.writeText = async () => { throw Error('CLIPBOARD_BUSY'); };
+  await deliver(t, { clipboard: 'smart' }, state, clip);
+  assert.equal(state.get(id, 'clipboard').smartGuard, true);
+  clip.seq = 'newer';
+  clip.writeText = async (_text, expected) => { assert.equal(expected, '1'); if (expected !== clip.seq) return false; clip.written++; return true; };
+  await deliver(t, { clipboard: 'always' }, state, clip, true);
+  assert.equal(clip.written, 0); assert.equal(state.get(id, 'clipboard').status, 'blocked_by_clipboard_change');
+  assert.equal(state.get(id, 'clipboard').smartGuard, true);
+}));
+test('legacy failed clipboard receipts with a baseline retain conservative Smart protection', () => scenario(async ({ state, t, id, clip }) => {
+  state.put(id, 'clipboard', { status: 'failed', attempts: 1 }); clip.seq = 'newer';
+  clip.writeText = async (_text, expected) => { assert.equal(expected, '1'); return false; };
+  await deliver(t, { clipboard: 'always' }, state, clip, true);
+  assert.equal(state.get(id, 'clipboard').status, 'blocked_by_clipboard_change');
+  assert.equal(clip.written, 0);
+}));
