@@ -783,8 +783,11 @@ onUnmounted(() => clearInterval(timer));
           </p>
           <p>{{ workerText }}</p>
         </div>
-        <button @click="changeTheme(theme === 'dark' ? 'light' : 'dark')">
-          {{ theme === "dark" ? "切换为浅色主题" : "切换为深色主题" }}
+        <button
+          :aria-label="theme === 'dark' ? '切换为浅色主题' : '切换为深色主题'"
+          @click="changeTheme(theme === 'dark' ? 'light' : 'dark')"
+        >
+          {{ theme === "dark" ? "浅色主题" : "深色主题" }}
         </button>
         <button @click="nativeHide">隐藏到托盘</button
         ><button @click="action('quit')" :disabled="busy">退出应用</button>
