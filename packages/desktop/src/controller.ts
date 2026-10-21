@@ -76,7 +76,7 @@ export class DesktopController {
     const r = raw as Record<string, unknown>;
     requireValue(r.v === 1 && typeof r.command === 'string', 'INVALID_PROTOCOL');
     const allowed: Record<string, string[]> = { snapshot: [], 'configure-hotkeys': ['hotkeys'], action: ['action'], configure: ['capture', 'delivery', 'autoConsent', 'alwaysConsent'],
-      submit: [], current: [], discard: [], pause: ['paused'], copy: ['id'], detail: ['id'], 'retry-delivery': ['id'], recover: [], 'select-agent': ['id', 'version'], 'discover-agents': [], quit: [] };
+      submit: [], current: [], discard: [], pause: ['paused'], copy: ['id'], detail: ['id'], 'retry-delivery': ['id'], recover: [], 'select-agent': ['id', 'version'], 'archive-agent': ['id', 'version', 'archived', 'confirm'], 'discover-agents': [], quit: [] };
     requireValue(Object.hasOwn(allowed, r.command) && Object.keys(r).every(k => ['v', 'command', ...allowed[r.command as string]].includes(k)), 'COMMAND_REFUSED');
     const id = () => { requireValue(typeof r.id === 'string' && /^[0-9a-f-]{36}$/.test(r.id), 'INVALID_TASK_ID'); return r.id; };
     switch (r.command) {
@@ -102,9 +102,10 @@ export class DesktopController {
               requireValue(!retryableDelivery(this.app, this.app.get(task.submission.taskId)), 'DELIVERY_STILL_FAILED'); break;
             }
             case 'cycle-agent': {
-              requireValue(this.settings.agents && this.app.registry.length > 1, 'NO_OTHER_APPROVED_AGENT');
-              const index = this.app.registry.findIndex(e => e.profile.id === this.app.profile.id && e.profile.version === this.app.profile.version);
-              const next = this.app.registry[(index + 1) % this.app.registry.length].profile;
+              const available = this.app.registry.filter(e => !this.isArchived(e.profile.id, e.profile.version));
+              requireValue(this.settings.agents && available.length > 1, 'NO_OTHER_APPROVED_AGENT');
+              const index = available.findIndex(e => e.profile.id === this.app.profile.id && e.profile.version === this.app.profile.version);
+              const next = available[(index + 1) % available.length].profile;
               await this.dispatch({ v: 1, command: 'select-agent', id: next.id, version: next.version }); break;
             }
             case 'current': await this.app.capture(false, true); requireValue(this.app.lastCaptureStatus === 'queued', this.app.lastCaptureStatus === 'duplicate' ? 'DUPLICATE_IMAGE' : 'NO_CURRENT_IMAGE'); break;
@@ -120,9 +121,21 @@ export class DesktopController {
         await this.refreshDiscovery();
         break;
       }
+      case 'archive-agent': {
+        requireValue(this.settings.agents && typeof r.id === 'string' && typeof r.version === 'string', 'UNAPPROVED_PROFILE');
+        requireValue(typeof r.archived === 'boolean' && r.confirm === true, 'PROFILE_REMOVAL_CONFIRMATION_REQUIRED');
+        requireValue(this.app.registry.some(e => e.profile.id === r.id && e.profile.version === r.version), 'UNAPPROVED_PROFILE');
+        requireValue(!r.archived || this.app.profile.id !== r.id || this.app.profile.version !== r.version, 'SELECT_ANOTHER_PROFILE_FIRST');
+        const next = structuredClone(this.settings);
+        const archived = (next.agents!.archived ?? []).filter(p => p.id !== r.id || p.version !== r.version);
+        if (r.archived) archived.push({ id: r.id, version: r.version });
+        next.agents!.archived = archived;
+        // Keep immutable execution entries for existing queued/running tasks and provenance.
+        saveSettings(this.root, next); this.settings = next; break;
+      }
       case 'select-agent': {
         requireValue(this.settings.agents && typeof r.id === 'string' && typeof r.version === 'string', 'UNAPPROVED_PROFILE');
-        requireValue(this.app.registry.some(e => e.profile.id === r.id && e.profile.version === r.version), 'UNAPPROVED_PROFILE');
+        requireValue(this.app.registry.some(e => e.profile.id === r.id && e.profile.version === r.version) && !this.isArchived(r.id, r.version), 'UNAPPROVED_PROFILE');
         const next = structuredClone(this.settings); next.agents!.selected = { id: r.id, version: r.version };
         saveSettings(this.root, next); this.app.select(r.id, r.version); this.settings = next; break;
       }
@@ -171,6 +184,7 @@ export class DesktopController {
     }
     return this.snapshot();
   }
+  private isArchived(id: string, version: string) { return !!this.settings.agents?.archived?.some(p => p.id === id && p.version === version); }
   private async snapshot() {
     const image = this.app.pending;
     if (image !== this.previewImage) {
@@ -183,7 +197,7 @@ export class DesktopController {
         const policy = this.settings.agents?.profiles.find(p => p.policy.id === e.profile.id && p.policy.version === e.profile.version)?.policy ?? this.settings.codex;
         const approved = this.settings.agents?.profiles.find(p => p.policy.id === e.profile.id && p.policy.version === e.profile.version);
         const gateway = approved && approved.provider !== 'codex' ? approved.policy.gateway : undefined;
-        return { gateway: gateway ? { endpoint: gateway.baseUrl, model: gateway.model, models: gateway.models, vision: gateway.vision, credentialStatus: 'bound_os_reference' } : undefined, id: e.profile.id, version: e.profile.version, provider: e.adapter.name, fingerprint: e.profile.fingerprint, path: policy?.program.args[0] ?? policy?.program.executable, cliVersion: policy?.cliVersion, status: e.adapter.name === 'claude' && !('imageProtocol' in (policy ?? {})) ? 'image_protocol_not_verified' : 'unverified_auth' };
+        return { archived: this.isArchived(e.profile.id, e.profile.version), removable: !!this.settings.agents && (e.profile.id !== this.app.profile.id || e.profile.version !== this.app.profile.version), gateway: gateway ? { endpoint: gateway.baseUrl, model: gateway.model, models: gateway.models, vision: gateway.vision, credentialStatus: 'bound_os_reference' } : undefined, id: e.profile.id, version: e.profile.version, provider: e.adapter.name, fingerprint: e.profile.fingerprint, path: policy?.program.args[0] ?? policy?.program.executable, cliVersion: policy?.cliVersion, status: e.adapter.name === 'claude' && !('imageProtocol' in (policy ?? {})) ? 'image_protocol_not_verified' : 'unverified_auth' };
       }), discovery: this.discovery,
       profile: { adapter: this.app.registry.find(e => e.profile === this.app.profile)?.adapter.name ?? this.settings.adapter, id: this.app.profile.id, profileVersion: this.app.profile.version, workspace: this.settings.agents?.profiles.find(p => p.policy.id === this.app.profile.id && p.policy.version === this.app.profile.version)?.policy.workspace ?? this.settings.codex?.workspace, version: this.settings.agents?.profiles.find(p => p.policy.id === this.app.profile.id && p.policy.version === this.app.profile.version)?.policy.cliVersion ?? this.settings.codex?.cliVersion, sandbox: 'read-only' },
       status: this.workerError ? 'worker_error' : this.captureError ? 'capture_error' : this.settings.desktop.paused ? 'paused' : !this.settings.desktop.enabled ? 'capture_off' : 'monitoring',

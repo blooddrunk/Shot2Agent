@@ -25,13 +25,13 @@
 
 这里的“程序包目录”指**直接包含 `Shot2Agent.exe`、`Start Codex.cmd` 和 `runtime` 文件夹的那一级目录**，不是 ZIP 所在目录、仓库根目录或 `runtime` 子目录。
 
-本次已下载并核对的程序包位于 Windows 路径：
+下面是上一份已交付程序包的路径示例；更新包请使用当次交付消息中的准确路径，不要为了新功能打开旧包：
 
 ```text
 D:\code\projects\Shot2Agent\build\M6-f531d18-ci39580060787\unpacked\Shot2Agent
 ```
 
-若使用本次交付包，先从托盘退出 Shot2Agent，再打开 PowerShell，完整复制执行：
+仅当使用上面的旧包时，可先从托盘退出 Shot2Agent，再打开 PowerShell 执行以下定位命令。使用新包时，优先按下文资源管理器方法打开对应目录：
 
 ```powershell
 Set-Location -LiteralPath 'D:\code\projects\Shot2Agent\build\M6-f531d18-ci39580060787\unpacked\Shot2Agent'
@@ -80,3 +80,22 @@ $claude = 'C:\Users\YOUR_NAME\.local\bin\claude.exe' # 替换为实际发现的�
 随后打开程序，选择这个新 Profile，保持捕获关闭、剪贴板投递为手动，并使用新的空输出目录。在记事本输入 `SHOT2AGENT 42`，截图仅包含这段文字，然后点击一次 **提交当前剪贴板图片**。预期：只有一次执行尝试，任务记录显示网关提供方和获批 Profile 版本，状态为 succeeded（成功），Markdown 正确识别该标记。记录不含敏感信息的端点主机名、模型及 CLI 版本、状态或错误码、识别出的标记和尝试次数；切勿记录 Token、真实个人截图或账户输出。认证、非交互式完成请求、图片类型消息块传输、模型视觉能力和标记识别，是**五项独立检查**。不能从一次 Worker 执行尝试推断实际 API 请求次数；CLI 内部的 HTTP 行为需要提供方侧不含敏感信息的用量证据。失败或结果不确定时立即停止，不自动重试或切换 Agent。如果无法确认直接视觉输入及重定向隔离符合要求，应让 Profile 保持 `not-verified`，继续安全拒绝。
 
 交互式快捷键投递、窗口隐藏时的前台焦点、实际剪贴板粘贴、原生托盘菜单交互，以及真实端点和 GLM 识图，在分别获得实际观察证据之前，均保持 NOT VERIFIED（未验证）。现有 Smart 冲突仍未解决，关闭输入法同步后也仍然存在。
+
+## 移除重复 Profile 与一次性 GLM 授权测试
+
+更新到含此入口的程序包后，在主界面展开 **执行配置 → CLI 路径与状态**。每个配置会显示提供方、模型、Profile ID 和版本。
+
+1. 在上方 **新任务 Agent** 中选择要保留的版本。
+2. 找到多余版本，点击 **从列表移除**，核对提示后点击 **确认移除**。当前选中的版本不能直接移除，先切换即可。
+3. 被移除版本不再出现在新任务选择和快捷键循环中。旧任务仍使用原来的不可变配置，历史、结果和 Token 保留；此操作不会删除系统凭据。
+4. 需要恢复时，在同一配置行点击 **恢复到列表**。配置跨重启保留。不要通过删除 Token 清理列表；同一 Token 可能被多个版本引用。
+
+本次操作人员已明确授权一次 `glm-5.3-flash` 合成截图请求。开发代理的 Windows 凭据读取前置检查返回 `1168`，尚未发送任何真实 API 请求；是否属于会话可见性差异未确定。若需在当前 Windows 登录会话中完成已授权测试：
+
+1. 打开新包中的 `Start Codex.cmd`，在 **新任务 Agent** 中选中已有的 `glm-5.3-flash` Gateway Profile。保持捕获关闭，避免同时生成其他请求，然后从托盘退出程序。
+2. 在同一程序包目录双击 `Run authorized GLM vision test once.cmd`。此操作明确执行一次可能消耗额度的测试，使用当前选中 Profile 的安全凭据引用和固定国内端点；不读取个人截图，不改动 Profile 的视觉声明，不调用 Claude CLI。
+3. 查看窗口输出或同目录的 `GLM-ONCE-RECEIPT.json`。预期 `model` 为 `glm-5.3-flash`、`requestsSent:1`、`markerRecognized:true`，状态为 `PASS_DIRECT_ENDPOINT_IMAGE_RECOGNITION`。截图固定为随包合成图片 `Synthetic GLM screenshot.png`，内容仅 `SHOT2AGENT 42`。
+4. 该入口不跟随重定向、不重试、不切换模型。收据一旦保留 `requestsSent:1`，再次双击会拒绝发送。不要删除收据来重试。失败或结果不确定时保留收据并停止；可提供收据中的安全错误码，无需发送 Token。
+5. 若收据为 `requestsSent:0` 且 `GATEWAY_CREDENTIAL_UNAVAILABLE`，表示尚未请求模型；不要重复添加凭据或清空系统凭据。先核对运行 Windows 用户和已选 Profile，再报告该错误。若出现 `GLM-ONCE-RUNNING.lock`，说明正在运行或上次中断，停止重复点击，先检查收据和进程；不要自行删除锁来触发可能的重复请求。
+
+该入口只验证直接端点认证、图片块请求和合成文字识别。即便成功，也不能宣称 Claude CLI 已通过真实端点验证，不能自动把正式 Profile 改为 `operator-attested`。正式请求仍保留原有视觉授权和隔离边界。

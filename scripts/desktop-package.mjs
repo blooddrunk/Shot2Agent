@@ -40,3 +40,7 @@ process.stdout.write(`PASS portable layout: ${out}\n`);
 
 copyFileSync('scripts/claude-gateway-windows-probe.mjs', join(out, 'Verify Gateway transport.mjs'));
 copyFileSync('docs/M6_WINDOWS_ACCEPTANCE.md', join(out, 'M6 Windows acceptance.md'));
+
+copyFileSync('scripts/glm-vision-once.mjs', join(out, 'Verify GLM vision once.mjs'));
+copyFileSync('scripts/fixtures/glm-vision.png', join(out, 'Synthetic GLM screenshot.png'));
+writeFileSync(join(out, 'Run authorized GLM vision test once.cmd'), '@echo off\r\ncd /d "%~dp0"\r\necho This sends ONE synthetic image to your selected glm-5.3-flash gateway. Account quota may be consumed.\r\necho No retry or model fallback. A receipt prevents another request from this package.\r\n"%~dp0runtime\\node.exe" "%~dp0Verify GLM vision once.mjs" --authorized-once\r\necho Read GLM-ONCE-RECEIPT.json for the result. Never share your token.\r\npause\r\n');

@@ -13,7 +13,7 @@ import type { DeliveryConfig } from '../../local/src/delivery.ts';
 export interface Settings {
   hotkeys?: Hotkeys;
   adapter: 'fake' | 'codex'; delivery: DeliveryConfig; codex?: CodexPolicy;
-  agents?: { version: 1; selected: { id: string; version: string }; profiles: ApprovedPolicy[] };
+  agents?: { version: 1; selected: { id: string; version: string }; profiles: ApprovedPolicy[]; archived?: { id: string; version: string }[] };
   desktop: { version: 1; enabled: boolean; mode: 'confirm' | 'auto'; paused: boolean; autoConsent: boolean; alwaysConsent: boolean };
 }
 export const defaults = (): Settings => ({ adapter: 'fake', delivery: { clipboard: 'always' },
@@ -28,6 +28,11 @@ export function validate(settings: Settings, allowPendingAlways = false): void {
     const a = settings.agents; requireValue(a.version === 1 && settings.adapter === 'codex' && Array.isArray(a.profiles), 'INVALID_AGENT_SETTINGS');
     const entries = executionRegistry(a.profiles);
     requireValue(entries.some(e => e.profile.id === a.selected?.id && e.profile.version === a.selected?.version), 'UNAPPROVED_PROFILE');
+    if (a.archived !== undefined) {
+      requireValue(Array.isArray(a.archived) && a.archived.length <= a.profiles.length && a.archived.every(p => p && Object.keys(p).sort().join(',') === 'id,version' && entries.some(e => e.profile.id === p.id && e.profile.version === p.version)), 'INVALID_ARCHIVED_PROFILES');
+      requireValue(new Set(a.archived.map(p => JSON.stringify([p.id, p.version]))).size === a.archived.length, 'INVALID_ARCHIVED_PROFILES');
+      requireValue(!a.archived.some(p => p.id === a.selected.id && p.version === a.selected.version), 'SELECTED_PROFILE_ARCHIVED');
+    }
     requireValue(settings.codex && a.profiles.some(p => p.provider === 'codex' && JSON.stringify(p.policy) === JSON.stringify(settings.codex)), 'ORIGINAL_CODEX_PROFILE_REQUIRED');
   }
   const c = settings.desktop;

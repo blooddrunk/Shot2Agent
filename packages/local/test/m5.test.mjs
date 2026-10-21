@@ -107,8 +107,35 @@ test('desktop selects only registered profiles; original Codex config is retaine
   assert.equal(desktop.app.get(queued).submission.provider, 'codex');
   assert.equal(desktop.app.get(queued).submission.profileId, 'codex-readonly');
   for (const raw of [{ id: 'evil', version: 'v1' }, { id: 'claude-readonly', version: 'v1', path: 'evil.exe' }]) await assert.rejects(desktop.dispatch({ v: 1, command: 'select-agent', ...raw }));
+  const archive = { v: 1, command: 'archive-agent', id: 'codex-readonly', version: 'v1', archived: true, confirm: true };
+  await assert.rejects(desktop.dispatch({ ...archive, id: 'claude-readonly' }), /SELECT_ANOTHER_PROFILE_FIRST/);
+  await assert.rejects(desktop.dispatch({ ...archive, confirm: false }), /PROFILE_REMOVAL_CONFIRMATION_REQUIRED/);
+  await assert.rejects(desktop.dispatch({ ...archive, path: 'untrusted' }), /COMMAND_REFUSED/);
+  await assert.rejects(desktop.dispatch({ ...archive, id: 'unknown' }), /UNAPPROVED_PROFILE/);
+  const archived = await desktop.dispatch(archive);
+  assert.equal(archived.agents.find(a => a.id === 'codex-readonly').archived, true);
+  assert.equal(desktop.app.registry.length, 2); // Existing queue still has its exact immutable execution entry.
+  assert.equal(desktop.app.get(queued).submission.profileId, 'codex-readonly');
+  await assert.rejects(desktop.dispatch({ v: 1, command: 'select-agent', id: 'codex-readonly', version: 'v1' }), /UNAPPROVED_PROFILE/);
+  await assert.rejects(desktop.dispatch({ v: 1, command: 'action', action: 'cycle-agent' }), /NO_OTHER_APPROVED_AGENT/);
   assert.equal(JSON.stringify(loadSettings(root).codex), original); await desktop.close();
-  const next = new DesktopController(root, cb(), undefined, 'codex'); assert.equal((await next.dispatch({ v: 1, command: 'snapshot' })).profile.adapter, 'claude'); await next.close();
+  const next = new DesktopController(root, cb(), undefined, 'codex');
+  assert.equal((await next.dispatch({ v: 1, command: 'snapshot' })).profile.adapter, 'claude');
+  assert.equal(loadSettings(root).agents.archived.length, 1);
+  assert.equal(next.app.get(queued).status, 'queued');
+  writeFileSync(join(workspace, 'mode'), 'success');
+  assert.equal(await next.app.work(), true);
+  assert.equal(next.app.get(queued).status, 'succeeded');
+  assert.equal(next.app.get(queued).attempts.length, 1);
+  assert.equal(next.app.get(queued).result.adapterName, 'codex');
+  const restored = await next.dispatch({ ...archive, archived: false });
+  assert.equal(restored.agents.find(a => a.id === 'codex-readonly').archived, false);
+  assert.equal((await next.dispatch({ v: 1, command: 'action', action: 'cycle-agent' })).profile.adapter, 'codex');
+  const bad = loadSettings(root); bad.agents.archived = [{ id: 'codex-readonly', version: 'v1' }];
+  assert.throws(() => saveSettings(root, bad), /SELECTED_PROFILE_ARCHIVED/);
+  bad.agents.archived = [{ id: 'unknown', version: 'v1' }];
+  assert.throws(() => saveSettings(root, bad), /INVALID_ARCHIVED_PROFILES/);
+  await next.close();
   assert.equal(readFileSync(join(root, 'settings.json'), 'utf8').includes('PRIVATE_SECRET'), false);
 });
 for (const mode of ['success', 'error', 'exit', 'invalid', 'missing', 'huge', 'double', 'logs', 'hang', 'tree', 'cancel', 'auth']) test(`native Windows Claude adapter with mock process: ${mode}`, { skip: process.platform !== 'win32' }, async t => {
