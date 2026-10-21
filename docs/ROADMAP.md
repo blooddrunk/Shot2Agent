@@ -1,4 +1,4 @@
-> **M5-L 0.5.0 candidate:** Local Codex/Claude discovery, stopped-Worker explicit approval and immutable new-task Agent selection. Claude native transport qualified only at 2.1.306, personal Pro/Max only; actual model/GUI gates remain separate. See [Windows controls and restrictions](M5_WINDOWS_ACCEPTANCE.md) and [executed validation](M5_VALIDATION.md).
+> **M5-L 0.5.0 candidate:** Local Codex/Claude discovery, stopped-Worker explicit approval and immutable new-task Agent selection. Claude native transport qualified only at 2.1.305/2.1.306, personal Pro/Max only; actual model/GUI gates remain separate. See [Windows controls and restrictions](M5_WINDOWS_ACCEPTANCE.md) and [executed validation](M5_VALIDATION.md).
 
 # Implementation roadmap: thin vertical slices and gates
 

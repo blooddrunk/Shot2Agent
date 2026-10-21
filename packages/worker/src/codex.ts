@@ -35,7 +35,7 @@ export async function inspectCodex(program: Program, workspace: string): Promise
 }
 /** Registry is constructed by the Worker from local operator config, never from task data. */
 export class CodexAgent implements AgentAdapter {
-  readonly name = 'codex'; readonly version = 'm2-2';
+  readonly name = 'codex'; readonly version = 'm5-1';
   private active = new Set<Promise<unknown>>();
   private policies: ReadonlyMap<string, { policy: CodexPolicy; profile: Profile }>;
   constructor(policies: readonly CodexPolicy[]) {

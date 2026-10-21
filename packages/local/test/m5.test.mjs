@@ -176,3 +176,7 @@ test('missing registered CLI preserves desktop history and fails before any mode
   assert.equal(desktop.app.get(id).status, 'failed'); assert.equal(desktop.app.get(id).result.errorCode, 'CODEX_PREFLIGHT');
   assert.equal((await desktop.dispatch({ v: 1, command: 'snapshot' })).total, 1); await desktop.close();
 });
+test('normal Windows environment cannot be requested for a provider or arbitrary command', async () => {
+  const { boundedProcess } = await import('../../worker/src/process.ts');
+  await assert.rejects(boundedProcess(program, ['--version'], { cwd: temp(), timeoutMs: 1000, nativePolicy: true }), /SYSTEM_POLICY_PROGRAM_REQUIRED/);
+});

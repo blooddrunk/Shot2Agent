@@ -27,7 +27,7 @@ export const CLAUDE_ARGS = ['--restricted', '--safe-mode', '-p', '--input-format
   '--no-session-persistence', '--settings', '{"disableAllHooks":true,"autoUpdates":false}'];
 /** Fail closed on endpoint policy or credentials eligible for remote managed hooks.
  * Only personal Pro/Max subscription auth is supported in this bounded release. */
-export async function assertClaudeIsolation(program: Program, cwd: string): Promise<void> {
+export async function assertClaudeIsolation(program: Program, cwd: string, signal?: AbortSignal): Promise<void> {
   requireValue(process.platform === 'win32', 'CLAUDE_WINDOWS_ONLY');
   requireValue(!process.env.ANTHROPIC_API_KEY && !process.env.CLAUDE_CODE_OAUTH_TOKEN, 'CLAUDE_AUTH_ISOLATION_UNVERIFIED');
   for (const base of [process.env.ProgramFiles, process.env.PROGRAMDATA]) {
@@ -39,10 +39,10 @@ export async function assertClaudeIsolation(program: Program, cwd: string): Prom
   // Match the existing native helper's finite startup budget. A fixed file avoids
   // inline-command startup differences; no shell or user-supplied code is involved.
   const script = fileURLToPath(new URL('./claude-policy.ps1', import.meta.url));
-  const policy = await boundedProcess({ executable: powershell, args: [] }, ['-NoProfile', '-NonInteractive', '-File', script], { cwd: process.env.SystemRoot ?? 'C:\\Windows', timeoutMs: 10000, maxBytes: 16384, provider: 'claude' }); await policy.settled;
+  const policy = await boundedProcess({ executable: powershell, args: [] }, ['-NoProfile', '-NonInteractive', '-File', script], { cwd: process.env.SystemRoot ?? 'C:\\Windows', timeoutMs: 10000, maxBytes: 16384, signal, nativePolicy: true }); await policy.settled;
   requireValue(!policy.stopped, 'CLAUDE_POLICY_CHECK_TIMEOUT');
   requireValue(policy.code === 0 && policy.output.trim() === 'absent', policy.code === 1 ? 'CLAUDE_MANAGED_POLICY_REFUSED' : 'CLAUDE_POLICY_CHECK_UNAVAILABLE');
-  const auth = await boundedProcess(program, ['--restricted', '--safe-mode', 'auth', 'status', '--json'], { cwd, timeoutMs: 5000, maxBytes: 16384, provider: 'claude' }); await auth.settled;
+  const auth = await boundedProcess(program, ['--restricted', '--safe-mode', 'auth', 'status', '--json'], { cwd, signal, timeoutMs: 5000, maxBytes: 16384, provider: 'claude' }); await auth.settled;
   requireValue(auth.code === 0 && !auth.stopped, 'CLAUDE_AUTH_UNVERIFIED');
   const status = JSON.parse(auth.output);
   requireValue(status.loggedIn === true && status.authMethod === 'claude.ai' && ['pro', 'max'].includes(status.subscriptionType), 'CLAUDE_AUTH_ISOLATION_UNVERIFIED');
@@ -89,8 +89,8 @@ export class ClaudeAgent implements AgentAdapter {
     if (signal.aborted) return fail('ABORTED_BEFORE_LAUNCH');
     try {
       claudeProfile(policy);
-      if (programDigest(policy.program) !== policy.digest || await inspectClaude(policy.program, policy.workspace) !== policy.cliVersion) return fail('CLAUDE_VERSION_CHANGED');
-      await assertClaudeIsolation(policy.program, policy.workspace);
+      if (programDigest(policy.program) !== policy.digest || await inspectClaude(policy.program, policy.workspace, signal) !== policy.cliVersion) return fail('CLAUDE_VERSION_CHANGED');
+      await assertClaudeIsolation(policy.program, policy.workspace, signal);
       requireValue(images.length === task.images.length, 'IMAGE_COUNT');
       for (let i = 0; i < images.length; i++) await verifyImage(Buffer.from(images[i]), task.images[i]);
     } catch (error) { return fail(error instanceof Error && /^[A-Z0-9_]{1,64}$/.test(error.message) ? error.message : 'CLAUDE_PREFLIGHT_REFUSED'); }

@@ -19,10 +19,11 @@ export class DesktopController {
   readonly root: string; readonly app: LocalApp; settings: Settings;
   private controller = new AbortController(); private worker?: Promise<unknown>;
   private closed = false; private armed = false; private workerError?: string; private captureError?: string;
+  private readonly inventory: typeof discover;
   private discovery: Candidate[] = []; private discovering?: Promise<void>;
   private preview?: string; private previewImage?: object;
-  constructor(root: string, clipboard: ClipboardPort, injected?: { adapter: AgentAdapter; profile: Profile }, launchMode: 'codex' | 'staging' | 'legacy' = 'legacy') {
-    this.launchMode = launchMode;
+  constructor(root: string, clipboard: ClipboardPort, injected?: { adapter: AgentAdapter; profile: Profile }, launchMode: 'codex' | 'staging' | 'legacy' = 'legacy', inventory: typeof discover = discover) {
+    this.launchMode = launchMode; this.inventory = inventory;
     requireValue(launchMode !== 'codex' || existsSync(join(root, 'settings.json')), 'CODEX_SETUP_REQUIRED');
     this.root = root; this.settings = loadSettings(root);
     requireValue(launchMode !== 'codex' || (this.settings.adapter === 'codex' && !injected), 'CODEX_PROFILE_REQUIRED');
@@ -44,9 +45,9 @@ export class DesktopController {
         for (const policy of policies) {
           const key = JSON.stringify([policy.program, policy.cliVersion]); if (seen.has(key)) continue; seen.add(key);
           if (Date.now() > deadline) { approved.push({ provider, path: '', status: 'scan_incomplete' }); break; }
-          approved.push(...await discover(provider, policy.workspace, { approved: { program: policy.program, version: policy.cliVersion, digest: policy.digest } }));
+          approved.push(...await this.inventory(provider, policy.workspace, { approved: { program: policy.program, version: policy.cliVersion, digest: policy.digest } }));
         }
-        return [...approved, ...await discover(provider, this.settings.codex!.workspace)];
+        return [...approved, ...await this.inventory(provider, this.settings.codex!.workspace)];
       }));
       this.discovery = results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
     })().finally(() => { this.discovering = undefined; });

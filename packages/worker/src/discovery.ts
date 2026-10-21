@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { openSync, readSync, closeSync, existsSync, lstatSync, readFileSync, realpathSync } from 'node:fs';
+import { createReadStream, openSync, readSync, closeSync, existsSync, lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { delimiter, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
 import { requireValue } from '../../core/src/model.ts';
@@ -35,25 +35,35 @@ export function resolveProgram(provider: Provider, path: string, node = process.
   return { executable: path, args: [] };
 }
 export function programDigest(program: Program): string {
-  const hash = createHash('sha256'); const buffer = Buffer.alloc(65536);
+  const hash = createHash('sha256'); const buffer = Buffer.alloc(65536); const deadline = Date.now() + 3000;
   for (const path of [program.executable, ...program.args]) {
-    hash.update(regular(path)); const fd = openSync(path, 'r');
-    try { let count: number; while ((count = readSync(fd, buffer)) > 0) hash.update(buffer.subarray(0, count)); }
+    hash.update(regular(path)); requireValue(lstatSync(path).size <= 512 * 1024 * 1024, 'CLI_FILE_LIMIT'); const fd = openSync(path, 'r');
+    try { let count: number; while ((count = readSync(fd, buffer)) > 0) { requireValue(Date.now() <= deadline, 'CLI_HASH_TIMEOUT'); hash.update(buffer.subarray(0, count)); } }
     finally { closeSync(fd); }
   }
   return hash.digest('hex');
 }
+async function discoveryDigest(program: Program): Promise<string> {
+  const hash = createHash('sha256'); const deadline = Date.now() + 3000;
+  for (const path of [program.executable, ...program.args]) {
+    hash.update(regular(path)); requireValue(lstatSync(path).size <= 512 * 1024 * 1024, 'CLI_FILE_LIMIT');
+    for await (const bytes of createReadStream(path, { highWaterMark: 65536 })) {
+      requireValue(Date.now() <= deadline, 'CLI_HASH_TIMEOUT'); hash.update(bytes);
+    }
+  }
+  return hash.digest('hex');
+}
 export const CLAUDE_FLAGS = ['--input-format', '--output-format', '--tools', '--disallowedTools', '--restricted', '--safe-mode', '--no-session-persistence', '--strict-mcp-config', '--mcp-config', '--settings'];
-export async function inspectClaude(program: Program, cwd: string): Promise<string> {
-  const version = await boundedProcess(program, ['--version'], { cwd, timeoutMs: 5000, maxBytes: 16384 }); await version.settled;
+export async function inspectClaude(program: Program, cwd: string, signal?: AbortSignal): Promise<string> {
+  const version = await boundedProcess(program, ['--version'], { cwd, signal, timeoutMs: 5000, maxBytes: 16384 }); await version.settled;
   requireValue(version.code === 0 && !version.stopped && /^\d+\.\d+\.\d+ \(Claude Code\)$/.test(version.output.trim()), 'CLAUDE_VERSION_UNAVAILABLE');
-  const help = await boundedProcess(program, ['--help'], { cwd, timeoutMs: 5000, maxBytes: 131072 }); await help.settled;
+  const help = await boundedProcess(program, ['--help'], { cwd, signal, timeoutMs: 5000, maxBytes: 131072 }); await help.settled;
   requireValue(help.code === 0 && !help.stopped && CLAUDE_FLAGS.every(f => help.output.includes(f)), 'CLAUDE_FLAGS_UNSUPPORTED');
   return version.output.trim();
 }
 export async function inspectCandidate(provider: Provider, path: string, cwd: string, pinned?: { version: string; digest?: string }, approvedProgram?: Program): Promise<Candidate> {
   const base: Candidate = { provider, path, status: 'invalid' };
-  try { base.program = approvedProgram ?? resolveProgram(provider, path); base.digest = programDigest(base.program); }
+  try { base.program = approvedProgram ?? resolveProgram(provider, path); base.digest = await discoveryDigest(base.program); }
   catch { return base; }
   try {
     base.version = await (provider === 'codex' ? inspectCodex : inspectClaude)(base.program, cwd);

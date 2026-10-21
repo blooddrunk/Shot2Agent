@@ -28,7 +28,7 @@ $claudePath = 'C:\Users\YOUR_NAME\.local\bin\claude.exe' # 替换为实际路径
 
 ## Claude 安全和协议边界
 
-当前仅 **Windows Claude Code 2.1.306** 的 JSONL 图片传输经官方原生 EXE + 本地模拟后端验证。其它版本可以被发现/批准，但缺少 `imageProtocol`，任务会以 `CLAUDE_IMAGE_PROTOCOL_NOT_VERIFIED` 拒绝；不会变为文字任务或切换 Codex。升级不能自动批准新版本。
+当前仅 **Windows Claude Code 2.1.305 / 2.1.306** 的 JSONL 图片传输经官方原生 EXE + 本地模拟后端验证。其它版本可以被发现/批准，但缺少 `imageProtocol`，任务会以 `CLAUDE_IMAGE_PROTOCOL_NOT_VERIFIED` 拒绝；不会变为文字任务或切换 Codex。升级不能自动批准新版本。
 
 Adapter 使用 `--restricted --safe-mode --tools "" --disallowedTools "mcp__*" --strict-mcp-config --mcp-config '{"mcpServers":{}}' --no-session-persistence`，不使用 `--bare` 或权限绕过。由于管理员 Hooks 高于这些参数，M5 拒绝检测到的机器/用户注册表策略、受管配置文件/目录、远程策略缓存及 MCP 配置（不可读取同样拒绝）。仅支持 CLI 报告已登录的个人 `claude.ai` Pro/Max 订阅；API Key、OAuth 环境 Token、Team/Enterprise 或未知账户类型拒绝，以免服务端策略加载无法隔离的 Hooks。身份读取不代表模型已成功认证。用户仍通过 Claude 自己的登录流程登录，Shot2Agent 不管理凭证。
 

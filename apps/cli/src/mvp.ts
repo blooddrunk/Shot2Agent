@@ -60,8 +60,8 @@ async function main() {
       const policy = { id: `${provider}-readonly`, version: `m5-${candidate.digest!.slice(0, 16)}-${randomUUID().slice(0, 8)}`, workspace,
         digest: candidate.digest!, program: candidate.program!, cliVersion: candidate.version!, timeoutMs: 180000, prompt: next.codex.prompt };
       const approved: ApprovedPolicy = provider === 'codex' ? { provider, policy } : { provider, policy: { ...policy, digest: candidate.digest!,
-        // Native stdin/image/completion qualified against official Windows 2.1.306 only.
-        ...(candidate.version === '2.1.306 (Claude Code)' ? { imageProtocol: 'windows-jsonl-v1' as const } : {}) } };
+        // Native stdin/image/completion qualified against native Windows 2.1.305/2.1.306 only.
+        ...(['2.1.305 (Claude Code)', '2.1.306 (Claude Code)'].includes(candidate.version!) ? { imageProtocol: 'windows-jsonl-v1' as const } : {}) } };
       const profiles: ApprovedPolicy[] = next.agents?.profiles ?? [{ provider: 'codex', policy: next.codex }];
       if (approved.provider === 'codex') codexProfile(approved.policy); else claudeProfile(approved.policy);
       profiles.push(approved); executionRegistry(profiles);

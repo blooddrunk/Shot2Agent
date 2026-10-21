@@ -1,3 +1,5 @@
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 export interface Program { executable: string; args: string[] }
 export interface ProcessResult {
@@ -7,8 +9,9 @@ export interface ProcessResult {
 }
 /** Never forwards child logs. A detached POSIX process group / taskkill tree owns descendants. */
 export async function boundedProcess(program: Program, args: string[], options: {
-  cwd: string; provider?: 'claude'; input?: string; signal?: AbortSignal; timeoutMs: number; maxBytes?: number;
+  cwd: string; provider?: 'claude'; nativePolicy?: true; input?: string; signal?: AbortSignal; timeoutMs: number; maxBytes?: number;
 }): Promise<ProcessResult> {
+  if (options.nativePolicy && (process.platform !== 'win32' || program.executable !== join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe') || program.args.length || JSON.stringify(args) !== JSON.stringify(['-NoProfile', '-NonInteractive', '-File', fileURLToPath(new URL('./claude-policy.ps1', import.meta.url))]))) throw new Error('SYSTEM_POLICY_PROGRAM_REQUIRED');
   if (options.signal?.aborted) return { code: null, output: '', stopped: true, launched: false, overflow: false, settled: Promise.resolve() };
   return new Promise(resolve => {
     let output = ''; let total = 0; let stopped = false; let launched = false; let overflow = false;
@@ -18,7 +21,9 @@ export async function boundedProcess(program: Program, args: string[], options: 
     const settled = new Promise<void>(resolve => { onSettled = resolve; });
     const allowed = new Set(['path', 'home', 'userprofile', 'localappdata', 'appdata', 'temp', 'tmp', 'tmpdir', 'systemroot', 'windir', 'comspec', 'pathext', 'username', 'user', 'codex_home', 'openai_api_key', 'codex_api_key', 'ssl_cert_file', 'ssl_cert_dir', 'https_proxy', 'http_proxy', 'all_proxy', 'no_proxy']);
     if (options.provider === 'claude') for (const key of ['anthropic_api_key', 'claude_code_oauth_token', 'claude_code_git_bash_path', 'programfiles', 'programdata']) allowed.add(key);
-    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => allowed.has(key.toLowerCase())));
+    // Only the fixed read-only OS registry helper inherits its normal Windows environment.
+    // Model CLIs always retain the provider allowlist; no Profile/task can enable this path.
+    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => options.nativePolicy || allowed.has(key.toLowerCase())));
     if (options.provider === 'claude') Object.assign(env, { CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1', DISABLE_AUTOUPDATER: '1' });
     const child = spawn(program.executable, [...program.args, ...args], {
       cwd: options.cwd, env, shell: false, windowsHide: true, detached: process.platform !== 'win32',
