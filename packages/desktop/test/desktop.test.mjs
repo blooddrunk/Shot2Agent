@@ -41,7 +41,7 @@ const configure = (h, clipboard = 'manual', saveDirectory) => h.rpc('configure',
 test('desktop process: first-run confirmation, startup safety, staged replacement/discard, duplicate/non-image', async t => {
   const h = host(); t.after(() => h.child.kill());
   let s = await h.rpc('snapshot'); assert.equal(s.settings.enabled,false); assert.equal(s.settings.mode,'confirm'); assert.equal(s.total,0);
-  await h.rpc('configure', { capture: { enabled: true, mode: 'confirm' } });
+  await h.rpc('configure', { capture: { enabled: true, mode: 'confirm' }, delivery: { clipboard: 'manual' } });
   await sleep(100); assert.equal((await h.rpc('snapshot')).total,0);
   h.event(png); s = await h.until(s=>!!s.pending); assert.match(s.pending,/^data:image\/png;base64,/); assert.equal(s.total,0);
   h.event(png2); await sleep(80); await h.rpc('discard'); assert.equal((await h.rpc('snapshot')).pending,null);
@@ -83,6 +83,26 @@ for (const mode of ['fail','unknown']) test(`desktop process: ${mode} is visible
   const expected=mode==='fail'?'failed':'execution_unknown'; let s=await h.until(s=>s.tasks[0]?.status===expected); const id=s.tasks[0].id;
   const d=await h.rpc('detail',{id}); assert.equal(d.attempts.length,1); await h.close();
   const next=host(h.root); t.after(()=>next.child.kill()); await sleep(100); s=await next.rpc('snapshot'); assert.equal(s.tasks[0].status,expected); assert.equal((await next.rpc('detail',{id})).attempts.length,1); await next.close();
+});
+
+test('fresh Always selection requires consent, preserves existing choices and guards explicit submission', async () => {
+  const root = temp(); let writes = 0;
+  const cb = { session: 'fresh', async sequence() { return '1'; }, async readImage() {}, async writeText() { writes++; return true; }, close() {} };
+  const desktop = new DesktopController(root, cb);
+  try {
+    assert.equal(desktop.settings.delivery.clipboard, 'always');
+    assert.equal(desktop.settings.desktop.alwaysConsent, false);
+    assert.equal(desktop.app.config.clipboard, 'manual');
+    await desktop.start();
+    const id = await desktop.app.submit(png2); await desktop.app.work();
+    assert.equal(desktop.app.state.get(id, 'clipboard').status, 'manual'); assert.equal(writes, 0);
+    await assert.rejects(desktop.dispatch({ v: 1, command: 'configure', capture: { enabled: true } }), /ALWAYS_OVERWRITE_CONSENT_REQUIRED/);
+    await desktop.dispatch({ v: 1, command: 'configure', capture: { enabled: true }, alwaysConsent: true });
+    const approved = await desktop.app.submit(png); await desktop.app.work();
+    assert.equal(desktop.app.state.get(approved, 'clipboard').status, 'succeeded'); assert.equal(writes, 1);
+  } finally { await desktop.close(); }
+  const settings = loadSettings(root); settings.delivery.clipboard = 'smart'; saveSettings(root, settings);
+  assert.equal(loadSettings(root).delivery.clipboard, 'smart');
 });
 
 test('settings migration backs up M2 config, preserves DB files, rejects unknown versions', () => {
@@ -137,7 +157,7 @@ test('desktop retry settings validated, persisted and shown without exposing exe
 
 test('desktop fixture ignores an incomplete appended event until its newline is published', async t => {
   const h = host(); t.after(() => h.child.kill());
-  await h.rpc('configure', { capture: { enabled: true, mode: 'confirm' } });
+  await h.rpc('configure', { capture: { enabled: true, mode: 'confirm' }, delivery: { clipboard: 'manual' } });
   const event = JSON.stringify({ sequence: '99', image: png2.toString('base64') });
   const fixture = join(h.root, 'synthetic-clipboard.json'); const middle = Math.floor(event.length / 2);
   appendFileSync(fixture, event.slice(0, middle));

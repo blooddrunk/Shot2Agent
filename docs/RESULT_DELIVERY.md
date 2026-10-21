@@ -104,3 +104,7 @@ Smart protection is sticky in each task delivery receipt: changing current setti
 ## M5-L Agent binding
 
 Provider selection applies to new submissions only. Execution uses the approved immutable provider/Profile version/fingerprint and stores actual adapter provenance. Existing Smart guards, no-clobber saves and independent delivery retries remain provider-independent; retrying delivery never calls either Agent. Unknown execution never switches providers or automatically reruns. See [M5 Windows acceptance](M5_WINDOWS_ACCEPTANCE.md).
+
+## Default selection follow-up — 2026-10-21
+
+Fresh desktop settings preselect Always, requiring explicit overwrite consent before use; capture starts disabled and unapproved delivery remains manual. Existing installations retain their saved mode. This change follows the operator's report of repeated Smart sequence conflicts. It does not certify a Smart fix or change the sticky guard on existing Smart receipts. CLI initialization remains manual by default.

@@ -33,7 +33,9 @@ export class DesktopController {
     const entries = !injected && this.settings.agents ? executionRegistry(this.settings.agents.profiles) : undefined;
     const selected = entries?.find(e => e.profile.id === this.settings.agents!.selected.id && e.profile.version === this.settings.agents!.selected.version);
     this.app = new LocalApp(root, injected?.adapter ?? selected?.adapter ?? (this.settings.adapter === 'codex' ? new CodexAgent([policy!]) : new FakeAgent()),
-      injected?.profile ?? selected?.profile ?? (this.settings.adapter === 'codex' ? codexProfile(policy!, false) : FAKE_PROFILE), this.settings.delivery, clipboard, entries);
+      injected?.profile ?? selected?.profile ?? (this.settings.adapter === 'codex' ? codexProfile(policy!, false) : FAKE_PROFILE),
+      // A fresh desktop preselects Always, but cannot write until overwrite consent.
+      { ...this.settings.delivery, clipboard: this.settings.delivery.clipboard === 'always' && !this.settings.desktop.alwaysConsent ? 'manual' : this.settings.delivery.clipboard }, clipboard, entries);
   }
   private async refreshDiscovery() {
     if (this.discovering) return this.discovering;
