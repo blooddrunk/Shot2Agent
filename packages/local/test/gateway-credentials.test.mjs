@@ -8,8 +8,6 @@ test('Windows secure store refuses absent disposable reference; no personal cred
 });
 test('Windows OS-backed credential lifecycle uses a unique disposable target and refuses replacement', { skip: process.platform !== 'win32' }, async () => {
   const { spawnSync } = await import('node:child_process');
-  const oldModulePath = process.env.PSModulePath;
-  process.env.PSModulePath = 'Z:\\synthetic-missing-modules';
   const reference = gateway().credentialRef; const native = credentialCommand('delete', reference);
   const addCommand = credentialCommand('add', reference);
   const add = () => spawnSync(addCommand.executable, [...addCommand.args, '-TokenFromPipe'], { env: addCommand.env, input: 'synthetic-fixture-only-credential\n', shell: false, encoding: 'utf8', timeout: 15000 });
@@ -21,6 +19,5 @@ test('Windows OS-backed credential lifecycle uses a unique disposable target and
     await assert.rejects(readGatewayToken(reference), /GATEWAY_CREDENTIAL_UNAVAILABLE/);
   } finally {
     spawnSync(native.executable, native.args, { env: native.env, shell: false, timeout: 15000, stdio: 'ignore' });
-    if (oldModulePath === undefined) delete process.env.PSModulePath; else process.env.PSModulePath = oldModulePath;
   }
 });
