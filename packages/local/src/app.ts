@@ -125,15 +125,25 @@ export class LocalApp {
     }
   }
   async retryDelivery(id: string, channels?: readonly string[]): Promise<void> { await deliver(this.get(id), this.config, this.state, this.clipboard, true, undefined, channels); }
-  deleteHistory(ids: readonly string[]): string[] {
+  get canReviewUnknownHistory(): boolean { return !this.working && !this.cleanupBlocked; }
+  deleteHistory(ids: readonly string[], options: { reviewedUnknown?: boolean } = {}): string[] {
     requireValue(ids.length > 0 && ids.length <= 10_000 && new Set(ids).size === ids.length, 'INVALID_TASK_DELETE');
+    let includesUnknown = false;
     for (const id of ids) {
       const task = this.get(id);
-      requireValue(task.status !== 'execution_unknown', 'TASK_EXECUTION_UNKNOWN_REQUIRES_REVIEW', 409);
-      requireValue(['succeeded', 'failed', 'timed_out', 'canceled'].includes(task.status), 'TASK_NOT_TERMINAL', 409);
+      if (task.status === 'execution_unknown') {
+        requireValue(options.reviewedUnknown === true, 'TASK_EXECUTION_UNKNOWN_REQUIRES_REVIEW', 409);
+        includesUnknown = true;
+      }
+      requireValue(['succeeded', 'failed', 'timed_out', 'canceled', 'execution_unknown'].includes(task.status), 'TASK_NOT_TERMINAL', 409);
     }
+    if (includesUnknown) {
+      requireValue(this.canReviewUnknownHistory, 'HISTORY_AGENT_STOP_PENDING', 409);
+      this.state.acquireWorker(); // Another live Local Worker must not race this review.
+    }
+    // The durable intent is written only after review and stop checks pass.
     this.state.beginTaskDeletion(ids);
-    this.core.deleteTasks(LOCAL_IDENTITY.ownerId, ids);
+    this.core.deleteTasks(LOCAL_IDENTITY.ownerId, ids, options);
     this.core.recoverBlobCleanup();
     this.state.finishTaskDeletion(ids);
     return ids.slice();
@@ -141,7 +151,8 @@ export class LocalApp {
   private recoverTaskDeletions(): void {
     const pending = this.state.pendingTaskDeletions();
     if (!pending.length) return;
-    this.core.deleteTasks(LOCAL_IDENTITY.ownerId, pending, true);
+    // Journal entries already passed the review/stop checks before the crash.
+    this.core.deleteTasks(LOCAL_IDENTITY.ownerId, pending, { allowMissing: true, reviewedUnknown: true });
     this.core.recoverBlobCleanup();
     this.state.finishTaskDeletion(pending);
   }

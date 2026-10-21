@@ -186,21 +186,21 @@ export class TaskCore {
       requireValue(reference, 'FILE_NOT_FOUND', 404); return this.blobs.read(reference);
     });
   }
-  /** Delete only settled, known tasks. execution_unknown remains available for operator review. */
-  deleteTasks(owner: string, ids: readonly string[], allowMissing = false): string[] {
+  /** Unknown outcomes require explicit operator review; deletion never changes execution state. */
+  deleteTasks(owner: string, ids: readonly string[], options: { allowMissing?: boolean; reviewedUnknown?: boolean } = {}): string[] {
     requireValue(typeof owner === 'string' && ids.length > 0 && ids.length <= 10_000 &&
       ids.every(id => typeof id === 'string' && /^[0-9a-f-]{36}$/.test(id)) && new Set(ids).size === ids.length, 'INVALID_TASK_DELETE');
     const deleted = this.store.transaction(() => {
       this.recover();
       const tasks = ids.flatMap(id => {
         const task = this.store.get(id);
-        if (!task && allowMissing) return [];
+        if (!task && options.allowMissing) return [];
         requireValue(task && task.ownerId === owner, 'TASK_NOT_FOUND', 404);
         return [task];
       });
       for (const task of tasks) {
-        requireValue(task.status !== 'execution_unknown', 'TASK_EXECUTION_UNKNOWN_REQUIRES_REVIEW', 409);
-        requireValue(['succeeded', 'failed', 'timed_out', 'canceled'].includes(task.status), 'TASK_NOT_TERMINAL', 409);
+        requireValue(task.status !== 'execution_unknown' || options.reviewedUnknown === true, 'TASK_EXECUTION_UNKNOWN_REQUIRES_REVIEW', 409);
+        requireValue(['succeeded', 'failed', 'timed_out', 'canceled', 'execution_unknown'].includes(task.status), 'TASK_NOT_TERMINAL', 409);
       }
       this.store.deleteTasks(ids);
       return ids.slice();

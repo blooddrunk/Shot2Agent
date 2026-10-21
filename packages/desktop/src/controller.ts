@@ -277,7 +277,7 @@ export class DesktopController {
       submit: [], current: [], discard: [], pause: ['paused'], copy: ['id'], detail: ['id'], 'retry-delivery': ['id'], recover: [], 'select-agent': ['id', 'version'],
       'archive-agent': ['id', 'version', 'archived', 'confirm'], 'delete-agent': ['id', 'version', 'confirm'], 'cleanup-unused-agents': [],
       'create-profile': ['provider', 'id', 'path', 'workspace', 'prompt', 'endpoint', 'model', 'token', 'editId', 'editVersion', 'reuseExisting', 'enableAfterTest'], 'credential-status': ['id', 'version'],
-      'delete-history': ['ids'], 'clear-history': ['mode'], 'discover-agents': [], quit: [] };
+      'delete-history': ['ids', 'reviewedUnknown'], 'clear-history': ['mode'], 'discover-agents': [], quit: [] };
     requireValue(Object.hasOwn(allowed, r.command) && Object.keys(r).every(k => ['v', 'command', ...allowed[r.command as string]].includes(k)), 'COMMAND_REFUSED');
     const id = () => { requireValue(typeof r.id === 'string' && /^[0-9a-f-]{36}$/.test(r.id), 'INVALID_TASK_ID'); return r.id; };
     switch (r.command) {
@@ -405,7 +405,8 @@ export class DesktopController {
       case 'current': requireValue(this.isConfigured(), 'AGENT_SETUP_REQUIRED'); await this.app.capture(false, true); break;
       case 'delete-history': {
         requireValue(Array.isArray(r.ids) && r.ids.length > 0 && r.ids.length <= 500 && r.ids.every(id => typeof id === 'string'), 'INVALID_TASK_DELETE');
-        this.app.deleteHistory(r.ids as string[]); this.lastHistoryCleanup = undefined; break;
+        requireValue(r.reviewedUnknown === undefined || typeof r.reviewedUnknown === 'boolean', 'INVALID_HISTORY_REVIEW');
+        this.app.deleteHistory(r.ids as string[], { reviewedUnknown: r.reviewedUnknown === true }); this.lastHistoryCleanup = undefined; break;
       }
       case 'clear-history': {
         requireValue(r.mode === 'completed' || r.mode === 'all-safe', 'INVALID_HISTORY_CLEAR_MODE');
@@ -457,14 +458,14 @@ export class DesktopController {
     });
     const current = this.currentPolicy();
     const selectedAgent = this.app.registry.find(e => e.profile.id === this.app.profile.id && e.profile.version === this.app.profile.version);
-    return { hotkeys: this.settings.hotkeys ?? {}, lastAction: this.lastAction, lastHistoryCleanup: this.lastHistoryCleanup,
+    return { hotkeys: this.settings.hotkeys ?? {}, lastAction: this.lastAction, lastHistoryCleanup: this.lastHistoryCleanup, canReviewUnknownHistory: this.app.canReviewUnknownHistory,
       settings: this.settings.desktop, delivery: this.settings.delivery, root: this.root, launchMode: this.launchMode, setupRequired: !this.isConfigured(),
       agents, discovery: this.discovery.map(candidate => ({ provider: candidate.provider, path: candidate.path, selectionPath: candidate.selectionPath ?? candidate.path, version: candidate.version, status: candidate.status })),
       profile: { adapter: selectedAgent?.adapter.name ?? current?.provider ?? 'fake', id: this.isConfigured() ? this.app.profile.id : '', profileVersion: this.isConfigured() ? this.app.profile.version : '',
         workspace: current?.policy.workspace ?? this.settings.codex?.workspace, version: current?.policy.cliVersion ?? this.settings.codex?.cliVersion, sandbox: 'read-only' }, workspaceSuggestion: this.workspaceSuggestion(),
       status: !this.isConfigured() ? 'setup_required' : this.workerError ? 'worker_error' : this.captureError ? 'capture_error' : this.settings.desktop.paused ? 'paused' : !this.settings.desktop.enabled ? 'capture_off' : 'monitoring',
       error: this.workerError ?? this.captureError, pending: this.preview ?? null, captureStatus: this.app.lastCaptureStatus,
-      total: tasks.length, tasks: tasks.sort((a, b) => b.createdAt - a.createdAt || b.submission.taskId.localeCompare(a.submission.taskId)).slice(0, 50).map(t => ({ id: t.submission.taskId, status: t.status, provider: t.submission.provider ?? t.attempts[0]?.adapterName, profileId: t.submission.profileId, summary: t.result?.summary, error: t.result?.errorCode ?? (t.status === 'queued' && !this.app.registry.some(e => e.profile.id === t.submission.profileId && e.profile.version === t.submission.profileVersion) ? 'PROFILE_UNAVAILABLE' : undefined),
+      total: tasks.length, tasks: tasks.sort((a, b) => b.createdAt - a.createdAt || b.submission.taskId.localeCompare(a.submission.taskId)).slice(0, 50).map(t => ({ id: t.submission.taskId, createdAt: t.createdAt, status: t.status, provider: t.submission.provider ?? t.attempts[0]?.adapterName, profileId: t.submission.profileId, summary: t.result?.summary, error: t.result?.errorCode ?? (t.status === 'queued' && !this.app.registry.some(e => e.profile.id === t.submission.profileId && e.profile.version === t.submission.profileVersion) ? 'PROFILE_UNAVAILABLE' : undefined),
         save: this.app.state.get(t.submission.taskId, 'save'), clipboard: this.app.state.get(t.submission.taskId, 'clipboard') })) };
   }
   async close() {

@@ -186,6 +186,11 @@ test('clear-all-safe removes terminal failures while preserving queued and execu
     assert.equal(result.lastHistoryCleanup.preservedUnknown, 1);
     assert.deepEqual(desktop.app.list().map(task => task.submission.taskId), [unknown, queued]);
     assert.equal(desktop.app.list().some(task => task.submission.taskId === failed), false);
+    assert.equal(result.canReviewUnknownHistory, true);
+    await assert.rejects(desktop.dispatch({ v: 1, command: 'delete-history', ids: [unknown] }), /TASK_EXECUTION_UNKNOWN_REQUIRES_REVIEW/);
+    await assert.rejects(desktop.dispatch({ v: 1, command: 'delete-history', ids: [unknown], reviewedUnknown: 'true' }), /INVALID_HISTORY_REVIEW/);
+    const reviewed = await desktop.dispatch({ v: 1, command: 'delete-history', ids: [unknown], reviewedUnknown: true });
+    assert.equal(reviewed.total, 1); assert.equal(reviewed.tasks[0].id, queued); assert.equal(reviewed.tasks[0].status, 'queued');
   } finally { await desktop.close(); rmSync(dir, { recursive: true, force: true }); }
 });
 

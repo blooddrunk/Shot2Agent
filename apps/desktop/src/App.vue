@@ -4,13 +4,13 @@ import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 
 type Receipt = { status: string; code?: string; attempts: number; classification?: string; stopReason?: string };
-type Task = { id: string; status: string; provider?: string; profileId?: string; summary?: string; error?: string; clipboard?: Receipt; save?: Receipt };
+type Task = { id: string; createdAt: number; status: string; provider?: string; profileId?: string; summary?: string; error?: string; clipboard?: Receipt; save?: Receipt };
 type Hotkeys = Record<string, string>;
 type Agent = { id: string; version: string; provider: string; archived: boolean; historical: boolean; referenced: boolean; removable: boolean; deletable: boolean;
   path?: string; workspace?: string; prompt?: string; cliVersion?: string; gateway?: { endpoint: string; model: string; vision: string; credentialStatus: string; connectionStatus: string } };
 type Discovery = { provider: string; path: string; selectionPath?: string; version?: string; status: string };
 type Snapshot = { hotkeys: Hotkeys; hotkeyStatus?: string; lastAction?: { action: string; status: string }; lastHistoryCleanup?: { deleted: number; preservedActive: number; preservedUnknown: number };
-  launchMode: string; root: string; status: string; setupRequired: boolean; workspaceSuggestion: string; error?: string; total: number; pending: string | null; captureStatus: string;
+  launchMode: string; root: string; status: string; setupRequired: boolean; workspaceSuggestion: string; error?: string; total: number; pending: string | null; captureStatus: string; canReviewUnknownHistory: boolean;
   settings: { enabled: boolean; mode: string; paused: boolean; autoConsent: boolean; alwaysConsent: boolean };
   delivery: { clipboard: string; saveDirectory?: string; retry?: { maxRetries: number; backoffMs: number; budgetMs: number } };
   agents: Agent[]; discovery: Discovery[]; profile: { adapter: string; id: string; profileVersion?: string; workspace?: string; version?: string; sandbox: string }; tasks: Task[] };
@@ -21,6 +21,9 @@ const modeText: Record<string, string> = { codex: 'Local', staging: 'Fake 验收
 const cliStatusText: Record<string, string> = { not_found: '未安装', invalid: '路径无效', unsupported: '功能不兼容', version_changed: '版本或文件已变化', unverified_auth: '已发现', scan_incomplete: '检测未完成' };
 const statusText: Record<string, string> = { monitoring: '正在监听新图片', paused: '捕获已暂停', capture_off: '捕获已关闭', setup_required: '先选择或配置一个 Agent', worker_error: 'Worker 已停止 · 请检查后重启', capture_error: '剪贴板读取暂停 · 可重新连接' };
 const errorText: Record<string, string> = {
+  CODEX_INTERRUPTED: 'Codex 任务已中断，未取得完整结果。',
+  HISTORY_AGENT_STOP_PENDING: '请等待当前 Agent 执行及清理结束后再删除不确定历史；若 Worker 停止状态未确认，请先确认 Agent 已停止，再退出并重新打开应用。',
+  TASK_EXECUTION_UNKNOWN_REQUIRES_REVIEW: '请确认对应 Agent 已停止，再删除这条执行结果不确定的历史。',
   CLAUDE_MANAGED_POLICY_REFUSED: '检测到 Claude 受管理配置，已停止执行。请确认本机是否安装了组织管理的 Claude 配置。',
   CLAUDE_POLICY_CHECK_UNAVAILABLE: '无法完成 Claude 本机配置检查，请使用最新 Windows 程序包后重试新任务。',
   CLAUDE_POLICY_CHECK_TIMEOUT: 'Claude 本机配置检查超时，请稍后手动提交新任务。',
@@ -51,9 +54,9 @@ const removedProfiles = computed(() => data.value?.agents.filter(a => a.archived
 const historicalProfiles = computed(() => data.value?.agents.filter(a => !a.archived && a.historical) ?? []);
 const selectableProfiles = computed(() => activeProfiles.value);
 const selectedAgent = computed(() => data.value?.agents.find(isSelectedAgent));
-const safeTasks = computed(() => data.value?.tasks.filter(t => ['succeeded', 'failed', 'timed_out', 'canceled'].includes(t.status)) ?? []);
+const safeTasks = computed(() => data.value?.tasks.filter(isDeletable) ?? []);
 function isSelectedAgent(agent: Agent) { return agent.id === data.value?.profile.id && agent.version === data.value?.profile.profileVersion; }
-function isDeletable(task: Task) { return ['succeeded', 'failed', 'timed_out', 'canceled'].includes(task.status); }
+function isDeletable(task: Task) { return ['succeeded', 'failed', 'timed_out', 'canceled'].includes(task.status) || (task.status === 'execution_unknown' && data.value?.canReviewUnknownHistory === true); }
 function providerForDiscovery() { return setupProvider.value === 'codex' ? 'codex' : 'claude'; }
 function chooseDetectedPath() {
   const candidate = data.value?.discovery.find(c => c.provider === providerForDiscovery() && c.status === 'unverified_auth' && c.path);
@@ -161,10 +164,14 @@ async function openTask(id: string) {
 function toggleTask(id: string, checked: boolean) { selectedTasks.value = checked ? [...new Set([...selectedTasks.value, id])] : selectedTasks.value.filter(value => value !== id); }
 function selectVisibleTasks() { selectedTasks.value = safeTasks.value.map(task => task.id); }
 function deleteTask(id: string) {
-  if (window.confirm('删除此任务的本地历史、截图、结果附件和投递记录？已保存到其他目录的 Markdown 不会删除。')) void action('delete-history', { ids: [id] });
+  const unknown = data.value?.tasks.find(task => task.id === id)?.status === 'execution_unknown';
+  const review = unknown ? '请先确认这个旧 Agent 任务已经停止。确认后仅删除历史，不会取消或重新运行 Agent。\n' : '';
+  if (window.confirm(`${review}删除此任务的本地历史、截图、结果附件和投递记录？已保存到其他目录的 Markdown 不会删除。`)) void action('delete-history', { ids: [id], reviewedUnknown: unknown });
 }
 function deleteSelectedTasks() {
-  if (selectedTasks.value.length && window.confirm(`永久删除选中的 ${selectedTasks.value.length} 项本地任务数据？`)) void action('delete-history', { ids: [...selectedTasks.value] });
+  const unknown = data.value?.tasks.filter(task => selectedTasks.value.includes(task.id) && task.status === 'execution_unknown').length ?? 0;
+  const review = unknown ? `其中 ${unknown} 项执行结果不确定，请先确认对应 Agent 均已停止。清理不会取消或重新运行 Agent。\n` : '';
+  if (selectedTasks.value.length && window.confirm(`${review}永久删除选中的 ${selectedTasks.value.length} 项本地任务数据？已导出的 Markdown 保留。`)) void action('delete-history', { ids: [...selectedTasks.value], reviewedUnknown: unknown > 0 });
 }
 function clearHistory(scope: 'completed' | 'all-safe') {
   const message = scope === 'completed' ? '删除所有成功任务的本地历史和私有文件？' : '删除所有可安全删除的终态任务？排队、运行中及结果不确定的任务会保留。';
@@ -270,16 +277,16 @@ onUnmounted(() => clearInterval(timer));
 
         <div class="section-heading history-heading"><h2>本地历史 <span>{{ data?.total ?? 0 }}</span></h2><span class="hint">最近显示 {{ data?.tasks.length ?? 0 }} 项</span></div>
         <div class="profile-actions"><button @click="selectVisibleTasks" :disabled="!safeTasks.length">选择可删除的已结束任务</button><button @click="deleteSelectedTasks" :disabled="busy || !selectedTasks.length">删除所选（{{ selectedTasks.length }}）</button><button @click="clearHistory('completed')" :disabled="busy || !data?.total">清除成功历史</button><button @click="clearHistory('all-safe')" :disabled="busy || !data?.total">清除所有可安全删除的历史</button></div>
-        <p class="hint">排队、运行中和结果不确定的任务会保留，直到可安全删除。删除历史不会删除保存到其他目录的 Markdown 文件。</p>
+        <p class="hint">排队、运行中任务会保留。执行结果不确定的旧任务可在确认 Agent 停止后单独或批量删除。删除历史不会删除保存到其他目录的 Markdown 文件。</p>
         <p v-if="data?.lastHistoryCleanup" class="notice">最近清理：删除 {{ data.lastHistoryCleanup.deleted }} 项，保留 {{ data.lastHistoryCleanup.preservedActive }} 个活动任务和 {{ data.lastHistoryCleanup.preservedUnknown }} 个结果不确定任务。</p>
         <p class="hint" v-if="!data?.tasks.length">尚无任务。配置 Agent 后开启捕获并应用设置。</p>
         <ul class="tasks"><li v-for="task in data?.tasks" :key="task.id">
-          <div class="section-heading"><label class="check task-check"><input type="checkbox" :checked="selectedTasks.includes(task.id)" :disabled="busy || !isDeletable(task)" @change="toggleTask(task.id, ($event.target as HTMLInputElement).checked)"><span>选择删除</span></label><button class="task-title" @click="openTask(task.id)" :disabled="busy"><strong>{{ (task.error && errorText[task.error]) || task.summary || task.status }}</strong><span>{{ task.provider || task.profileId }} · {{ task.id.slice(0, 8) }} · {{ task.status }}</span></button><button v-if="isDeletable(task)" @click="deleteTask(task.id)" :disabled="busy">删除</button></div>
+          <div class="section-heading"><label class="check task-check"><input type="checkbox" :checked="selectedTasks.includes(task.id)" :disabled="busy || !isDeletable(task)" @change="toggleTask(task.id, ($event.target as HTMLInputElement).checked)"><span>选择删除</span></label><button class="task-title" @click="openTask(task.id)" :disabled="busy"><strong>{{ (task.error && errorText[task.error]) || task.summary || task.status }}</strong><span>{{ new Date(task.createdAt).toLocaleString('zh-CN', { hour12: false }) }} · {{ task.provider }} · {{ task.profileId }} · {{ task.id.slice(0, 8) }} · {{ task.status }}</span></button><button v-if="isDeletable(task) && task.status !== 'execution_unknown'" @click="deleteTask(task.id)" :disabled="busy">删除</button></div>
           <p class="hint">剪贴板：{{ task.clipboard?.status || '等待结果' }} · 保存：{{ task.save?.status || '等待结果' }}</p>
           <p class="hint" v-if="task.clipboard?.code">剪贴板：{{ task.clipboard.code }} · {{ task.clipboard.classification }} · {{ task.clipboard.attempts }} 次</p><p class="hint" v-if="task.save?.code">保存：{{ task.save.code }} · {{ task.save.classification }} · {{ task.save.attempts }} 次</p>
           <p class="error" v-if="task.error">{{ task.error }} · 此任务不会自动重跑。</p><p class="notice" v-if="task.clipboard?.status === 'blocked_by_clipboard_change'">Smart 已保护较新的剪贴板内容，可手动复制结果。</p>
           <div class="task-actions" v-if="task.status === 'succeeded'"><button @click="action('copy', { id: task.id })" :disabled="busy">复制结果</button><button @click="action('retry-delivery', { id: task.id })" :disabled="busy">重试结果投递</button></div>
-          <p class="notice" v-if="task.status === 'execution_unknown'">执行结果不确定。请先检查 Agent；此任务不能自动重跑或删除。</p>
+          <div class="notice" v-if="task.status === 'execution_unknown'"><p>执行结果不确定，不会自动重跑。确认对应 Agent 已停止后，可以删除这条历史。</p><button :disabled="busy || !data?.canReviewUnknownHistory" @click="deleteTask(task.id)">确认停止后删除</button><span v-if="!data?.canReviewUnknownHistory" class="hint">请等待当前 Agent 执行及清理结束。</span></div>
           <p class="hint" v-if="['queued', 'leased', 'running'].includes(task.status)">任务正在排队或运行；不会因为清理历史而取消。</p>
         </li></ul>
         <article v-if="detail" class="result"><div class="section-heading"><h2>结果详情</h2><button @click="detail = undefined">关闭详情</button></div><p class="hint">{{ detail.status }}</p><p v-if="detail.gateway" class="hint path">{{ detail.gateway.endpoint }} · {{ detail.gateway.model }}</p><pre>{{ detail.result?.contentMarkdown || detail.result?.errorCode || '暂无结果；完成后重新打开详情。' }}</pre></article>
