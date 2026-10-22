@@ -108,3 +108,5 @@ Quick actions form one wrapping group with an 8px gap. Advanced cleanup has a se
 Keep the screenshot workflow prominent; preserve keyboard focus and visible action feedback. Keep provider-specific Token controls exclusive to GLM. Keep advanced cleanup separate from ordinary removal. Never treat browser screenshots or Fake execution as Windows paste, actual provider authentication, live vision or universal IME proof.
 
 M8 adds an inline ordered composer using the existing controls and preview styles. Capture settings expose independent clipboard/folder toggles; file/text payload and notification are independent from Markdown save.
+
+Local 1.0 uses Lucide (@lucide/vue) SVG icons for navigation and common actions. Icons use one 1.8px stroke, inherit text color, and remain decorative (aria-hidden, non-focusable) beside visible labels. Consent, errors and destructive actions keep their wording. No icon fonts, CDN assets or new execution controls.

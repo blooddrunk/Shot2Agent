@@ -670,3 +670,17 @@ dialog::backdrop {
 .composer-images li { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; min-width: 0; }
 .composer-images img { width: 120px; height: 80px; object-fit: contain; }
 .composer .section-heading { flex-wrap: wrap; gap: 8px; }
+
+/* One SVG family; text keeps the accessible name and carries critical meaning. */
+.app-icon { display: inline-block; flex: 0 0 auto; vertical-align: -0.18em; }
+button > .app-icon, summary > .app-icon, h2 > .app-icon, h3 > .app-icon,
+.notice > .app-icon, .error > .app-icon { margin-inline-end: 6px; }
+button > .app-icon:last-child:not(:first-child) { margin-inline-start: 6px; margin-inline-end: 0; }
+nav button { display: flex; align-items: center; gap: 8px; }
+nav button > .app-icon { margin: 0; }
+@media (max-width: 560px) {
+  nav button { justify-content: center; gap: 4px; padding-inline: 6px; }
+  nav button > .app-icon { width: 14px; height: 14px; }
+}
+.sidebar-bottom button { display: flex; align-items: center; justify-content: center; gap: 6px; padding-inline: 6px; white-space: nowrap; }
+.sidebar-bottom button > .app-icon { margin: 0; }

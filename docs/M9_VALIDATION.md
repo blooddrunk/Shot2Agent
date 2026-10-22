@@ -1,8 +1,8 @@
-# M9-L 1.0.0-rc.1 validation
+# M9-L Local 1.0 validation
 
 Baseline: `a84b8b17f9aa33246e8df5e5cef6f1c9129aaf77`, after documentation PR #19 merged. All tests use disposable roots, synthetic images and Fake/mock Agents. No operator Token/history or paid request.
 
-This candidate is **not formally accepted Local v1.0**. Explorer Ctrl+V/focus after the 0.8.1 fix remains NOT VERIFIED until interactive evidence is available. Previously operator-reported unchanged folder/batch/pause/notification observations retain their existing scope.
+The 1.0.0-rc.1 candidate was followed by operator acceptance on 2026-10-22: **“验证成功，可以完成复制。”** This is operator-reported file-copy PASS after the exact published RC; it closes the previously reported Explorer paste blocker. The reply did not separately enumerate trial counts or provide a focus recording. Previously accepted unchanged native observations retain their original scope. Formal 1.0.0 additionally includes the requested icons and user documentation; its final CI/package results are recorded below and in the release.
 
 Implementation adds locked native cache cleanup (current CF_HDROP paths and files newer than ten minutes retained), cache quota display and confirmed GUI cleanup, version/build consistency checks, backup/upgrade guide, historical synthetic upgrade fixtures, extracted-ZIP gates. No new database/settings migration is required. Historical fixtures are produced by the actual 0.7.2, 0.8.0 and 0.8.1 sources; generation command is `node --experimental-strip-types scripts/generate-upgrade-fixtures.mjs` (exit 0). Historical source SHAs are embedded in each fixture under `scripts/fixtures/upgrades`. Mock GLM credentials are memory-only; only references appear in fixtures.
 
@@ -26,5 +26,16 @@ The working tree for these commands is the implementation committed with this do
 
 Native tests cover CF_HDROP, Preferred DropEffect=COPY, idle owner/OLE readback, external clipboard replacement, clipboard contention, cleanup while current files are advertised, recent retention, unknown-file refusal, helper restart and history deletion preserving files. Historical upgrade fixtures verify preserved settings, shared credential references, queued/unknown bindings, history/exports and interrupted delivery without Agent replay; corrupt settings and a partial settings temp file never overwrite the recoverable original. M9 adds no incompatible schema/settings migration. Existing core tests retain abrupt-exit, partial-write and deletion-journal recovery coverage.
 
-**NOT VERIFIED:** actual Explorer Ctrl+V and foreground-focus observations on the final ZIP. Windows Computer Use initialization failed before any input with `sandboxCwd is not a local file URI: file:///mnt/d/code/projects/Shot2Agent`; hosted CI/API readback cannot replace this. The sole remaining operator retest is the three pastes in [the short guide](LOCAL_V1_GUIDE.md), one after tray hide. Other unchanged native observations are not requested again. Real paid model vision/provider compatibility is not tested in this milestone.
+## Native operator acceptance and final 1.0.0 follow-up
 
+The published RC used source `573cae0e671c5360198d492078b09d16f1802a52`, ZIP SHA-256 `20eb9f4070d70e46c8a014e64fa2976739241d6f409ecb220d809047bfef5d4f`. On 2026-10-22 the operator reported successful copying (quoted above) in response to the requested native retest. This is a user observation, not a claim that CI drove Explorer. Computer Use remained unavailable because initialization rejected the WSL workspace URI.
+
+The follow-up requested Lucide icons and readable ordinary-user docs before formal release. It changes presentation, documentation and version only; executable/credential isolation, Core, native clipboard implementation, cache cleanup, task execution and data schemas remain unchanged. No repeat of the already accepted native test is requested. The final build still runs the Windows native and extracted-package regressions.
+
+**NOT VERIFIED:** independent automated Explorer/focus recording, universal IME/provider compatibility and real paid vision in this release run. These are not relabeled as CI proof. The operator's file-copy acceptance and earlier scoped native PASS reports are retained separately from automation.
+
+## Local 1.0 icons and user documentation validation
+
+The follow-up uses frozen `@lucide/vue` 1.61.0, decorative SVG companions to existing visible labels, and no new native permissions. README, quick start and a full configuration manual cover the actual GUI fields, supported CLI/model restrictions, package contents, delivery, history, cache, troubleshooting and backup. Both manuals and icon licensing are included in the portable ZIP. The README screenshot uses a disposable mock CLI configuration, not operator data.
+
+Executed commands: `corepack pnpm install --frozen-lockfile`, `npm run check` (216 total / 191 PASS / 25 Linux platform skips / 0 FAIL), `npm run desktop:test-ui` (21/21 PASS), targeted layout follow-up (5/5 PASS), and Rust fmt check all exit 0. The final full run includes the narrow-sidebar icon alignment fix. Dark/light renders at 1040, 720 and 480px were inspected. Local documentation links and package-file explanations were checked. The Impeccable detector exits 0 with four pre-existing style advisories, none introduced by the icon changes. Exact final Windows matrix/build source SHA, artifact checksum and per-command outcomes are recorded in the release and PR; a successful package is required before tagging.

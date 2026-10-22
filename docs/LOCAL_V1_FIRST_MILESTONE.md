@@ -1,3 +1,5 @@
+> Local 1.0 release: [用户使用手册](USER_GUIDE.md) · [发布验证与操作员验收](M9_VALIDATION.md)。下文保留历史规格和规划，不作为当前用户操作指南。
+
 # Shot2Agent: Local v1.0 is the FIRST product milestone
 
 Decision 2026-10-21. Baseline: merged M6-L PR #11 (c430c5735b7c0dc6f2bd2740bc50f8e94f33f2a4). This is a PLAN, not completed functionality. Remote/VPS is strictly later; the old roadmap's M3-M5 sections describe scope, not sequential release gates.
