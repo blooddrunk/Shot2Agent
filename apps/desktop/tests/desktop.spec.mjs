@@ -219,7 +219,7 @@ test("history details, Copy, selection, deletion, clear; capture consent and out
   await seedTasks();
   await nav(page, "首页");
   await expect(page.locator(".tasks li")).toHaveCount(3);
-  await page.getByRole("button", { name: "复制结果" }).first().click();
+  await page.getByRole("button", { name: "复制文本" }).first().click();
   await expect(page.getByText("已复制结果，可以粘贴。")).toBeVisible();
   await page.locator(".task-title").first().click();
   await expect(page.getByRole("dialog", { name: "结果详情" })).toBeVisible();
@@ -351,7 +351,7 @@ test("history pages and searches older than the newest 50 tasks", async ({
     page.getByRole("button", { name: "上一页", exact: true }),
   ).toBeDisabled();
   await expect(page.locator(".tasks li")).toHaveCount(1);
-  await page.getByRole("button", { name: "复制结果", exact: true }).click();
+  await page.getByRole("button", { name: "复制文本", exact: true }).click();
   await expect(page.getByText("已复制结果，可以粘贴。")).toBeVisible();
   await page.getByRole("button", { name: "删除", exact: true }).click();
   await expect(page.locator(".tasks li")).toHaveCount(0);

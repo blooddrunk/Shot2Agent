@@ -8,7 +8,10 @@ Implementation candidate. Baseline `b2c32b04` (PR #16), safely merged into `code
 - New deterministic M8 controller/core regression exit 0: 12 passed, 0 failed. Covers four input combinations, startup/partial/replaced/renamed files, rearm/pause, dedupe/repeat, 2/5-image order, immutable profile, atomic invalid/oversize refusal, composer editing, independent file/save/notification delivery, history-only, conflict/busy/ambiguous retries and no Agent rerun.
 - Local `npm run check` exit 0: lint, TS/Vue type checks, 210 Node tests (185 passed / 25 platform skipped / 0 failed), production builds and compiled fresh-cwd Fake / bundled Gateway-resource smoke passed. `npm run desktop:test-ui` exit 0: 17/17 passed, including real Vue composer at 1040x760, 720x560 and 480x640, source/output controls and all retained M7 workflows.
 - Visual composer screenshots inspected at compact width; no horizontal clipping found. Mechanical design check exit 0, four advisory findings in pre-existing style lines; no design-system rewrite.
-- Windows CI, Rust, native helper and packaged EXE evidence remain pending until linked below.
+- PR source `9709d81178259768475dc144e9873d91a654b576`: [CI 39707230956](https://github.com/blooddrunk/Shot2Agent/actions/runs/39707230956) passed Linux/Windows Node 22/24 and 17 Vue tests. Windows Node 24 recorded 210 total / 208 passed / 2 skipped / 0 failed, including native clipboard helper coverage. All workflow commands completed successfully.
+- [Windows package 39707230916](https://github.com/blooddrunk/Shot2Agent/actions/runs/39707230916) passed frozen install, release build, Rust fmt and 4 release Rust tests, packaging, downloaded policy helper, synthetic Credential Manager lifecycle, bundled Gateway fixture and packaged EXE IPC/refusal/quit/death/descendant-cleanup smoke. Package downloaded and manifest/resource inclusion independently inspected.
+- PR artifact `Shot2Agent-Windows-x64` id `12396130131`, ZIP SHA-256 `8659910c722060107a194e2aa3f7d8167345293565d8f4ce38d44e7c4468938f`; BUILD.txt says M8-L 0.8.0 / Node v24.21.0. PR workflows check out a synthetic merge ref: this artifact records `9c896364649e638140adca51cedeff6961a98cea`, rather than branch HEAD. A merged-main build must use main's exact SHA; use BUILD.txt and final handoff links for its identity.
+- Final labels distinguish **复制文本** from **复制文件** and show a Chinese explanation for unavailable native notifications. Final local Vue typecheck exit 0 and 17/17 UI tests passed after these labels; the PR/main checks remain the independent final gate.
 - Native Computer Use initialization attempted; tool rejected the WSL cwd with `sandboxCwd is not a local file URI: file:///mnt/d/code/projects/Shot2Agent`. No native GUI action was performed. Explorer actual paste, native folder-picker interaction and visible/non-focus-stealing notification remain NOT VERIFIED unless separately observed.
 - Windows native helper tests verify CF_HDROP readback, existing file contents, Smart sequence rejection, clipboard-lock contention and native notification API acceptance. API acceptance is not visible-notification proof. Windows package smoke verifies restricted IPC/start/shutdown, not GUI acceptance.
 
@@ -27,3 +30,15 @@ Implementation candidate. Baseline `b2c32b04` (PR #16), safely merged into `code
 ## Deliberate limits / M9
 
 No installer, Remote/Relay work, recursive media import, arbitrary binary result attachments or automatic Agent rerun. File clipboard materializes the verified Markdown answer only. Cache is retained across history deletion/exit, bounded to 1000 files / 256 MiB with refusal at quota; no background eviction can invalidate an advertised clipboard file. M9 owns end-user cache/backup ergonomics, final portable/upgrade matrix, native acceptance gaps, simple GUI docs and Local v1.0 tagging after agreed gates pass.
+
+## Changed implementation surfaces
+
+| Files | Decision |
+| --- | --- |
+| packages/desktop/src/folder.ts, controller.ts, settings.ts | Bounded nonrecursive source baseline and reconciliation, existing opt-in migration, composer IPC with file paths rather than large image IPC payloads |
+| packages/local/src/app.ts | Shared capture/manual/folder submission, full image verification, Core atomic ordered batches and immutable selected Profile |
+| packages/local/src/clipboard.ts, clipboard.ps1 | Serialized native CF_HDROP lock/sequence/deadline; optional Windows balloon notification without installer |
+| packages/local/src/delivery.ts, state.ts, desktop/actions.ts | Independent durable channels/payload receipts, stable verified Markdown cache, notification upgrade baseline and existing retry guards |
+| apps/desktop/src/App.vue, style.css | Existing four-page GUI extended with folder picker, composer, independent outputs and specific manual copy actions |
+| packages/worker/src/gateway.ts | Known image-capable model check retained; historical vision qualification is diagnostic rather than a paid execution gate |
+| desktop/local tests, portable manifest and M8 docs | Synthetic regression and native helper proof; 0.8.0 package identity and explicit acceptance boundaries |

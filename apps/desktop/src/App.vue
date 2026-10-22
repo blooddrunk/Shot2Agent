@@ -145,6 +145,8 @@ const errorText: Record<string, string> = {
   CAPTURE_FOLDER_UNAVAILABLE: "截图目录不可访问，请重新选择后应用设置。",
   FOLDER_IMAGE_INVALID_OR_UNREADABLE: "已跳过无法读取的图片，请检查文件是否完整。",
   NO_CURRENT_IMAGE: "当前剪贴板中没有图片，请先截图。",
+  NATIVE_NOTIFICATION_UNAVAILABLE: "Windows 通知不可用；请检查系统通知设置，其他输出仍可使用。",
+  FILE_CLIPBOARD_CACHE_FULL: "文件复制缓存已满，请保留需要的文件后清理缓存，再手动复制。",
   COPY_FAILED: "复制未完成，请检查剪贴板是否被占用；可稍后手动复制。",
   PROFILE_NAME_EXISTS:
     "这个名称已经存在，请编辑或恢复原助手，或使用另一个名称。",
@@ -1401,7 +1403,7 @@ onUnmounted(() => clearInterval(timer));
                 "等待结果"
               }}
             </p>
-            <p v-if="page === 'history'" class="hint">{{ task.imageCount ?? 1 }} 张图片 · 通知：{{ receiptText[task.notification?.status || ''] || task.notification?.status || '等待结果' }}<span v-if="task.notification?.code"> · {{ task.notification.code }}</span></p>
+            <p v-if="page === 'history'" class="hint">{{ task.imageCount ?? 1 }} 张图片 · 通知：{{ receiptText[task.notification?.status || ''] || task.notification?.status || '等待结果' }}<span v-if="task.notification?.code"> · {{ errorText[task.notification.code] || task.notification.code }}</span></p>
             <p class="hint" v-if="task.clipboard?.code">
               剪贴板：{{ task.clipboard.code }} ·
               {{ task.clipboard.classification }} ·
@@ -1422,7 +1424,7 @@ onUnmounted(() => clearInterval(timer));
             </p>
             <div class="task-actions" v-if="task.status === 'succeeded'">
               <button @click="action('copy', { id: task.id })" :disabled="busy">
-                复制结果</button
+                复制文本</button
               ><button @click="action('copy-files', { id: task.id })" :disabled="busy">复制文件</button><button
                 @click="action('retry-delivery', { id: task.id })"
                 :disabled="busy"
