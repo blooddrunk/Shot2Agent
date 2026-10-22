@@ -1,20 +1,4 @@
-> M8-L 0.8.0 candidate: independent clipboard/folder sources, ordered 2–5 image tasks, native file clipboard and optional completion notifications. [Windows GUI usage](docs/M8_WINDOWS_RUN.md) · [Actual validation and limits](docs/M8_VALIDATION.md). Local v1.0 remains the M9 gate.
-
-> **M7-UX 0.7.2:** Light/dark appearance switch, live capture/processing sidebar, cleaner hotkey/history/cleanup controls, and a fix for missing packaged GLM connection-test images. [Usage and verification](docs/M7_UX_VALIDATION.md#operator-acceptance-and-ui-follow-up--2026-10-22).
-
-> **M7-UX 0.7.1:** Four focused Local desktop pages, visible Agent editor, responsive controls, history management and separate local GLM Token save / optional paid connection test. [GUI guide](docs/M7_UX_RUN.md) · [validation and Windows package evidence](docs/M7_UX_VALIDATION.md).
-
-> **M6-L 0.6.0 candidate:** Configurable native Windows global hotkeys, latest completed-result actions, and separate Claude-compatible Gateway Profiles with Windows Credential Manager references. No real GLM vision claim; setup refuses unqualified image models until explicit operator attestation. See [controls and acceptance](docs/M6_WINDOWS_ACCEPTANCE.md) and [validation](docs/M6_VALIDATION.md).
-
-> **Desktop default follow-up:** Fresh desktop settings preselect Always, with capture disabled and overwrite consent required before use. Existing settings are preserved. Smart remains optional; its reported sequence conflicts are unresolved. See [operation](docs/M3_WINDOWS_RUN.md#always-default-selection--2026-10-21).
-
-> **M5-L 0.5.0 candidate:** Local Codex/Claude discovery, stopped-Worker explicit approval and immutable new-task Agent selection. Claude native transport qualified only at 2.1.305/2.1.306, personal Pro/Max only; custom GLM/token endpoints are not supported in this release. Actual model/GUI gates remain separate. See [Windows controls and restrictions](docs/M5_WINDOWS_ACCEPTANCE.md) and [executed validation](docs/M5_VALIDATION.md).
-
-> **Desktop 0.4.1:** `Shot2Agent.exe` / `Start Codex.cmd` opens the existing approved `Shot2Agent-Codex` Profile; missing configuration fails visibly. `Start acceptance.cmd` stays Fake, and `Start legacy Local.cmd` preserves the original Local history. See [Windows startup](docs/M3_WINDOWS_RUN.md) and [verification boundaries](docs/DESKTOP_CODEX_ENTRY_VALIDATION.md).
-
-> **M4-L 0.4.0:** Local delivery now has no-clobber Markdown publication, independently bounded retries and safe failure/IPC diagnostics. Smart retains its original baseline; Agent execution never auto-replays. See [reliability scope](docs/M4_LOCAL_RELIABILITY.md) and [executed Windows/CI evidence](docs/M4_VALIDATION.md).
-
-> **M3-L desktop implementation:** Windows Tauri 2 + Vue 3 Local shell, opt-in automatic new-image submission, confirmation preview, pause/resume, history, independent Smart/manual/Always clipboard and Markdown save. No Relay/listener. See [Windows build/run and five native observations](docs/M3_WINDOWS_RUN.md) and [M3 evidence](docs/M3_VALIDATION.md). M2 acceptance is preserved. The six M3 desktop observations were operator-accepted on 2026-10-21, with a Smart/input-method compatibility caveat; see the evidence record.
+> **Latest Local 0.8.1 (merged):** M8-L input/output features and native Windows Copy files / capture-status stabilization shipped in [PR #17](https://github.com/blooddrunk/Shot2Agent/pull/17) and [PR #18](https://github.com/blooddrunk/Shot2Agent/pull/18). Merged-main CI and Windows portable package passed. The operator's post-fix Explorer paste is **not yet independently retested**. [Windows GUI usage](docs/M8_WINDOWS_RUN.md) · [Evidence](docs/M8_VALIDATION.md) · [Next: M9-L Local v1.0 release plan](docs/M9_LOCAL_V1_RELEASE.md).
 
 # Shot2Agent
 
@@ -22,7 +6,7 @@
 
 Shot2Agent is a screenshot-driven, asynchronous agent task system. **Local mode** lets one Windows PC capture, process and return screenshots without a Relay/VPS. **Remote mode** optionally uses a personal VPS Relay to coordinate capture PC A and Agent PC B. Both modes use the same task contract, Profile model, Agent adapters and result-delivery settings.
 
-> Status: **M2-L Local CLI implemented**: Windows clipboard image → SQLite → Fake/real Codex → Markdown/history → manual/Smart clipboard and independent Markdown save. No Relay/VPS/local HTTP needed. The operator accepted the minimum Windows Local loop after stabilization; detailed native edge cases remain separately unverified. Start with [Windows commands, configuration and acceptance](docs/LOCAL_MVP_USAGE.md); see [verification evidence](docs/M2_VALIDATION.md) and the [plain-language Windows acceptance guide](docs/WINDOWS_ACCEPTANCE.md).
+> **Current Local user entry:** Download the Windows x64 portable ZIP from [GitHub Actions](https://github.com/blooddrunk/Shot2Agent/actions/workflows/desktop.yml), extract the entire ZIP, and double-click **Shot2Agent.exe**. Complete Agent, workspace, GLM Token, capture and result settings in the GUI. No target-machine Node, Git, pnpm, or Shot2Agent CLI required; WebView2 and the selected third-party Agent CLI/login are external prerequisites. For developer-only M2 CLI workflows see [historical instructions](docs/LOCAL_MVP_USAGE.md).
 
 ## Confirmed V1 scope
 
@@ -50,7 +34,7 @@ Same-PC Worker -> Codex CLI                 Worker on PC B -> Codex CLI
 Local history + optional delivery           Relay result -> history / PC A receiver
 ```
 
-Local mode never requires a Relay URL, a VPS, or a remote upload/download round trip. The hosted Agent model may still need Internet. See [Deployment modes](docs/DEPLOYMENT_MODES.md) and [Architecture](docs/ARCHITECTURE.md). M2-L adds a Local CLI/coordinator, native clipboard helper, real Codex adapter and independent Local delivery. M3-L adds the bounded Local desktop/tray shell; Remote delivery, watched folders and batch authoring remain planned.
+Local mode never requires a Relay URL, a VPS, or a remote upload/download round trip. The hosted Agent model may still need Internet. See [Deployment modes](docs/DEPLOYMENT_MODES.md) and [Architecture](docs/ARCHITECTURE.md). M2-L adds a Local CLI/coordinator, native clipboard helper, real Codex adapter and independent Local delivery. M3-L adds the bounded Local desktop/tray shell; Remote delivery remains planned; Local watched folders and batch authoring are implemented.
 
 ## Read first
 
@@ -65,26 +49,13 @@ Local mode never requires a Relay URL, a VPS, or a remote upload/download round 
 9. [Result delivery policy](docs/RESULT_DELIVERY.md)
 10. [Instructions for coding agents](AGENTS.md)
 
-## Windows 11 Local MVP quick start
+## Windows 11 Local desktop — ordinary user quick start
 
-普通用户在 **Windows PowerShell** 运行，先安装 Node 22.16+、Git、pnpm 10.19.0 和已登录的 Codex CLI。完整安装、Fake 离线验证及错误处理见 [Windows 使用指南](docs/LOCAL_MVP_USAGE.md)。在仓库根目录执行：
+1. Download the latest **Shot2Agent-Windows-x64** ZIP from [Windows desktop package runs](https://github.com/blooddrunk/Shot2Agent/actions/workflows/desktop.yml) and extract the **entire** archive into a writable folder.
+2. Double-click **Shot2Agent.exe**. Set up Codex CLI, Claude Code, or supported Claude-compatible GLM in the GUI; choose your Agent, workspace and optional GLM Token. Saving a Token does not send a model request. Install/login to the chosen external Agent CLI and WebView2 only if your PC needs them.
+3. In **设置**, enable clipboard screenshots and/or a screenshot folder, choose confirmation or consented automatic submission, and independently configure text/file clipboard, Markdown save and optional Windows notification. Submit from the Home preview or compose an ordered 2–5-image task. Review/copy results and manage history in the app. Closing the window hides it to the tray; use tray Quit to exit.
 
-```powershell
-corepack pnpm install --frozen-lockfile
-npm run check
-codex --version
-codex login status
-$localRoot = Join-Path $env:LOCALAPPDATA 'Shot2Agent-Codex'
-$workspace = Join-Path $env:LOCALAPPDATA 'Shot2Agent-ReadonlyWorkspace'
-$output = Join-Path $env:LOCALAPPDATA 'Shot2Agent-Results'
-New-Item -ItemType Directory -Force $workspace | Out-Null
-$codexPath = (Get-Command codex.cmd -ErrorAction Stop).Source
-node .\dist\apps\cli\src\mvp.js init --root $localRoot --adapter codex --workspace $workspace --codex $codexPath --clipboard smart --save $output
-node .\dist\apps\cli\src\mvp.js doctor --root $localRoot
-node .\dist\apps\cli\src\mvp.js watch --root $localRoot
-```
-
-用 `Win+Shift+S` 截图后在控制台输入 `submit` 确认；输入 `list` 查任务、`show UUID` 读取 Markdown、`copy UUID` 手动复制、`delivery UUID` 查两个通道状态、`quit` 退出。Smart 只在提交后没有新的剪切板操作时自动返回。明确希望自动提交时，在启动 `watch` 命令后加 `--auto`，可最小化控制台继续使用；这会将新图片发给配置的 Agent。`init` 不覆盖已有配置；同一个 watcher 内提交才能保留 Smart 生命周期基线。所有可选通道关闭时仍保留历史。
+No Shot2Agent command line, Git, Node, pnpm, JSON or repair script is part of normal use. `Start acceptance.cmd` is **developer-only**, for isolated Fake tests; it does not represent a real Agent. Native Explorer file paste is still awaiting the operator's narrow post-0.8.1 retest. [Short usage guide](docs/M8_WINDOWS_RUN.md) · [M9-L release plan](docs/M9_LOCAL_V1_RELEASE.md).
 
 ## M1 developer checks and Local demo
 
@@ -101,7 +72,7 @@ Local needs no Relay URL, server or Agent credentials. Tests cover both direct L
 
 ## Implementation / deployment status
 
-M1 provides shared task/attempt/result persistence, private verified images, idempotent upload, transactional claims/leases and Fake execution in both modes. M2-L provides clipboard PNG/DIB intake, confirmation/default or opt-in auto submission, version-pinned read-only Codex execution, persistent history, manual/Smart/explicit Always text return, independent atomic Markdown save and delivery retries. **The minimum Local loop and six M3 desktop observations have scoped operator acceptance. Smart/input-method interactions and unobserved interruption cases retain explicit limits. The Local tray/UI is implemented; folder watch, batch editor, file clipboard, remote notifications and production VPS deployment remain deferred.** The optional Relay is unchanged and not imported by Local MVP.
+**M8-L 0.8.0 merged; 0.8.1 stabilization merged; M9-L Local v1.0 release acceptance next.** Local desktop includes independent clipboard/folder capture, ordered 2–5 image tasks, native Markdown file clipboard, optional completion notification, separate result destinations, GUI Agent/GLM Token management and history cleanup. Exact merged-main Windows/Linux checks and portable EXE package passed; the original user's post-0.8.1 Explorer paste remains unverified. [M8 evidence](docs/M8_VALIDATION.md) · [M9-L release gate](docs/M9_LOCAL_V1_RELEASE.md). Remote/VPS remains deferred.
 
 ## Security baseline
 
