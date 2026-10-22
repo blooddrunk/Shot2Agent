@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { lstatSync, readFileSync } from 'node:fs';
 import sharp from 'sharp';
 import { openCore } from '../../core/src/core.ts';
-import { sha256, withImageDecode } from '../../core/src/blobs.ts';
+import { sha256, verifyImage, withImageDecode } from '../../core/src/blobs.ts';
 import { requireValue } from '../../core/src/model.ts';
 import type { AgentAdapter, ImageContentType, Profile } from '../../contracts/src/index.ts';
 import { IMAGE_LIMITS } from '../../contracts/src/index.ts';
@@ -11,12 +11,13 @@ import { runOnce } from '../../worker/src/worker.ts';
 import type { ClipboardImage, ClipboardPort } from './clipboard.ts';
 import { LocalState } from './state.ts';
 import type { Baseline } from './state.ts';
-import { deliver } from './delivery.ts';
+import { deliver, resultFiles } from './delivery.ts';
 import type { DeliveryConfig } from './delivery.ts';
 export const LOCAL_IDENTITY = { ownerId: 'local-user', deviceId: 'local-pc' };
 export class LocalApp {
-  readonly core; readonly state;
-  private pendingImage?: ClipboardImage;
+  readonly core: ReturnType<typeof openCore>; readonly state: LocalState;
+  private pendingImage?: ClipboardImage & { source?: string };
+  private pendingQueue: (ClipboardImage & { source?: string })[] = [];
   lastCaptureStatus: 'queued' | 'no_image' | 'duplicate' | 'capture_in_progress' = 'no_image';
   private cleanupBlocked = false;
   private working = false; private capturing = false; private lastSequence?: string;
@@ -34,6 +35,9 @@ export class LocalApp {
     requireValue(this.selected, 'UNAPPROVED_PROFILE'); this.config = config; this.clipboard = clipboard;
     this.core = openCore(root); this.state = new LocalState(root);
     this.recoverTaskDeletions();
+    // Upgrade adds a destination without notifying old completed history.
+    for (const task of this.list()) if (task.status === 'succeeded' && !this.state.get(task.submission.taskId, 'notification'))
+      this.state.put(task.submission.taskId, 'notification', { status: 'disabled', attempts: 0 });
   }
   /** Atomically changes the configuration available to future claims; current task bindings stay pinned. */
   setRegistry(registry: readonly ExecutionEntry[], selectedId: string, selectedVersion: string): void {
@@ -44,27 +48,42 @@ export class LocalApp {
     this.registry = next; this.selected = selected; this.adapter = selected.adapter;
   }
   get pending() { return this.pendingImage; }
-  discard(): void { this.pendingImage = undefined; }
+  discard(): void { this.pendingImage = this.pendingQueue.shift(); }
+  private clearPending(): void { this.pendingImage = undefined; this.pendingQueue = []; }
+  async ingest(bytes: Buffer, auto: boolean, baseline?: Baseline, source = 'clipboard') {
+    if (auto) return this.submit(bytes, baseline, false, source);
+    const hash = sha256(bytes);
+    if (this.state.duplicate(hash) || [this.pendingImage, ...this.pendingQueue].some(i => i && sha256(i.bytes) === hash)) return;
+    await validateLocalImage(bytes);
+    requireValue(this.pendingQueue.length < 20, 'PENDING_IMAGES_FULL');
+    const image = { bytes: Buffer.from(bytes), sequence: baseline?.sequence ?? '', source };
+    if (!this.pendingImage || (source === 'clipboard' && this.pendingImage.source === 'clipboard')) this.pendingImage = image; else this.pendingQueue.push(image);
+  }
   /** Arm at the current sequence without reading/submitting historical clipboard contents. */
   async arm(): Promise<void> {
     requireValue(this.clipboard, 'WINDOWS_CLIPBOARD_REQUIRED');
-    this.pendingImage = undefined;
+    this.clearPending();
     this.lastSequence = await this.clipboard.sequence();
   }
-  async submit(bytes: Buffer, baseline?: Baseline, force = false): Promise<string | undefined> {
-    const selected = this.selected; // Bind before any asynchronous image processing or UI selection.
-    const originalHash = sha256(bytes);
-    const prepared = await prepareImage(bytes); bytes = prepared.bytes;
-    const hash = sha256(bytes);
-    if (!force && this.state.duplicate(hash)) { this.lastCaptureStatus = 'duplicate'; return undefined; }
-    const info = await sharp(bytes, { limitInputPixels: IMAGE_LIMITS.maxPixels, failOn: 'warning', animated: true }).metadata();
-    const contentType = `image/${info.format}` as ImageContentType;
+  async submit(bytes: Buffer, baseline?: Baseline, force = false, source = 'clipboard'): Promise<string | undefined> {
+    return this.submitImages([bytes], baseline, force, source);
+  }
+  async submitImages(inputs: readonly Buffer[], baseline?: Baseline, force = true, source = 'composer'): Promise<string | undefined> {
+    const selected = this.selected;
+    requireValue(inputs.length >= 1 && inputs.length <= 5, 'BATCH_IMAGE_COUNT');
+    requireValue(inputs.reduce((n, b) => n + b.length, 0) <= IMAGE_LIMITS.maxTotalBytes, 'BATCH_OVER_60_MIB');
+    const prepared = [];
+    for (const input of inputs) prepared.push(await validateLocalImage(input));
+    const hash = prepared.length === 1 ? prepared[0].metadata.sha256 : sha256(JSON.stringify(prepared.map(i => i.metadata.sha256)));
     const taskId = randomUUID();
-    // Persist baseline first. A crash cannot publish a task with an unsafe guessed baseline.
-    if (!this.state.capture(taskId, hash, baseline, { originalHash, sentHash: hash, transformation: prepared.transformation, width: info.width, height: info.height }, force)) { this.lastCaptureStatus = 'duplicate'; return undefined; }
-    try { await this.core.submit(LOCAL_IDENTITY, taskId, { taskId, profileId: selected.profile.id, profileVersion: selected.profile.version,
-      provider: selected.adapter.name, profileFingerprint: selected.profile.fingerprint,
-      images: [{ fileName: `screenshot.${info.format}`, contentType, byteSize: bytes.length, sha256: hash }] }, [bytes]); } catch (error) { this.state.forgetCapture(taskId); throw error; }
+    if (!this.state.capture(taskId, hash, baseline, { source, images: prepared.map(i => i.provenance), ...(prepared.length === 1 ? prepared[0].provenance : {}) }, force)) {
+      this.lastCaptureStatus = 'duplicate'; return undefined;
+    }
+    try {
+      await this.core.submit(LOCAL_IDENTITY, taskId, { taskId, profileId: selected.profile.id, profileVersion: selected.profile.version,
+        provider: selected.adapter.name, profileFingerprint: selected.profile.fingerprint,
+        images: prepared.map(i => i.metadata) }, prepared.map(i => i.bytes));
+    } catch (error) { this.state.forgetCapture(taskId); throw error; }
     this.lastCaptureStatus = 'queued'; return taskId;
   }
   async capture(force = false, current = false): Promise<string | undefined> {
@@ -77,8 +96,8 @@ export class LocalApp {
       const staged = current ? undefined : pendingAtStart;
       const image = staged ?? await this.clipboard.readImage();
       if (!image) { this.lastCaptureStatus = 'no_image'; return undefined; }
-      const id = await this.submit(image.bytes, { session: this.clipboard.session, sequence: image.sequence }, force);
-      if (this.pendingImage === pendingAtStart) this.pendingImage = undefined;
+      const id = await this.submit(image.bytes, { session: this.clipboard.session, sequence: image.sequence }, force, staged?.source ?? 'clipboard');
+      if (this.pendingImage === pendingAtStart) this.discard();
       return id;
     } finally { this.capturing = false; }
   }
@@ -91,8 +110,8 @@ export class LocalApp {
     // A failed/busy read leaves the sequence unconsumed so a later poll retries.
     this.lastSequence = image?.sequence ?? sequence;
     if (!image) return { changed: true, image: false };
-    if (!auto) this.pendingImage = image;
-    return { changed: true, image: true, ...(auto ? { id: await this.submit(image.bytes, { session: this.clipboard.session, sequence: image.sequence }) } : {}) };
+    const id = await this.ingest(image.bytes, auto, { session: this.clipboard.session, sequence: image.sequence });
+    return { changed: true, image: true, ...(id ? { id } : {}) };
   }
   async work(signal?: AbortSignal): Promise<boolean> {
     if (this.working || this.cleanupBlocked) return false; this.state.acquireWorker(); this.working = true;
@@ -113,15 +132,16 @@ export class LocalApp {
     return tasks;
   }
   get(id: string) { return this.core.get(LOCAL_IDENTITY.ownerId, id); }
-  async copy(id: string): Promise<void> {
+  async copy(id: string, payload: 'text' | 'files' = 'text'): Promise<void> {
     const task = this.get(id); requireValue(task.result && this.clipboard, 'RESULT_OR_CLIPBOARD_UNAVAILABLE');
     const old = this.state.get(id, 'clipboard');
     requireValue(old?.status !== 'pending', 'DELIVERY_IN_PROGRESS');
     try {
-      requireValue(await this.clipboard.writeText(task.result.contentMarkdown), 'COPY_FAILED');
-      this.state.put(id, 'clipboard', { status: 'succeeded', attempts: (old?.attempts ?? 0) + 1, history: old?.history, smartGuard: old?.smartGuard });
+      const success = payload === 'files' ? await this.clipboard.writeFiles?.(resultFiles(task, this.state)) : await this.clipboard.writeText(task.result.contentMarkdown);
+      requireValue(success, 'COPY_FAILED');
+      this.state.put(id, 'clipboard', { status: 'succeeded', attempts: (old?.attempts ?? 0) + 1, history: old?.history, smartGuard: old?.smartGuard, payload });
     } catch {
-      this.state.put(id, 'clipboard', { status: 'failed', code: 'COPY_FAILED', attempts: (old?.attempts ?? 0) + 1, history: old?.history, smartGuard: old?.smartGuard }); throw new Error('COPY_FAILED');
+      this.state.put(id, 'clipboard', { status: 'failed', code: 'COPY_FAILED', attempts: (old?.attempts ?? 0) + 1, history: old?.history, smartGuard: old?.smartGuard, payload }); throw new Error('COPY_FAILED');
     }
   }
   async retryDelivery(id: string, channels?: readonly string[]): Promise<void> { await deliver(this.get(id), this.config, this.state, this.clipboard, true, undefined, channels); }
@@ -178,4 +198,13 @@ export async function prepareImage(bytes: Buffer): Promise<{ bytes: Buffer; tran
   requireValue(optimized.length <= IMAGE_LIMITS.maxImageBytes, 'IMAGE_OVER_20_MIB_AFTER_LOSSLESS_OPTIMIZATION_NO_RESIZE');
   return { bytes: optimized, transformation: 'lossless-png' };
   });
+}
+
+export async function validateLocalImage(input: Buffer) {
+  const prepared = await prepareImage(input); const bytes = prepared.bytes;
+  const info = await sharp(bytes, { limitInputPixels: IMAGE_LIMITS.maxPixels, failOn: 'warning', animated: true }).metadata();
+  const hash = sha256(bytes);
+  const metadata = { fileName: `screenshot.${info.format}`, contentType: `image/${info.format}` as ImageContentType, byteSize: bytes.length, sha256: hash };
+  await verifyImage(bytes, metadata);
+  return { bytes, metadata, provenance: { originalHash: sha256(input), sentHash: hash, transformation: prepared.transformation, width: info.width, height: info.height } };
 }

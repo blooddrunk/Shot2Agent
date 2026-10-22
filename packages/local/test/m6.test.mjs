@@ -29,13 +29,13 @@ test('gateway endpoints, mapping, credential reference and vision refuse unsafe 
   const base = gateway(); validateGateway(base);
   for (const baseUrl of ['http://open.bigmodel.cn/api/anthropic', 'https://token@open.bigmodel.cn/api/anthropic', 'https://open.bigmodel.cn/api/anthropic?token=private', 'https://evil.invalid', 'https://open.bigmodel.cn:443/api/anthropic', 'https://127.0.0.1/api/anthropic']) assert.throws(() => validateGateway({ ...base, baseUrl }));
   for (const override of [{ credentialRef: 'plaintext-token' }, { model: '../bad' }, { models: { sonnet: 'glm-5.3-flash' } }, { token: 'synthetic' }]) assert.throws(() => validateGateway({ ...base, ...override }));
-  assert.throws(() => assertGatewayVision(base), /GATEWAY_VISION_NOT_VERIFIED/);
+  assert.doesNotThrow(() => assertGatewayVision(base));
   assert.throws(() => assertGatewayVision({ ...base, model: 'glm-4.6', vision: 'operator-attested' }), /VISION_UNSUPPORTED/);
   if (process.platform !== 'win32') assert.throws(() => credentialCommand('read', base.credentialRef), /WINDOWS_SECURE_STORE_REQUIRED/);
 });
-test('GLM 5.3 Flash is image-capable but still requires separate vision qualification', () => {
+test('GLM supported real screenshot requests do not require a prior paid qualification test', () => {
   const base = { ...gateway(), model: 'glm-5.3-flash', models: { opus: 'glm-5.3-flash', sonnet: 'glm-5.3-flash', haiku: 'glm-5.3-flash' } };
-  assert.throws(() => assertGatewayVision(base), /GATEWAY_VISION_NOT_VERIFIED/);
+  assert.doesNotThrow(() => assertGatewayVision(base));
   assert.doesNotThrow(() => assertGatewayVision({ ...base, vision: 'operator-attested' }));
   assert.doesNotThrow(() => assertGatewayVision({ ...base, vision: 'synthetic-test-passed' }));
   for (const alias of ['opus', 'sonnet', 'haiku']) {
@@ -43,27 +43,27 @@ test('GLM 5.3 Flash is image-capable but still requires separate vision qualific
   }
   assert.throws(() => assertGatewayVision({ ...base, vision: 'operator-attested', model: 'glm-5.3-flash-unknown' }), /GATEWAY_MODEL_VISION_UNSUPPORTED/);
 });
-test('gateway setup never invokes CLI/model until vision is qualified; provenance remains gateway', async () => {
+test('gateway real task preserves policy preflight and provenance without a paid test gate', async () => {
   const root = temp(); const policy = policyFor(root); const registry = executionRegistry([{ provider: 'claude-compatible-endpoint', policy }]);
   assert.equal(registry[0].adapter.name, 'claude-compatible-endpoint');
   assert.throws(() => executionRegistry([{ provider: 'claude', policy }]), /AUTH_PROFILE_MISMATCH/);
   let secrets = 0;
-  const agent = new ClaudeAgent([policy], { machinePolicy: async () => { throw Error('unexpected'); }, token: async () => { secrets++; return 'synthetic'; } });
+  const agent = new ClaudeAgent([policy], { machinePolicy: async () => { throw Error('CLAUDE_MANAGED_POLICY_REFUSED'); }, token: async () => { secrets++; return 'synthetic'; } });
   const result = await agent.execute({ profileId: policy.id, profileVersion: policy.version, images: [] }, claudeProfile(policy), [], new AbortController().signal);
-  assert.equal(result.errorCode, 'GATEWAY_VISION_NOT_VERIFIED'); assert.equal(result.status, 'failed'); assert.equal(secrets, 0);
+  assert.equal(result.errorCode, 'CLAUDE_MANAGED_POLICY_REFUSED'); assert.equal(result.status, 'failed'); assert.equal(secrets, 0);
   const app = new LocalApp(root, agent, claudeProfile(policy), { clipboard: 'off' });
   try {
     const image = await sharp({ create: { width: 12, height: 12, channels: 3, background: '#abc123' } }).png().toBuffer();
     const id = await app.submit(image); await app.work(); const stored = app.get(id);
     assert.equal(stored.submission.provider, 'claude-compatible-endpoint');
     assert.equal(stored.result.adapterName, 'claude-compatible-endpoint');
-    assert.equal(stored.result.errorCode, 'GATEWAY_VISION_NOT_VERIFIED');
+    assert.equal(stored.result.errorCode, 'CLAUDE_MANAGED_POLICY_REFUSED');
     assert.equal(stored.attempts.length, 1); assert.equal(await app.work(), false);
   } finally { app.close(); }
   assert.equal(existsSync(join(root, 'mock-gateway.json')), false); rmSync(root, { recursive: true, force: true });
 });
 for (const mode of ['success', 'auth', 'echo-secret', 'malformed', 'credential-missing', 'policy-refused']) test(`isolated Gateway CLI + local Mock API: ${mode}`, async () => {
-  const root = temp(); const policy = policyFor(root); policy.gateway.vision = 'operator-attested';
+  const root = temp(); const policy = policyFor(root);
   const secret = 'synthetic-fixture-only-credential'; let calls = 0; let request;
   const server = createServer(async (req, res) => {
     calls++; let body = ''; for await (const part of req) body += part;

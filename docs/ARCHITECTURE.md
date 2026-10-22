@@ -1,3 +1,5 @@
+> M8-L 0.8.0 adds independent Local folder/clipboard intake, ordered 2–5 image GUI tasks, CF_HDROP Markdown output and optional native completion notifications. [Current operation](M8_WINDOWS_RUN.md) and [executed validation / native gaps](M8_VALIDATION.md) supersede historical planned feature labels below. Next release scope is M9-L final Local v1.0, with Remote deferred.
+
 # Architecture and trust boundaries
 
 > M3-L desktop update: Tauri 2/Vue 3 uses a restricted anonymous-pipe Node child; no network listener or Relay. Windows Job containment owns descendants; EOF/quit aborts and settles work. Versioned capture settings share M2 settings with backup; SQLite tasks are retained. Worker exclusion is transactional and PID-aware. See [desktop operation](M3_WINDOWS_RUN.md) and [evidence](M3_VALIDATION.md).

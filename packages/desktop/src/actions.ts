@@ -18,8 +18,8 @@ export function completedResults(app: LocalApp): TaskView[] {
     .sort((a, b) => b.result!.finishedAt - a.result!.finishedAt || b.submission.taskId.localeCompare(a.submission.taskId));
 }
 export function retryableChannels(app: LocalApp, t: TaskView): string[] {
-  return (['save', 'clipboard'] as const).filter(channel => {
-    if (channel === 'save' ? !app.config.saveDirectory : !['smart', 'always'].includes(app.config.clipboard)) return false;
+  return (['save', 'clipboard', 'notification'] as const).filter(channel => {
+    if (channel === 'save' ? !app.config.saveDirectory : channel === 'notification' ? !app.config.notification : !['smart', 'always'].includes(app.config.clipboard)) return false;
     const receipt = app.state.get(t.submission.taskId, channel);
     // Hotkeys never replay interrupted/ambiguous writes or conflict protection.
     return receipt?.status === 'failed' && receipt.classification !== 'ambiguous' && receipt.classification !== 'conflict';

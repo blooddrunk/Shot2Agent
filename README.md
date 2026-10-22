@@ -1,3 +1,5 @@
+> M8-L 0.8.0 candidate: independent clipboard/folder sources, ordered 2–5 image tasks, native file clipboard and optional completion notifications. [Windows GUI usage](docs/M8_WINDOWS_RUN.md) · [Actual validation and limits](docs/M8_VALIDATION.md). Local v1.0 remains the M9 gate.
+
 > **M7-UX 0.7.2:** Light/dark appearance switch, live capture/processing sidebar, cleaner hotkey/history/cleanup controls, and a fix for missing packaged GLM connection-test images. [Usage and verification](docs/M7_UX_VALIDATION.md#operator-acceptance-and-ui-follow-up--2026-10-22).
 
 > **M7-UX 0.7.1:** Four focused Local desktop pages, visible Agent editor, responsive controls, history management and separate local GLM Token save / optional paid connection test. [GUI guide](docs/M7_UX_RUN.md) · [validation and Windows package evidence](docs/M7_UX_VALIDATION.md).

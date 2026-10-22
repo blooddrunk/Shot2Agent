@@ -1,6 +1,6 @@
 # M8-L: complete Local feature parity before the first v1.0 milestone
 
-**Status:** PLAN / next implementation goal, not completed. **Baseline:** merged main 005015bce192ba6beffb3330fffc92fc58ed2177 (M7-UX 0.7.2, PRs #14 and #15). Created 2026-10-22. This specification refines, but does not silently replace, the binding Local-first scope in LOCAL_V1_FIRST_MILESTONE.md. M9-L is the packaging/final acceptance gate; Remote/Relay comes only afterward.
+**Status:** M8-L 0.8.0 implementation candidate; native acceptance and final main gates are tracked in [M8_VALIDATION.md](M8_VALIDATION.md). **Baseline:** merged main 005015bce192ba6beffb3330fffc92fc58ed2177 (M7-UX 0.7.2, PRs #14 and #15). Created 2026-10-22. This specification refines, but does not silently replace, the binding Local-first scope in LOCAL_V1_FIRST_MILESTONE.md. M9-L is the packaging/final acceptance gate; Remote/Relay comes only afterward.
 
 ## Product outcome and execution order
 

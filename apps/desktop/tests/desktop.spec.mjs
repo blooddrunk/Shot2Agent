@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { mkdtempSync, mkdirSync, rmSync, realpathSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
@@ -7,7 +7,7 @@ import { DesktopController } from "../../../packages/desktop/src/controller.ts";
 import { FakeAgent } from "../../../packages/worker/src/fake.ts";
 import { makeCli, credentialStore } from "./fixtures.mjs";
 
-let desktop, root, workspace, testsSent, gatewayFailureCode;
+let desktop, root, workspace, testsSent, gatewayFailureCode, pickerSelection;
 const previousLocalAppData = process.env.LOCALAPPDATA;
 test.beforeEach(async ({ page }) => {
   root = realpathSync(mkdtempSync(join(tmpdir(), "shot2agent-ui-")));
@@ -17,6 +17,7 @@ test.beforeEach(async ({ page }) => {
   makeCli(root, "codex");
   makeCli(root, "claude");
   testsSent = 0;
+  pickerSelection = null;
   gatewayFailureCode = "";
   const clipboard = {
     session: "ui-synthetic",
@@ -60,6 +61,7 @@ test.beforeEach(async ({ page }) => {
   );
   await desktop.start();
   await page.exposeBinding("desktopInvoke", async (_source, command, args) => {
+    if (command === "plugin:dialog|open") return pickerSelection;
     if (command !== "rpc") return undefined;
     const { request } = args;
     try {
@@ -217,7 +219,7 @@ test("history details, Copy, selection, deletion, clear; capture consent and out
   await seedTasks();
   await nav(page, "首页");
   await expect(page.locator(".tasks li")).toHaveCount(3);
-  await page.getByRole("button", { name: "复制结果" }).first().click();
+  await page.getByRole("button", { name: "复制文本" }).first().click();
   await expect(page.getByText("已复制结果，可以粘贴。")).toBeVisible();
   await page.locator(".task-title").first().click();
   await expect(page.getByRole("dialog", { name: "结果详情" })).toBeVisible();
@@ -245,7 +247,7 @@ test("history details, Copy, selection, deletion, clear; capture consent and out
   await page.getByLabel("剪贴板返回").selectOption("manual");
   await page.getByRole("button", { name: "应用设置" }).click();
   await expect(
-    page.getByText("设置已保存。从下一次剪贴板变化开始监听。"),
+    page.getByText("设置已保存。仅监听此后新增的图片。"),
   ).toBeVisible();
   expect(desktop.settings.desktop.mode).toBe("auto");
   expect(desktop.settings.delivery.clipboard).toBe("manual");
@@ -306,7 +308,7 @@ test("first-run, preview, GLM form and errors have visible states; optional test
   await nav(page, "首页");
   await expect(
     page.getByRole("button", { name: "处理剪贴板图片" }),
-  ).toBeDisabled();
+  ).toBeEnabled();
   await add(page, "codex", "preview-codex");
   await desktop.dispatch({
     v: 1,
@@ -349,7 +351,7 @@ test("history pages and searches older than the newest 50 tasks", async ({
     page.getByRole("button", { name: "上一页", exact: true }),
   ).toBeDisabled();
   await expect(page.locator(".tasks li")).toHaveCount(1);
-  await page.getByRole("button", { name: "复制结果", exact: true }).click();
+  await page.getByRole("button", { name: "复制文本", exact: true }).click();
   await expect(page.getByText("已复制结果，可以粘贴。")).toBeVisible();
   await page.getByRole("button", { name: "删除", exact: true }).click();
   await expect(page.locator(".tasks li")).toHaveCount(0);
@@ -564,4 +566,63 @@ test("missing synthetic resource reports no request and preserves the working GL
   await expect(page.getByRole("alert")).toContainText("未发送模型请求");
   expect(testsSent).toBe(sent);
   expect(JSON.stringify(desktop.settings)).toBe(before);
+});
+
+for (const [width, height, count] of [[1040, 760, 2], [720, 560, 5], [480, 640, 5]]) {
+  test(`M8 real Vue composer ${count} images, keyboard and layout ${width}x${height}`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await add(page, "codex", "batch-agent");
+    const paths = [];
+    for (let i = 0; i < count; i++) {
+      const path = join(root, `synthetic-${i}.png`);
+      writeFileSync(path, await sharp({ create: { width: 48, height: 32, channels: 3, background: { r: i * 40, g: 90, b: 140 } } }).png().toBuffer());
+      paths.push(path);
+    }
+    pickerSelection = paths;
+    await nav(page, "首页");
+    await page.getByRole("button", { name: "添加图片文件…" }).click();
+    await expect(page.locator(".composer-images li")).toHaveCount(count);
+    expect(desktop.app.list()).toHaveLength(0);
+    const initialIds = (await desktop.dispatch({ v: 1, command: "snapshot" })).composer.map(i => i.id);
+    const move = page.getByRole("button", { name: "下移第 1 张", exact: true });
+    await move.focus(); await page.keyboard.press("Enter");
+    await expect.poll(async () => (await desktop.dispatch({ v: 1, command: "snapshot" })).composer[1].id).toBe(initialIds[0]);
+    await page.getByRole("button", { name: "移除第 1 张", exact: true }).click();
+    await expect(page.locator(".composer-images li")).toHaveCount(count - 1);
+    pickerSelection = [paths[0]]; await page.getByRole("button", { name: "添加图片文件…" }).click();
+    await expect(page.locator(".composer-images li")).toHaveCount(count);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.locator(".composer").screenshot({ path: `build/ui-evidence/m8-composer-${width}.png` });
+    const original = desktop.app.registry;
+    desktop.app.setRegistry(original.map(e => ({ profile: e.profile, adapter: new FakeAgent() })), desktop.app.profile.id, desktop.app.profile.version);
+    await page.getByRole("button", { name: `提交 ${count} 张为一个任务`, exact: true }).click();
+    await expect(page.locator(".composer-images li")).toHaveCount(0);
+    expect(desktop.app.list()).toHaveLength(1); expect(desktop.app.list()[0].submission.images).toHaveLength(count);
+    await desktop.app.work();
+    await nav(page, "历史记录");
+    await expect(page.locator(".tasks li")).toHaveCount(1);
+  });
+}
+test("M8 GUI independent capture/output controls, native picker boundary and history-only", async ({ page }) => {
+  await add(page, "claude-compatible-endpoint", "glm-direct");
+  await nav(page, "首页");
+  await expect(page.getByRole("button", { name: "处理剪贴板图片", exact: true })).toBeEnabled(); expect(testsSent).toBe(0);
+  const folder = realpathSync(mkdtempSync(join(tmpdir(), "m8-ui-folder-")));
+  try {
+    await nav(page, "设置");
+    await page.getByLabel("剪贴板返回").selectOption("off");
+    for (const [clip, file] of [[false, true], [true, false], [true, true], [false, false]]) {
+      await page.getByLabel("监听剪贴板中的新图片", { exact: true }).setChecked(clip);
+      await page.getByLabel("监听截图文件夹（仅此目录）", { exact: true }).setChecked(file);
+      if (file) { pickerSelection = folder; await page.getByRole("button", { name: "选择截图文件夹…" }).click(); }
+      await page.getByRole("button", { name: "应用设置", exact: true }).click();
+      await expect(page.getByText("设置已保存。仅监听此后新增的图片。")).toBeVisible();
+      expect(desktop.settings.desktop.enabled).toBe(clip); expect(desktop.settings.desktop.folderEnabled).toBe(file);
+    }
+    await page.getByLabel("自动复制内容").selectOption("files");
+    await page.getByLabel("完成时显示 Windows 通知", { exact: true }).check();
+    await page.getByRole("button", { name: "应用设置", exact: true }).click();
+    expect(desktop.settings.delivery.clipboardPayload).toBe("files"); expect(desktop.settings.delivery.notification).toBe(true); expect(testsSent).toBe(0);
+    await page.screenshot({ path: "build/ui-evidence/m8-input-output-settings.png", fullPage: true });
+  } finally { rmSync(folder, { recursive: true, force: true }); }
 });

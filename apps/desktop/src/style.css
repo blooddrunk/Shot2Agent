@@ -664,3 +664,9 @@ dialog::backdrop {
   color: var(--on-accent);
   border-color: var(--accent);
 }
+
+.composer { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); }
+.composer-images { padding: 0; list-style: none; display: grid; gap: 12px; }
+.composer-images li { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; min-width: 0; }
+.composer-images img { width: 120px; height: 80px; object-fit: contain; }
+.composer .section-heading { flex-wrap: wrap; gap: 8px; }

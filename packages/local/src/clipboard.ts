@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { lstatSync } from 'node:fs';
+import { isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { requireValue } from '../../core/src/model.ts';
 export interface ClipboardImage { sequence: string; bytes: Buffer }
@@ -8,6 +10,8 @@ export interface ClipboardPort {
   sequence(): Promise<string>;
   readImage(): Promise<ClipboardImage | undefined>;
   writeText(text: string, expected?: string, timeoutMs?: number): Promise<boolean>;
+  writeFiles?(paths: string[], expected?: string, timeoutMs?: number): Promise<boolean>;
+  notify?(): Promise<void>;
   close(): void;
 }
 /** Persistent hidden native helper. Requests are serialized; no foreground/window activation APIs. */
@@ -82,6 +86,16 @@ export class WindowsClipboard implements ClipboardPort {
     const result = await this.request({ op: 'write', text, expected: expected ?? null }, timeoutMs);
     requireValue(typeof result.written === 'boolean', 'CLIPBOARD_PROTOCOL');
     return result.written;
+  }
+  async writeFiles(paths: string[], expected?: string, timeoutMs?: number): Promise<boolean> {
+    requireValue(expected === undefined || /^\d{1,10}$/.test(expected), 'INVALID_CLIPBOARD_SEQUENCE');
+    requireValue(paths.length > 0 && paths.length <= 5 && paths.every(path => isAbsolute(path) && !path.includes('\0') && path.length <= 2048 && lstatSync(path).isFile() && !lstatSync(path).isSymbolicLink()), 'INVALID_CLIPBOARD_FILES');
+    const result = await this.request({ op: 'files', paths, expected: expected ?? null }, timeoutMs);
+    requireValue(typeof result.written === 'boolean', 'CLIPBOARD_PROTOCOL'); return result.written;
+  }
+  async notify(): Promise<void> {
+    const result = await this.request({ op: 'notify' }, 3000);
+    requireValue(result.notified === true, 'NATIVE_NOTIFICATION_UNAVAILABLE');
   }
   close(): void {
     if (this.dead) return; this.dead = true; this.child.kill(); this.receive?.('{"error":"CLIPBOARD_HELPER_STOPPED"}');
