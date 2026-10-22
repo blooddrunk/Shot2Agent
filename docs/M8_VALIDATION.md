@@ -42,3 +42,18 @@ No installer, Remote/Relay work, recursive media import, arbitrary binary result
 | apps/desktop/src/App.vue, style.css | Existing four-page GUI extended with folder picker, composer, independent outputs and specific manual copy actions |
 | packages/worker/src/gateway.ts | Known image-capable model check retained; historical vision qualification is diagnostic rather than a paid execution gate |
 | desktop/local tests, portable manifest and M8 docs | Synthetic regression and native helper proof; 0.8.0 package identity and explicit acceptance boundaries |
+
+
+## Operator follow-up and 0.8.1 stabilization — 2026-10-22
+
+The operator reports the shortest native checklist PASS except two defects: repeated Copy files usually left Explorer without Paste/Ctrl+V capability (only one observed success), and Home's capture summary appeared static. Win+V visibility is not used as file clipboard evidence. This is scoped operator evidence for the other checklist items, not a new independent real-provider or universal IME qualification.
+
+Home's pause defect was reproduced by a real-Vue regression before the fix. The summary now derives from the saved snapshot, includes pause/off and clipboard/folder sources, and is tested after GUI Apply, pause/resume and externally changed settings.
+
+File publication now includes Shell Preferred DropEffect=COPY in the same native clipboard lock, pumps the owning HWND's STA messages while waiting for pipe input, and verifies retained CF_HDROP paths/copy effect/sequence after a bounded responsive interval (up to 150ms, within the existing deadline). A known replacement reports CLIPBOARD_REPLACED_AFTER_WRITE (conflict); verification uncertainty remains ambiguous. Neither condition silently re-writes the clipboard or reruns AI. Manual Copy retains the native failure phase rather than replacing all errors with COPY_FAILED.
+
+This corrects identified native integration gaps and prevents false success within the verification interval; the exact cause of the operator's intermittent failure is not yet proven. No attribution to an input method or claim of immunity to later external clipboard changes is made. Windows regression expands native OLE readback to 12 alternating one/two-file copies with Unicode paths, idle/status reads, COPY effect and an injected external replacement. Local/CI execution results will be recorded at delivery; the affected original-machine Copy files behavior still needs the operator's narrow retest.
+
+Shell format reference: https://learn.microsoft.com/en-us/windows/win32/shell/clipboard . Preferred DropEffect communicates copy intent; the format alone is not proof of successful Explorer paste.
+
+0.8.1 local gates: frozen install exit 0; npm run check exit 0 (211 total, 186 passed, 25 platform skipped, 0 failed); final real-Vue suite exit 0 (19/19); design detector exit 0 (no findings). Local native compile-only and three idle sequence/EOF requests passed; no image read or operator clipboard write occurred. Windows native repeated/OLE/replacement tests and package gates are independently tracked in the stabilization PR checks.

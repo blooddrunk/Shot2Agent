@@ -55,7 +55,7 @@ export class WindowsClipboard implements ClipboardPort {
         try {
           const result = JSON.parse(line);
           if (result?.error) {
-            const allowed = ['CLIPBOARD_BUSY', 'CLIPBOARD_WRITE_AMBIGUOUS', 'CLIPBOARD_ALLOC', 'CLIPBOARD_UNAVAILABLE_OR_OVERSIZED', 'CLIPBOARD_HELPER_STOPPED'];
+            const allowed = ['CLIPBOARD_BUSY', 'CLIPBOARD_WRITE_AMBIGUOUS', 'CLIPBOARD_ALLOC', 'CLIPBOARD_UNAVAILABLE_OR_OVERSIZED', 'CLIPBOARD_HELPER_STOPPED', 'CLIPBOARD_REPLACED_AFTER_WRITE', 'NATIVE_NOTIFICATION_UNAVAILABLE'];
             reject(new Error(allowed.includes(result.error) ? result.error : 'CLIPBOARD_PROTOCOL')); return;
           }
           requireValue(result && typeof result === 'object', 'CLIPBOARD_PROTOCOL'); resolve(result);
@@ -90,7 +90,7 @@ export class WindowsClipboard implements ClipboardPort {
   async writeFiles(paths: string[], expected?: string, timeoutMs?: number): Promise<boolean> {
     requireValue(expected === undefined || /^\d{1,10}$/.test(expected), 'INVALID_CLIPBOARD_SEQUENCE');
     requireValue(paths.length > 0 && paths.length <= 5 && paths.every(path => isAbsolute(path) && !path.includes('\0') && path.length <= 2048 && lstatSync(path).isFile() && !lstatSync(path).isSymbolicLink()), 'INVALID_CLIPBOARD_FILES');
-    const result = await this.request({ op: 'files', paths, expected: expected ?? null }, timeoutMs);
+    const result = await this.request({ op: 'files', paths, expected: expected ?? null, verifyMilliseconds: Math.min(150, Math.floor((timeoutMs ?? 15000) / 4)) }, timeoutMs);
     requireValue(typeof result.written === 'boolean', 'CLIPBOARD_PROTOCOL'); return result.written;
   }
   async notify(): Promise<void> {

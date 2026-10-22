@@ -119,10 +119,23 @@ test('history-only and file Smart conflict/busy/ambiguous failures preserve boun
   for (const channel of ['save', 'clipboard', 'notification']) assert.equal(desktop.app.state.get(silent, channel).status, 'disabled'); assert.equal(cb.notifications, 0); assert.equal(cb.files.length, 0);
   await rpc('configure', { delivery: { clipboard: 'smart', clipboardPayload: 'files' } });
   const conflict = await desktop.app.submit(images[1], { session: cb.session, sequence: '0' }); await desktop.app.work(); assert.equal(desktop.app.state.get(conflict, 'clipboard').status, 'blocked_by_clipboard_change');
-  for (const code of ['CLIPBOARD_BUSY', 'CLIPBOARD_HELPER_TIMEOUT', 'CLIPBOARD_WRITE_AMBIGUOUS']) {
+  for (const code of ['CLIPBOARD_BUSY', 'CLIPBOARD_HELPER_TIMEOUT', 'CLIPBOARD_WRITE_AMBIGUOUS', 'CLIPBOARD_REPLACED_AFTER_WRITE']) {
     let writes = 0; cb.writeFiles = async () => { writes++; throw Error(code); };
     await rpc('configure', { delivery: { clipboard: 'always', clipboardPayload: 'files', notification: true, retry: { maxRetries: 2, backoffMs: 10, budgetMs: 3000 } }, alwaysConsent: true });
     const id = await desktop.app.submit(images[2], undefined, true); await desktop.app.work();
     assert.equal(writes, code === 'CLIPBOARD_BUSY' ? 3 : 1); assert.equal(desktop.app.state.get(id, 'notification').status, 'succeeded'); assert.equal(desktop.app.get(id).attempts.length, 1);
+  }
+});
+
+
+test('manual Copy files preserves native failure phases and never silently writes again or executes AI', async t => {
+  const { desktop, cb } = setup(t); await desktop.start();
+  const id = await desktop.app.submit(images[0]); await desktop.app.work();
+  for (const code of ['CLIPBOARD_BUSY', 'CLIPBOARD_REPLACED_AFTER_WRITE', 'CLIPBOARD_HELPER_TIMEOUT']) {
+    let calls = 0; cb.writeFiles = async () => { calls++; throw Error(code); };
+    await assert.rejects(desktop.app.copy(id, 'files'), new RegExp(code));
+    assert.equal(calls, 1); assert.equal(desktop.app.state.get(id, 'clipboard').code, code);
+    assert.equal(desktop.app.state.get(id, 'clipboard').status, 'failed');
+    assert.equal(desktop.app.get(id).attempts.length, 1);
   }
 });
