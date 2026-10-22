@@ -65,6 +65,7 @@ export function deliveryFailure(error: unknown, channel: string): { code: string
   if (['SAVE_CONFLICT', 'UNSAFE_SAVE_PATH'].includes(code)) return { code, classification: 'conflict' };
   if (channel === 'notification') return { code: 'NATIVE_NOTIFICATION_UNAVAILABLE', classification: 'permanent' };
   if (channel === 'clipboard') {
+    if (code === 'CLIPBOARD_REPLACED_AFTER_WRITE') return { code, classification: 'conflict' };
     if (code === 'CLIPBOARD_BUSY') return { code, classification: 'transient' };
     if (['CLIPBOARD_WRITE_AMBIGUOUS', 'CLIPBOARD_HELPER_TIMEOUT', 'CLIPBOARD_HELPER_STOPPED', 'CLIPBOARD_PROTOCOL'].includes(code))
       return { code, classification: 'ambiguous' };

@@ -626,3 +626,47 @@ test("M8 GUI independent capture/output controls, native picker boundary and his
     await page.screenshot({ path: "build/ui-evidence/m8-input-output-settings.png", fullPage: true });
   } finally { rmSync(folder, { recursive: true, force: true }); }
 });
+
+test("M8 home capture status follows applied sources, mode, pause and external changes", async ({ page }) => {
+  await add(page, "codex", "capture-status-agent");
+  await desktop.dispatch({ v: 1, command: "configure", capture: { enabled: true, mode: "confirm" }, delivery: { clipboard: "manual" } });
+  await nav(page, "首页");
+  const summary = page.locator(".capture-toolbar .hint");
+  await expect(summary).toContainText("确认后提交");
+  await page.getByRole("button", { name: "暂停捕获", exact: true }).click();
+  await expect(summary).toContainText("捕获已暂停");
+  await page.getByRole("button", { name: "恢复捕获", exact: true }).click();
+  await expect(summary).toContainText("剪贴板");
+  await desktop.dispatch({ v: 1, command: "configure", capture: { enabled: false, mode: "auto" }, autoConsent: true, delivery: { clipboard: "off" } });
+  await expect(summary).toContainText("自动提交");
+  await expect(summary).toContainText("捕获已关闭");
+  const folder = realpathSync(mkdtempSync(join(tmpdir(), "m8-status-folder-")));
+  try {
+    await desktop.dispatch({ v: 1, command: "configure", capture: { enabled: false, folderEnabled: true, folderDirectory: folder } });
+    await expect(summary).toContainText("文件夹");
+    await expect(summary).not.toContainText("剪贴板");
+    await desktop.dispatch({ v: 1, command: "configure", capture: { enabled: true } });
+    await expect(summary).toContainText("剪贴板 + 文件夹");
+    await nav(page, "设置");
+    await page.getByLabel("提交方式").selectOption("confirm");
+    await page.getByRole("button", { name: "应用设置", exact: true }).click();
+    await nav(page, "首页");
+    await expect(summary).toContainText("确认后提交");
+  } finally { rmSync(folder, { recursive: true, force: true }); }
+});
+
+
+test("M8 Copy files distinguishes native replacement from verified success without AI rerun", async ({ page }) => {
+  await add(page, "codex", "copy-feedback-agent"); await seedTasks(1); await nav(page, "首页");
+  let writes = 0;
+  desktop.app.clipboard.writeFiles = async () => { writes++; throw Error("CLIPBOARD_REPLACED_AFTER_WRITE"); };
+  await page.getByRole("button", { name: "复制文件", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "随后被其他剪贴板活动替换" })).toBeVisible();
+  expect(writes).toBe(1);
+  await expect(page.getByText(/^已写入并验证 Markdown 文件/)).not.toBeVisible();
+  expect(desktop.app.state.get(desktop.app.list()[0].submission.taskId, "clipboard").code).toBe("CLIPBOARD_REPLACED_AFTER_WRITE");
+  desktop.app.clipboard.writeFiles = async paths => { writes++; expect(paths.length).toBe(1); return true; };
+  await page.getByRole("button", { name: "复制文件", exact: true }).click();
+  await expect(page.getByText(/^已写入并验证 Markdown 文件/)).toBeVisible(); expect(writes).toBe(2);
+  expect(desktop.app.list()[0].attempts.length).toBe(1);
+});

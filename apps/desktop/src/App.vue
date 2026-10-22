@@ -147,6 +147,10 @@ const errorText: Record<string, string> = {
   NO_CURRENT_IMAGE: "当前剪贴板中没有图片，请先截图。",
   NATIVE_NOTIFICATION_UNAVAILABLE: "Windows 通知不可用；请检查系统通知设置，其他输出仍可使用。",
   FILE_CLIPBOARD_CACHE_FULL: "文件复制缓存已满，请保留需要的文件后清理缓存，再手动复制。",
+  CLIPBOARD_BUSY: "剪贴板正被其他程序占用，尚未写入；请稍后手动复制。",
+  CLIPBOARD_REPLACED_AFTER_WRITE: "文件已写入，但随后被其他剪贴板活动替换；请稍后手动复制并在资源管理器粘贴。",
+  CLIPBOARD_WRITE_AMBIGUOUS: "无法确认剪贴板写入结果，未自动重试；请检查后手动复制。",
+  CLIPBOARD_HELPER_TIMEOUT: "剪贴板响应超时，未自动重试；请重启应用后手动复制。",
   COPY_FAILED: "复制未完成，请检查剪贴板是否被占用；可稍后手动复制。",
   PROFILE_NAME_EXISTS:
     "这个名称已经存在，请编辑或恢复原助手，或使用另一个名称。",
@@ -248,6 +252,17 @@ const workerText = computed(() => {
   if (activity.running)
     return `正在处理 ${activity.running} 项${activity.queued ? ` · 排队 ${activity.queued} 项` : ""}`;
   return activity.queued ? `等待处理 ${activity.queued} 项` : "处理服务空闲";
+});
+// Report saved, effective capture state; draft form fields are intentionally separate.
+const captureSummary = computed(() => {
+  const snapshot = data.value;
+  if (!snapshot) return "正在读取捕获状态";
+  const modeText = snapshot.settings.mode === "auto" ? "自动提交" : "确认后提交";
+  if (snapshot.setupRequired) return `${modeText} · 等待配置 Agent`;
+  if (snapshot.settings.paused) return `${modeText} · 捕获已暂停`;
+  if (snapshot.status === "capture_error") return `${modeText} · 捕获读取已暂停`;
+  const sources = [snapshot.settings.enabled ? "剪贴板" : "", snapshot.settings.folderEnabled ? "文件夹" : ""].filter(Boolean);
+  return `${modeText} · ${sources.length ? `捕获已开启（${sources.join(" + ")}）` : "捕获已关闭"}`;
 });
 const page = ref("home");
 const search = ref("");
@@ -467,7 +482,7 @@ async function action(command: string, args: Record<string, unknown> = {}) {
       message.value = args.paused
         ? "捕获已暂停。"
         : "捕获已恢复，已有图片不会自动提交。";
-    if (command === "copy-files") message.value = "已复制 Markdown 文件，可粘贴到资源管理器。";
+    if (command === "copy-files") message.value = "已写入并验证 Markdown 文件，请在资源管理器按 Ctrl+V 粘贴（Win+V 不作为文件粘贴依据）。";
     if (command === "composer-submit") message.value = "多张图片已作为一个任务提交。";
     if (command === "retry-delivery")
       message.value =
@@ -944,9 +959,7 @@ onUnmounted(() => clearInterval(timer));
         </section>
         <p v-if="data?.folderError" class="error" role="status">{{ errorText[data.folderError] || data.folderError }}</p>
         <div class="capture-toolbar">
-          <span class="hint"
-            >{{ data?.settings.mode === "auto" ? "自动提交" : "确认后提交" }} ·
-            {{ (data?.settings.enabled || data?.settings.folderEnabled) ? "捕获已开启" : "捕获未开启" }}</span
+          <span class="hint" role="status" aria-label="当前捕获状态">{{ captureSummary }}</span
           ><button @click="page = 'settings'">捕获与输出设置</button
           ><button
             v-if="data && !data.setupRequired"
@@ -1405,7 +1418,7 @@ onUnmounted(() => clearInterval(timer));
             </p>
             <p v-if="page === 'history'" class="hint">{{ task.imageCount ?? 1 }} 张图片 · 通知：{{ receiptText[task.notification?.status || ''] || task.notification?.status || '等待结果' }}<span v-if="task.notification?.code"> · {{ errorText[task.notification.code] || task.notification.code }}</span></p>
             <p class="hint" v-if="task.clipboard?.code">
-              剪贴板：{{ task.clipboard.code }} ·
+              剪贴板：{{ errorText[task.clipboard.code] || task.clipboard.code }} ·
               {{ task.clipboard.classification }} ·
               {{ task.clipboard.attempts }} 次
             </p>

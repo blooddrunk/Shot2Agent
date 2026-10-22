@@ -254,6 +254,34 @@ test('Windows native helper synthetic DIB capture, Unicode copy and atomic seque
     assert.equal(fileList.status, 0, fileList.stderr);
     const copied = JSON.parse(fileList.stdout); const paths = Array.isArray(copied) ? copied : [copied];
     assert.equal(paths.length, 1); assert.equal(readFileSync(paths[0], 'utf8'), app.get(id).result.contentMarkdown);
+    // Repeat through an independent OLE reader while the owning helper is idle.
+    // Exercise retained Unicode paths, order, repeated same-task copy and explicit copy effect.
+    const secondFile = join(dir, 'result-中文.md'); writeFileSync(secondFile, '# Synthetic second file');
+    const oleRead = () => spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Sta', '-Command',
+      "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false); Add-Type -AssemblyName System.Windows.Forms; $d=[System.Windows.Forms.Clipboard]::GetDataObject(); $paths=[string[]]$d.GetData([System.Windows.Forms.DataFormats]::FileDrop); $effect=$d.GetData('Preferred DropEffect'); if ($null -eq $paths -or $effect -isnot [System.IO.MemoryStream]) { exit 4 }; [Console]::Write((@{paths=$paths; effect=[BitConverter]::ToUInt32($effect.ToArray(),0)} | ConvertTo-Json -Compress))"],
+      { encoding: 'utf8', windowsHide: true, timeout: 5000 });
+    for (let iteration = 0; iteration < 12; iteration++) {
+      const expectedFiles = iteration % 2 ? [paths[0], secondFile] : paths;
+      assert.equal(await clipboard.writeFiles(expectedFiles), true);
+      // A status/sequence read must not clear the file payload; allow idle owner messages.
+      await clipboard.sequence(); await new Promise(resolve => setTimeout(resolve, 40));
+      const ole = oleRead(); assert.equal(ole.status, 0, ole.stderr);
+      const data = JSON.parse(ole.stdout); assert.deepEqual(data.paths, expectedFiles); assert.equal(data.effect, 1);
+    }
+    // External replacement during post-write verification is a conflict, never another write.
+    await clipboard.writeText('synthetic pre-replacement baseline');
+    const replacer = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Sta', '-Command',
+      "Add-Type -AssemblyName System.Windows.Forms; [Console]::WriteLine('READY'); $until=[DateTime]::UtcNow.AddSeconds(5); while ([DateTime]::UtcNow -lt $until) { if ([System.Windows.Forms.Clipboard]::ContainsFileDropList()) { [System.Windows.Forms.Clipboard]::SetText('synthetic newer user text'); exit 0 }; Start-Sleep -Milliseconds 5 }; exit 5"],
+      { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'], timeout: 15000 });
+    const replaced = new Promise(resolve => replacer.once('close', resolve));
+    try {
+      await new Promise((resolve, reject) => {
+        replacer.stdout.once('data', data => data.toString().includes('READY') ? resolve() : reject(Error('REPLACER_NOT_READY')));
+        replacer.once('error', reject);
+      });
+      await assert.rejects(clipboard.writeFiles(paths), /CLIPBOARD_REPLACED_AFTER_WRITE/);
+      assert.equal(await replaced, 0);
+    } finally { replacer.kill(); }
     const originalSequence = await clipboard.sequence();
     await clipboard.writeText('newer synthetic clipboard');
     assert.equal(await clipboard.writeFiles(paths, originalSequence), false);

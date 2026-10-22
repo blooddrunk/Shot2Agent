@@ -11,7 +11,7 @@ import { runOnce } from '../../worker/src/worker.ts';
 import type { ClipboardImage, ClipboardPort } from './clipboard.ts';
 import { LocalState } from './state.ts';
 import type { Baseline } from './state.ts';
-import { deliver, resultFiles } from './delivery.ts';
+import { deliver, resultFiles, deliveryFailure } from './delivery.ts';
 import type { DeliveryConfig } from './delivery.ts';
 export const LOCAL_IDENTITY = { ownerId: 'local-user', deviceId: 'local-pc' };
 export class LocalApp {
@@ -140,8 +140,9 @@ export class LocalApp {
       const success = payload === 'files' ? await this.clipboard.writeFiles?.(resultFiles(task, this.state)) : await this.clipboard.writeText(task.result.contentMarkdown);
       requireValue(success, 'COPY_FAILED');
       this.state.put(id, 'clipboard', { status: 'succeeded', attempts: (old?.attempts ?? 0) + 1, history: old?.history, smartGuard: old?.smartGuard, payload });
-    } catch {
-      this.state.put(id, 'clipboard', { status: 'failed', code: 'COPY_FAILED', attempts: (old?.attempts ?? 0) + 1, history: old?.history, smartGuard: old?.smartGuard, payload }); throw new Error('COPY_FAILED');
+    } catch (error) {
+      const failure = error instanceof Error && error.message === 'COPY_FAILED' ? { code: 'COPY_FAILED' } : deliveryFailure(error, 'clipboard');
+      this.state.put(id, 'clipboard', { status: 'failed', ...failure, attempts: (old?.attempts ?? 0) + 1, history: old?.history, smartGuard: old?.smartGuard, payload }); throw new Error(failure.code, { cause: error });
     }
   }
   async retryDelivery(id: string, channels?: readonly string[]): Promise<void> { await deliver(this.get(id), this.config, this.state, this.clipboard, true, undefined, channels); }
