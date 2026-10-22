@@ -675,10 +675,39 @@ test("M8 Copy files distinguishes native replacement from verified success witho
 // Browser/controller evidence only. Actual locked clipboard cleanup runs in Windows CI.
 test("M9 settings show version, cache, backup guidance and confirmed cleanup", async ({ page }) => {
   await nav(page, "设置");
-  await expect(page.getByRole("heading", { name: "Shot2Agent 1.0.0-rc.1" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Shot2Agent 1.0.0" })).toBeVisible();
   await expect(page.getByRole("region", { name: "文件复制缓存" })).toContainText("0 / 1000");
   await page.getByRole("button", { name: "清理旧复制缓存" }).click();
   await expect(page.getByText(/已清理 0 个旧缓存文件/)).toBeVisible();
   await expect(page.getByRole("region", { name: "版本与备份" })).toContainText("Windows 凭据管理器");
   await expect(page.getByRole("button", { name: "清理旧复制缓存" })).toBeEnabled();
+});
+
+// Decorative icons must keep visible/accessible action names and fit both themes.
+test("Local v1 icons preserve labels, keyboard navigation and compact layouts", async ({ page }) => {
+  await add(page, "codex", "my-codex");
+  await desktop.dispatch({ v: 1, command: "configure", capture: { enabled: true, mode: "confirm" }, delivery: { clipboard: "manual" } });
+  for (const theme of ["dark", "light"]) {
+    await nav(page, "设置");
+    await page.getByRole("button", { name: theme === "dark" ? "深色" : "浅色", exact: true }).click();
+    for (const width of [1040, 720, 480]) {
+      await page.setViewportSize({ width, height: 760 });
+      await nav(page, "首页");
+      const navigation = page.getByRole("navigation", { name: "主要导航" });
+      await expect(navigation.locator("svg[aria-hidden='true']")).toHaveCount(4);
+      await expect(page.getByRole("button", { name: "处理剪贴板图片", exact: true })).toBeEnabled();
+      await expect(page.getByRole("button", { name: "暂停捕获", exact: true })).toBeEnabled();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: `build/ui-evidence/v1-${theme}-${width}-home.png`, fullPage: true });
+    }
+    await nav(page, "设置");
+    await expect(page.getByRole("button", { name: "清理旧复制缓存", exact: true })).toBeEnabled();
+    await expect(page.locator("svg.app-icon:not([aria-hidden='true'])")).toHaveCount(0);
+    await page.screenshot({ path: `build/ui-evidence/v1-${theme}-settings.png`, fullPage: true });
+  }
+  await page.getByRole("navigation").getByRole("button", { name: "首页", exact: true }).focus();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("navigation").getByRole("button", { name: "AI 助手", exact: true })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("region", { name: "AI 助手管理" })).toBeVisible();
 });

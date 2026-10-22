@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import AppNavigation from "./components/AppNavigation.vue";
+import AppIcon from "./components/AppIcon.vue";
 import { loadTheme, saveTheme, type Theme } from "./theme";
 
 type Receipt = {
@@ -854,10 +855,10 @@ onUnmounted(() => clearInterval(timer));
           :aria-label="theme === 'dark' ? '切换为浅色主题' : '切换为深色主题'"
           @click="changeTheme(theme === 'dark' ? 'light' : 'dark')"
         >
-          {{ theme === "dark" ? "浅色主题" : "深色主题" }}
+          <AppIcon :name="theme === 'dark' ? 'sun' : 'moon'" />{{ theme === "dark" ? "浅色主题" : "深色主题" }}
         </button>
-        <button @click="nativeHide">隐藏到托盘</button
-        ><button @click="action('quit')" :disabled="busy">退出应用</button>
+        <button @click="nativeHide"><AppIcon name="hide" />隐藏到托盘</button
+        ><button @click="action('quit')" :disabled="busy"><AppIcon name="power" />退出应用</button>
       </div>
     </aside>
     <main>
@@ -888,7 +889,7 @@ onUnmounted(() => clearInterval(timer));
           class="error"
           role="alert"
         >
-          {{ error || transportError || data?.error }}
+          <AppIcon name="alert" />{{ error || transportError || data?.error }}
           <button
             v-if="data?.status === 'capture_error'"
             @click="action('recover')"
@@ -896,7 +897,7 @@ onUnmounted(() => clearInterval(timer));
             重新连接剪贴板
           </button>
         </p>
-        <p v-if="message" class="notice" role="status">{{ message }}</p>
+        <p v-if="message" class="notice" role="status"><AppIcon name="check" />{{ message }}</p>
       </div>
       <section v-if="page === 'home'" aria-label="截图处理">
         <div class="agent-current">
@@ -914,7 +915,7 @@ onUnmounted(() => clearInterval(timer));
             </p>
           </div>
           <button @click="page = 'agents'">
-            {{ data?.setupRequired ? "开始设置" : "更换助手" }}
+            <AppIcon name="agent" />{{ data?.setupRequired ? "开始设置" : "更换助手" }}
           </button>
         </div>
         <p v-if="selectedAgent?.gateway?.connectionStatus === 'not_tested'" class="notice">
@@ -926,7 +927,7 @@ onUnmounted(() => clearInterval(timer));
             @click="action('current')"
             :disabled="busy || !data || data.setupRequired"
           >
-            处理剪贴板图片
+            <AppIcon name="clipboard" />处理剪贴板图片
           </button>
         </div>
         <div class="preview" v-if="data?.pending">
@@ -935,8 +936,8 @@ onUnmounted(() => clearInterval(timer));
             <strong>等待确认</strong>
             <p>仅此预览会被提交。</p>
             <button class="primary" @click="action('submit')" :disabled="busy">
-              提交图片</button
-            ><button @click="action('composer-add-pending')" :disabled="busy || (data?.composer?.length ?? 0) >= 5">加入多图任务</button><button @click="action('discard')" :disabled="busy">丢弃</button>
+              <AppIcon name="send" />提交图片</button
+            ><button @click="action('composer-add-pending')" :disabled="busy || (data?.composer?.length ?? 0) >= 5"><AppIcon name="images" />加入多图任务</button><button @click="action('discard')" :disabled="busy"><AppIcon name="trash" />丢弃</button>
           </div>
         </div>
         <div v-else class="empty">
@@ -953,34 +954,34 @@ onUnmounted(() => clearInterval(timer));
         </div>
 
         <section class="composer" aria-label="多图任务">
-          <div class="section-heading"><h2>多图任务 · 2–5 张</h2><button @click="pickImages" :disabled="busy || (data?.composer?.length ?? 0) >= 5">添加图片文件…</button></div>
+          <div class="section-heading"><h2>多图任务 · 2–5 张</h2><button @click="pickImages" :disabled="busy || (data?.composer?.length ?? 0) >= 5"><AppIcon name="image" />添加图片文件…</button></div>
           <p class="hint">按列表顺序作为一个任务提交。编辑期间监听不会改变列表；提交时使用当前选择的助手。</p>
-          <button @click="action('composer-add-clipboard')" :disabled="busy || (data?.composer?.length ?? 0) >= 5">添加当前剪贴板图片</button>
+          <button @click="action('composer-add-clipboard')" :disabled="busy || (data?.composer?.length ?? 0) >= 5"><AppIcon name="clipboard" />添加当前剪贴板图片</button>
           <ol class="composer-images" v-if="data?.composer?.length">
             <li v-for="(image, index) in data.composer" :key="image.id">
               <img :src="image.preview" :alt="`第 ${index + 1} 张截图`" />
               <div><strong>第 {{ index + 1 }} 张</strong><div class="task-actions">
-                <button :aria-label="`上移第 ${index + 1} 张`" :disabled="busy || index === 0" @click="action('composer-move', { index, to: index - 1 })">上移</button>
-                <button :aria-label="`下移第 ${index + 1} 张`" :disabled="busy || index === data.composer.length - 1" @click="action('composer-move', { index, to: index + 1 })">下移</button>
-                <button :aria-label="`移除第 ${index + 1} 张`" :disabled="busy" @click="action('composer-remove', { index })">移除</button>
+                <button :aria-label="`上移第 ${index + 1} 张`" :disabled="busy || index === 0" @click="action('composer-move', { index, to: index - 1 })"><AppIcon name="up" />上移</button>
+                <button :aria-label="`下移第 ${index + 1} 张`" :disabled="busy || index === data.composer.length - 1" @click="action('composer-move', { index, to: index + 1 })"><AppIcon name="down" />下移</button>
+                <button :aria-label="`移除第 ${index + 1} 张`" :disabled="busy" @click="action('composer-remove', { index })"><AppIcon name="trash" />移除</button>
               </div></div>
             </li>
           </ol>
           <div class="task-actions" v-if="data?.composer?.length">
-            <button class="primary" :disabled="busy || data.setupRequired || data.composer.length < 2" @click="action('composer-submit')">提交 {{ data.composer.length }} 张为一个任务</button>
-            <button :disabled="busy" @click="action('composer-discard')">丢弃多图草稿</button>
+            <button class="primary" :disabled="busy || data.setupRequired || data.composer.length < 2" @click="action('composer-submit')"><AppIcon name="send" />提交 {{ data.composer.length }} 张为一个任务</button>
+            <button :disabled="busy" @click="action('composer-discard')"><AppIcon name="trash" />丢弃多图草稿</button>
           </div>
         </section>
         <p v-if="data?.folderError" class="error" role="status">{{ errorText[data.folderError] || data.folderError }}</p>
         <div class="capture-toolbar">
           <span class="hint" role="status" aria-label="当前捕获状态">{{ captureSummary }}</span
-          ><button @click="page = 'settings'">捕获与输出设置</button
+          ><button @click="page = 'settings'"><AppIcon name="settings" />捕获与输出设置</button
           ><button
             v-if="data && !data.setupRequired"
             @click="action('pause', { paused: !data.settings.paused })"
             :disabled="busy"
           >
-            {{ data.settings.paused ? "恢复捕获" : "暂停捕获" }}
+            <AppIcon :name="data.settings.paused ? 'play' : 'pause'" />{{ data.settings.paused ? "恢复捕获" : "暂停捕获" }}
           </button>
         </div>
       </section>
@@ -990,7 +991,7 @@ onUnmounted(() => clearInterval(timer));
             选择一个默认助手处理接下来的截图。已有任务始终使用原配置。
           </p>
           <button class="primary" @click="addProfile" :disabled="busy || !data">
-            添加 AI 助手
+            <AppIcon name="plus" />添加 AI 助手
           </button>
         </div>
         <div v-if="!activeProfiles.length" class="empty">
@@ -1044,7 +1045,7 @@ onUnmounted(() => clearInterval(timer));
           </p>
           <div class="profile-actions">
             <button @click="editProfile(agent)" :disabled="busy">
-              编辑配置</button
+              <AppIcon name="edit" />编辑配置</button
             ><button
               v-if="agent.gateway"
               @click="editProfile(agent)"
@@ -1147,16 +1148,16 @@ onUnmounted(() => clearInterval(timer));
               :aria-pressed="theme === 'dark'"
               @click="changeTheme('dark')"
             >
-              深色</button
+              <AppIcon name="moon" />深色</button
             ><button
               :aria-pressed="theme === 'light'"
               @click="changeTheme('light')"
             >
-              浅色
+              <AppIcon name="sun" />浅色
             </button>
           </div>
         </fieldset>
-        <h2>捕获</h2>
+        <h2><AppIcon name="camera" />捕获</h2>
         <form
           @submit.prevent="apply"
           @change="dirty = true"
@@ -1172,7 +1173,7 @@ onUnmounted(() => clearInterval(timer));
           <label class="check"><input type="checkbox" v-model="folderEnabled" :disabled="data?.setupRequired" />监听截图文件夹（仅此目录）</label>
           <template v-if="folderEnabled">
             <label>截图文件夹<input v-model="folderDirectory" type="text" placeholder="请选择独立的截图目录" spellcheck="false" /></label>
-            <button type="button" @click="pickCaptureFolder">选择截图文件夹…</button>
+            <button type="button" @click="pickCaptureFolder"><AppIcon name="folder" />选择截图文件夹…</button>
             <p class="hint">仅 PNG/JPEG/WebP，文件完成写入后处理；启动、恢复和切换目录时跳过已有文件。不能与应用数据或结果保存目录重叠。</p>
           </template>
           <label
@@ -1190,7 +1191,7 @@ onUnmounted(() => clearInterval(timer));
           <p class="hint">
             启动和恢复时会跳过已存在的图片。确认预览只保留在内存。
           </p>
-          <h2>结果去向</h2>
+          <h2><AppIcon name="file" />结果去向</h2>
           <p class="hint">
             历史始终保留。剪贴板、Markdown 保存和 Windows 通知可独立启用。
           </p>
@@ -1222,15 +1223,15 @@ onUnmounted(() => clearInterval(timer));
                 placeholder="D:\Shot2Agent Results"
                 spellcheck="false" /></label
             ><button type="button" @click="pickSaveDirectory">
-              选择文件夹…
+              <AppIcon name="folder" />选择文件夹…
             </button></template
           >
           <button class="primary" type="submit" :disabled="busy || !data">
-            应用设置</button
+            <AppIcon name="save" />应用设置</button
           ><span v-if="dirty" class="hint unsaved">尚未保存</span>
         </form>
         <details class="hotkeys">
-          <summary>全局快捷键与操作</summary>
+          <summary><AppIcon name="keyboard" />全局快捷键与操作</summary>
           <p class="hint">
             默认关闭。支持 Ctrl+Alt、Ctrl+Shift 或 Alt+Shift 加字母/数字。
           </p>
@@ -1243,7 +1244,7 @@ onUnmounted(() => clearInterval(timer));
                 @input="hotkeyDirty = true"
                 placeholder="未启用"
                 spellcheck="false" /></label
-            ><button type="submit" :disabled="busy || !data">保存快捷键</button>
+            ><button type="submit" :disabled="busy || !data"><AppIcon name="save" />保存快捷键</button>
           </form>
           <p class="hint">
             原生状态：{{ data?.hotkeyStatus || "尚未连接" }}
@@ -1268,15 +1269,15 @@ onUnmounted(() => clearInterval(timer));
           </p>
         </details>
         <section aria-label="文件复制缓存">
-          <h3>文件复制缓存</h3>
+          <h3><AppIcon name="archive" />文件复制缓存</h3>
           <p class="hint">{{ data?.fileCache?.files ?? 0 }} / 1000 个文件 · {{ ((data?.fileCache?.bytes ?? 0) / 1048576).toFixed(2) }} / 256 MiB</p>
           <p class="hint">只清理超过 10 分钟的旧复制缓存。保留当前剪贴板引用的文件；导出的 Markdown、历史和截图不受影响。</p>
           <p v-if="data?.fileCache?.error" class="error">{{ errorText[data.fileCache.error] }}</p>
-          <button :disabled="busy || !data || !!data.fileCache?.error" @click="cleanFileCache">清理旧复制缓存</button>
+          <button :disabled="busy || !data || !!data.fileCache?.error" @click="cleanFileCache"><AppIcon name="trash" />清理旧复制缓存</button>
           <p class="path">{{ data?.fileCache?.directory }}</p>
         </section>
         <section aria-label="版本与备份">
-          <h3>Shot2Agent {{ data?.appVersion }}</h3>
+          <h3><AppIcon name="drive" />Shot2Agent {{ data?.appVersion }}</h3>
           <p class="hint">Local · 完整构建提交见解压目录 BUILD.txt。</p>
           <p class="path">数据目录：{{ data?.root }}</p>
           <p class="hint">升级前从托盘退出应用，再复制整个数据目录作为备份。完整解压新版到另一个目录后启动，会继续使用原数据。Token 由 Windows 凭据管理器保管，不包含在目录备份中；换电脑需重新填写。回退时先退出应用，保留当前数据副本后恢复整份旧备份。不要在运行时只复制 SQLite 文件。</p>
@@ -1334,7 +1335,7 @@ onUnmounted(() => clearInterval(timer));
         aria-label="任务列表"
       >
         <label v-if="page === 'history'"
-          >搜索历史<input
+          ><AppIcon name="search" />搜索历史<input
             type="search"
             maxlength="200"
             v-model="search"
@@ -1465,12 +1466,12 @@ onUnmounted(() => clearInterval(timer));
             </p>
             <div class="task-actions" v-if="task.status === 'succeeded'">
               <button @click="action('copy', { id: task.id })" :disabled="busy">
-                复制文本</button
-              ><button @click="action('copy-files', { id: task.id })" :disabled="busy">复制文件</button><button
+                <AppIcon name="copy" />复制文本</button
+              ><button @click="action('copy-files', { id: task.id })" :disabled="busy"><AppIcon name="copy-file" />复制文件</button><button
                 @click="action('retry-delivery', { id: task.id })"
                 :disabled="busy"
               >
-                重试结果投递
+                <AppIcon name="retry" />重试结果投递
               </button>
             </div>
             <div class="notice" v-if="task.status === 'execution_unknown'">
@@ -1500,7 +1501,7 @@ onUnmounted(() => clearInterval(timer));
           class="view-history"
           @click="page = 'history'"
         >
-          查看全部历史 →
+          查看全部历史<AppIcon name="next" />
         </button>
         <p
           v-if="page === 'history' && data?.total && !visibleTasks.length"
@@ -1568,7 +1569,7 @@ onUnmounted(() => clearInterval(timer));
             {{ editVersion ? "编辑 Agent 配置" : "添加 AI 助手" }}
           </h2>
           <button @click="closeEditor" :disabled="busy" aria-label="关闭编辑器">
-            关闭
+            <AppIcon name="close" />关闭
           </button>
         </div>
         <p class="hint">

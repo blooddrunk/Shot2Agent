@@ -10,7 +10,7 @@ const root = mkdtempSync(join(tmpdir(), 'shot-extracted-'));
 const moduleAt = p => import(pathToFileURL(join(bundle, 'runtime/dist', p)).href);
 const { APP_VERSION } = await moduleAt('packages/desktop/src/version.js');
 assert.match(readFileSync(join(bundle, 'BUILD.txt'), 'utf8'), new RegExp(APP_VERSION.replaceAll('.', '\\.')));
-for (const file of ['Shot2Agent.exe', 'runtime/node.exe', 'runtime/dist/packages/local/src/clipboard.ps1', 'runtime/dist/packages/worker/src/claude-policy.ps1', 'runtime/dist/packages/worker/src/gateway-credential.ps1', 'runtime/dist/scripts/fixtures/glm-vision.png', 'Windows instructions.md']) assert.ok(existsSync(join(bundle, file)), file);
+for (const file of ['Shot2Agent.exe', 'runtime/node.exe', 'runtime/dist/packages/local/src/clipboard.ps1', 'runtime/dist/packages/worker/src/claude-policy.ps1', 'runtime/dist/packages/worker/src/gateway-credential.ps1', 'runtime/dist/scripts/fixtures/glm-vision.png', 'Windows instructions.md', 'LOCAL_V1_GUIDE.md', 'USER_GUIDE.md', 'THIRD_PARTY_NOTICES.md']) assert.ok(existsSync(join(bundle, file)), file);
 const manifest = JSON.parse(readFileSync(join(bundle, 'MANIFEST.json')));
 for (const [file, hash] of Object.entries(manifest.files)) assert.equal(createHash('sha256').update(readFileSync(join(bundle, file))).digest('hex'), hash, file);
 const { DesktopController } = await moduleAt('packages/desktop/src/controller.js');
@@ -38,6 +38,6 @@ try {
   await desktop.close();
   desktop = new DesktopController(root, new WindowsClipboard(), { adapter: new FakeAgent(), profile: FAKE_PROFILE }, 'staging', async () => []);
   assert.equal(desktop.app.get(id2).status, 'succeeded'); assert.equal(desktop.app.get(id2).attempts.length, 1);
-  const report = `PASS extracted ZIP ${APP_VERSION}: manifest hashes/resources, fresh GUI onboarding contract (no profile), isolated Fake one/five images, native files/cache, retained files after deletion, restart history. GUI rendering/focus/Explorer paste NOT VERIFIED.`;
+  const report = `PASS extracted ZIP ${APP_VERSION}: manifest hashes/resources, fresh GUI onboarding contract (no profile), isolated Fake one/five images, native files/cache, retained files after deletion, restart history. Interactive Explorer/focus is outside this automated check; see the operator acceptance record.`;
   writeFileSync(join(bundle, 'PORTABLE-VERIFY.txt'), report); process.stdout.write(report + '\n');
 } finally { await desktop?.close(); clipboard.close(); rmSync(root, { recursive: true, force: true }); }
