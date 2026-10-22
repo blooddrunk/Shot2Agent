@@ -23,6 +23,11 @@ jobs:
           workspaces: apps/desktop/src-tauri
           cache-on-failure: true
       - run: corepack pnpm install --frozen-lockfile
+      - name: Rust format and unit checks
+        working-directory: apps/desktop/src-tauri
+        run: |
+          cargo fmt --check
+          cargo test
       - run: npm run desktop:build
       - run: cargo fmt --check --manifest-path apps/desktop/src-tauri/Cargo.toml
       - run: cargo test --release --features tauri/custom-protocol --manifest-path apps/desktop/src-tauri/Cargo.toml

@@ -22,6 +22,8 @@ type Task = {
   error?: string;
   clipboard?: Receipt;
   save?: Receipt;
+  notification?: Receipt;
+  imageCount?: number;
 };
 type Hotkeys = Record<string, string>;
 type Agent = {
@@ -73,9 +75,13 @@ type Snapshot = {
   historyOffset: number;
   pending: string | null;
   captureStatus: string;
+  composer?: { id: string; preview: string }[];
+  folderError?: string;
   canReviewUnknownHistory: boolean;
   settings: {
     enabled: boolean;
+    folderEnabled?: boolean;
+    folderDirectory?: string;
     mode: string;
     paused: boolean;
     autoConsent: boolean;
@@ -84,6 +90,8 @@ type Snapshot = {
   delivery: {
     clipboard: string;
     saveDirectory?: string;
+    clipboardPayload?: string;
+    notification?: boolean;
     retry?: { maxRetries: number; backoffMs: number; budgetMs: number };
   };
   agents: Agent[];
@@ -129,6 +137,15 @@ const statusText: Record<string, string> = {
   capture_error: "剪贴板读取暂停 · 可重新连接",
 };
 const errorText: Record<string, string> = {
+  BATCH_IMAGE_COUNT: "多图任务需要 2–5 张图片；最多可添加 5 张。",
+  BATCH_OVER_60_MIB: "图片合计超过 60 MiB，请减少图片或文件大小。",
+  INVALID_IMAGE: "图片不完整或格式不支持，请选择已保存完成的 PNG/JPEG/WebP。",
+  CAPTURE_FOLDER_REQUIRED: "请选择截图文件夹，再启用目录监听。",
+  CAPTURE_OUTPUT_OVERLAP: "截图文件夹不能与应用数据或结果保存目录重叠，请另选目录。",
+  CAPTURE_FOLDER_UNAVAILABLE: "截图目录不可访问，请重新选择后应用设置。",
+  FOLDER_IMAGE_INVALID_OR_UNREADABLE: "已跳过无法读取的图片，请检查文件是否完整。",
+  NO_CURRENT_IMAGE: "当前剪贴板中没有图片，请先截图。",
+  COPY_FAILED: "复制未完成，请检查剪贴板是否被占用；可稍后手动复制。",
   PROFILE_NAME_EXISTS:
     "这个名称已经存在，请编辑或恢复原助手，或使用另一个名称。",
   CLI_NOT_USABLE: "本机程序暂不可用，请重新检测或选择 Codex / Claude Code。",
@@ -177,6 +194,10 @@ const error = ref("");
 const message = ref("");
 const busy = ref(false);
 const enabled = ref(false);
+const folderEnabled = ref(false);
+const folderDirectory = ref("");
+const clipboardPayload = ref("text");
+const notification = ref(false);
 const mode = ref("confirm");
 const clipboard = ref("always");
 const save = ref(false);
@@ -271,11 +292,6 @@ const taskStatus: Record<string, string> = {
   canceled: "已取消",
   execution_unknown: "结果不确定",
 };
-const visionReady = computed(
-  () =>
-    !selectedAgent.value?.gateway ||
-    selectedAgent.value.gateway.vision !== "not-verified",
-);
 async function showEditor() {
   returnFocus.value = document.activeElement as HTMLElement;
   showProfileForm.value = true;
@@ -347,6 +363,10 @@ function hydrate(snapshot: Snapshot) {
   if (!hotkeyDirty.value) hotkeys.value = { ...snapshot.hotkeys };
   if (!dirty.value) {
     enabled.value = snapshot.settings.enabled;
+    folderEnabled.value = snapshot.settings.folderEnabled ?? false;
+    folderDirectory.value = snapshot.settings.folderDirectory ?? "";
+    clipboardPayload.value = snapshot.delivery.clipboardPayload ?? "text";
+    notification.value = snapshot.delivery.notification ?? false;
     mode.value = snapshot.settings.mode;
     clipboard.value = snapshot.delivery.clipboard;
     maxRetries.value = snapshot.delivery.retry?.maxRetries ?? 0;
@@ -409,7 +429,7 @@ async function action(command: string, args: Record<string, unknown> = {}) {
       showProfileForm.value = false;
       returnFocus.value?.focus();
       message.value =
-        "Agent 配置已保存。已有任务保留原配置；未验证的 GLM 需单独测试连接。";
+        "Agent 配置已保存。已有任务保留原配置；可直接提交截图，测试连接可选。";
     }
     if (command === "archive-agent")
       message.value = args.archived
@@ -445,6 +465,8 @@ async function action(command: string, args: Record<string, unknown> = {}) {
       message.value = args.paused
         ? "捕获已暂停。"
         : "捕获已恢复，已有图片不会自动提交。";
+    if (command === "copy-files") message.value = "已复制 Markdown 文件，可粘贴到资源管理器。";
+    if (command === "composer-submit") message.value = "多张图片已作为一个任务提交。";
     if (command === "retry-delivery")
       message.value =
         "已检查结果投递，请查看剪贴板和保存状态；Agent 未重新执行。";
@@ -604,11 +626,13 @@ async function apply() {
     return;
   }
   await action("configure", {
-    capture: { enabled: enabled.value, mode: mode.value },
+    capture: { enabled: enabled.value, mode: mode.value, folderEnabled: folderEnabled.value, ...(folderDirectory.value ? { folderDirectory: folderDirectory.value } : {}) },
     autoConsent: autoConsent.value,
     alwaysConsent: alwaysConsent.value,
     delivery: {
       clipboard: clipboard.value,
+      clipboardPayload: clipboardPayload.value,
+      notification: notification.value,
       retry: {
         maxRetries: maxRetries.value,
         backoffMs: backoffMs.value,
@@ -619,9 +643,21 @@ async function apply() {
   });
   if (!error.value) {
     dirty.value = false;
-    message.value = "设置已保存。从下一次剪贴板变化开始监听。";
+    message.value = "设置已保存。仅监听此后新增的图片。";
     await refresh();
   }
+}
+async function pickImages() {
+  try {
+    const paths = await open({ title: "添加 2–5 张截图", multiple: true, filters: [{ name: "截图", extensions: ["png", "jpg", "jpeg", "webp"] }] });
+    if (paths) await action("composer-add-files", { paths: Array.isArray(paths) ? paths : [paths] });
+  } catch { error.value = "无法打开图片选择窗口，请重试。"; }
+}
+async function pickCaptureFolder() {
+  try {
+    const path = await open({ title: "选择截图文件夹", directory: true, multiple: false });
+    if (typeof path === "string") { folderDirectory.value = path; dirty.value = true; }
+  } catch { error.value = "无法选择截图文件夹，请检查目录是否可访问。"; }
 }
 async function pickSaveDirectory() {
   try {
@@ -850,14 +886,14 @@ onUnmounted(() => clearInterval(timer));
             {{ data?.setupRequired ? "开始设置" : "更换助手" }}
           </button>
         </div>
-        <p v-if="!visionReady" class="notice">
-          Token 已本地保存，图片能力尚未验证。请在 AI 助手中选择“测试连接”。
+        <p v-if="selectedAgent?.gateway?.connectionStatus === 'not_tested'" class="notice">
+          Token 已本地保存。可直接提交截图；测试连接可选且可能产生费用。
         </p>
         <div class="section-heading">
           <h2>截图处理</h2>
           <button
             @click="action('current')"
-            :disabled="busy || !data || data.setupRequired || !visionReady"
+            :disabled="busy || !data || data.setupRequired"
           >
             处理剪贴板图片
           </button>
@@ -869,7 +905,7 @@ onUnmounted(() => clearInterval(timer));
             <p>仅此预览会被提交。</p>
             <button class="primary" @click="action('submit')" :disabled="busy">
               提交图片</button
-            ><button @click="action('discard')" :disabled="busy">丢弃</button>
+            ><button @click="action('composer-add-pending')" :disabled="busy || (data?.composer?.length ?? 0) >= 5">加入多图任务</button><button @click="action('discard')" :disabled="busy">丢弃</button>
           </div>
         </div>
         <div v-else class="empty">
@@ -885,10 +921,30 @@ onUnmounted(() => clearInterval(timer));
           </p>
         </div>
 
+        <section class="composer" aria-label="多图任务">
+          <div class="section-heading"><h2>多图任务 · 2–5 张</h2><button @click="pickImages" :disabled="busy || (data?.composer?.length ?? 0) >= 5">添加图片文件…</button></div>
+          <p class="hint">按列表顺序作为一个任务提交。编辑期间监听不会改变列表；提交时使用当前选择的助手。</p>
+          <button @click="action('composer-add-clipboard')" :disabled="busy || (data?.composer?.length ?? 0) >= 5">添加当前剪贴板图片</button>
+          <ol class="composer-images" v-if="data?.composer?.length">
+            <li v-for="(image, index) in data.composer" :key="image.id">
+              <img :src="image.preview" :alt="`第 ${index + 1} 张截图`" />
+              <div><strong>第 {{ index + 1 }} 张</strong><div class="task-actions">
+                <button :aria-label="`上移第 ${index + 1} 张`" :disabled="busy || index === 0" @click="action('composer-move', { index, to: index - 1 })">上移</button>
+                <button :aria-label="`下移第 ${index + 1} 张`" :disabled="busy || index === data.composer.length - 1" @click="action('composer-move', { index, to: index + 1 })">下移</button>
+                <button :aria-label="`移除第 ${index + 1} 张`" :disabled="busy" @click="action('composer-remove', { index })">移除</button>
+              </div></div>
+            </li>
+          </ol>
+          <div class="task-actions" v-if="data?.composer?.length">
+            <button class="primary" :disabled="busy || data.setupRequired || data.composer.length < 2" @click="action('composer-submit')">提交 {{ data.composer.length }} 张为一个任务</button>
+            <button :disabled="busy" @click="action('composer-discard')">丢弃多图草稿</button>
+          </div>
+        </section>
+        <p v-if="data?.folderError" class="error" role="status">{{ errorText[data.folderError] || data.folderError }}</p>
         <div class="capture-toolbar">
           <span class="hint"
             >{{ data?.settings.mode === "auto" ? "自动提交" : "确认后提交" }} ·
-            {{ data?.settings.enabled ? "捕获已开启" : "捕获未开启" }}</span
+            {{ (data?.settings.enabled || data?.settings.folderEnabled) ? "捕获已开启" : "捕获未开启" }}</span
           ><button @click="page = 'settings'">捕获与输出设置</button
           ><button
             v-if="data && !data.setupRequired"
@@ -1081,9 +1137,15 @@ onUnmounted(() => clearInterval(timer));
             ><input
               type="checkbox"
               v-model="enabled"
-              :disabled="data?.setupRequired || !visionReady"
+              :disabled="data?.setupRequired"
             />监听剪贴板中的新图片</label
           >
+          <label class="check"><input type="checkbox" v-model="folderEnabled" :disabled="data?.setupRequired" />监听截图文件夹（仅此目录）</label>
+          <template v-if="folderEnabled">
+            <label>截图文件夹<input v-model="folderDirectory" type="text" placeholder="请选择独立的截图目录" spellcheck="false" /></label>
+            <button type="button" @click="pickCaptureFolder">选择截图文件夹…</button>
+            <p class="hint">仅 PNG/JPEG/WebP，文件完成写入后处理；启动、恢复和切换目录时跳过已有文件。不能与应用数据或结果保存目录重叠。</p>
+          </template>
           <label
             >提交方式<select v-model="mode">
               <option value="confirm">确认后提交</option>
@@ -1101,7 +1163,7 @@ onUnmounted(() => clearInterval(timer));
           </p>
           <h2>结果去向</h2>
           <p class="hint">
-            历史始终保留。剪贴板返回和 Markdown 保存可同时启用。
+            历史始终保留。剪贴板、Markdown 保存和 Windows 通知可独立启用。
           </p>
           <label
             >剪贴板返回<select v-model="clipboard">
@@ -1111,6 +1173,9 @@ onUnmounted(() => clearInterval(timer));
               <option value="always">Always · 总是覆盖</option>
             </select></label
           >
+          <label>自动复制内容<select v-model="clipboardPayload"><option value="text">文本 · 粘贴到编辑器</option><option value="files">Markdown 文件 · 粘贴到资源管理器</option></select></label>
+          <label class="check"><input type="checkbox" v-model="notification" />完成时显示 Windows 通知</label>
+          <p class="hint">关闭所有输出后，结果仍保留在历史中。系统通知可能被 Windows 设置隐藏。</p>
           <label v-if="clipboard === 'always'" class="consent"
             ><input
               type="checkbox"
@@ -1336,6 +1401,7 @@ onUnmounted(() => clearInterval(timer));
                 "等待结果"
               }}
             </p>
+            <p v-if="page === 'history'" class="hint">{{ task.imageCount ?? 1 }} 张图片 · 通知：{{ receiptText[task.notification?.status || ''] || task.notification?.status || '等待结果' }}<span v-if="task.notification?.code"> · {{ task.notification.code }}</span></p>
             <p class="hint" v-if="task.clipboard?.code">
               剪贴板：{{ task.clipboard.code }} ·
               {{ task.clipboard.classification }} ·
@@ -1357,7 +1423,7 @@ onUnmounted(() => clearInterval(timer));
             <div class="task-actions" v-if="task.status === 'succeeded'">
               <button @click="action('copy', { id: task.id })" :disabled="busy">
                 复制结果</button
-              ><button
+              ><button @click="action('copy-files', { id: task.id })" :disabled="busy">复制文件</button><button
                 @click="action('retry-delivery', { id: task.id })"
                 :disabled="busy"
               >
@@ -1584,7 +1650,7 @@ onUnmounted(() => clearInterval(timer));
             /></label>
             <p class="hint">
               保存仅将 Token 存入 Windows 凭据管理器，不会请求模型。新
-              Token、端点或模型需在助手列表中单独“测试连接”后才能处理图片。未更改的已验证连接保留其状态。
+              Token、端点或模型可直接用于您提交的截图。“测试连接”可选，可能产生费用；保存不会触发测试。
             </p>
           </template>
           <div class="dialog-footer">

@@ -1,3 +1,5 @@
+> M8-L 0.8.0 adds independent Local folder/clipboard intake, ordered 2–5 image GUI tasks, CF_HDROP Markdown output and optional native completion notifications. [Current operation](M8_WINDOWS_RUN.md) and [executed validation / native gaps](M8_VALIDATION.md) supersede historical planned feature labels below. Next release scope is M9-L final Local v1.0, with Remote deferred.
+
 # Product specification - V1 baseline
 
 **Status:** confirmed V1 scope. M1 core/Fake and M2-L Local clipboard/Codex/text delivery are implemented; the minimum Windows Local loop has [operator acceptance](M2_VALIDATION.md#operator-acceptance-2026-10-20). Dedicated native edge cases remain separately unverified. Full tray/UI, folder/batch editor and Remote delivery are still planned. Updated 2026-10-20.

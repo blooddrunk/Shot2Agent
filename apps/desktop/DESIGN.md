@@ -101,8 +101,10 @@ Quick actions form one wrapping group with an 8px gap. Advanced cleanup has a se
 - Editor uses a native dialog with title focus, modal keyboard containment, Escape/cancel, focus restoration, scrollable content and sticky title. Optional technical configuration is in disclosures.
 - Disabled, busy, empty, preview, status, error and success states are explicit. Operation feedback uses live regions. Primary actions are filled green; secondary actions remain quiet.
 - **The Explicit Intake Rule:** automatic capture and Always overwrite need distinct consent. Existing clipboard images are skipped on startup/resume.
-- **The Independent Save Rule:** local GLM Token save and potentially paid connection testing have separate actions. Qualification never appears as a generic “configured means image-ready” badge.
+- **The Independent Save Rule:** local GLM Token save and potentially paid connection testing have separate actions. Connection testing is optional; supported models can process an explicitly requested screenshot without a prior synthetic test. Saving never requests a model.
 
 ## Do's and Don'ts
 
 Keep the screenshot workflow prominent; preserve keyboard focus and visible action feedback. Keep provider-specific Token controls exclusive to GLM. Keep advanced cleanup separate from ordinary removal. Never treat browser screenshots or Fake execution as Windows paste, actual provider authentication, live vision or universal IME proof.
+
+M8 adds an inline ordered composer using the existing controls and preview styles. Capture settings expose independent clipboard/folder toggles; file/text payload and notification are independent from Markdown save.

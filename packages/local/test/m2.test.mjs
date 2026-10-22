@@ -247,12 +247,26 @@ test('Windows native helper synthetic DIB capture, Unicode copy and atomic seque
     const readback = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Sta', '-Command',
       "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false); Add-Type -AssemblyName System.Windows.Forms; [Console]::Write([System.Windows.Forms.Clipboard]::GetText())"], { encoding: 'utf8', windowsHide: true, timeout: 15000 });
     assert.equal(readback.status, 0, readback.stderr); assert.equal(readback.stdout, app.get(id).result.contentMarkdown);
+    // Native CF_HDROP: Explorer consumes a UTF-16 file list, not path text.
+    await app.copy(id, 'files');
+    const fileList = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Sta', '-Command',
+      "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false); Add-Type -AssemblyName System.Windows.Forms; if (-not [System.Windows.Forms.Clipboard]::ContainsFileDropList()) { exit 3 }; $p=[System.Windows.Forms.Clipboard]::GetFileDropList(); [Console]::Write(($p | ConvertTo-Json -Compress))"], { encoding: 'utf8', windowsHide: true, timeout: 15000 });
+    assert.equal(fileList.status, 0, fileList.stderr);
+    const copied = JSON.parse(fileList.stdout); const paths = Array.isArray(copied) ? copied : [copied];
+    assert.equal(paths.length, 1); assert.equal(readFileSync(paths[0], 'utf8'), app.get(id).result.contentMarkdown);
+    const originalSequence = await clipboard.sequence();
+    await clipboard.writeText('newer synthetic clipboard');
+    assert.equal(await clipboard.writeFiles(paths, originalSequence), false);
+    assert.equal(await clipboard.writeFiles(paths), true);
+    // This proves submission to the native shell API, not visible balloon display.
+    try { await clipboard.notify(); }
+    catch (error) { assert.match(error.message, /^NATIVE_NOTIFICATION_UNAVAILABLE$/); }
     // Hold the native clipboard lock in a separate bounded process. The write must
     // report known pre-write contention, then recover without hidden helper replay.
     const holder = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `
       Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class LockClipboard { [DllImport("user32.dll")] public static extern bool OpenClipboard(IntPtr owner); [DllImport("user32.dll")] public static extern bool CloseClipboard(); }';
       if (-not [LockClipboard]::OpenClipboard([IntPtr]::Zero)) { exit 2 };
-      try { [Console]::WriteLine('LOCKED'); Start-Sleep -Seconds 2 } finally { [LockClipboard]::CloseClipboard() | Out-Null }
+      try { [Console]::WriteLine('LOCKED'); Start-Sleep -Seconds 4 } finally { [LockClipboard]::CloseClipboard() | Out-Null }
     `], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'], timeout: 15000 });
     const exited = new Promise(resolve => holder.once('close', resolve));
     try {
@@ -261,6 +275,7 @@ test('Windows native helper synthetic DIB capture, Unicode copy and atomic seque
         holder.once('error', reject); holder.once('exit', code => { if (code) reject(Error('LOCK_FAILED')); });
       });
       await assert.rejects(clipboard.writeText('synthetic contention probe'), /CLIPBOARD_BUSY/);
+      await assert.rejects(clipboard.writeFiles(paths), /CLIPBOARD_BUSY/);
       assert.equal(await exited, 0);
       assert.equal(await clipboard.writeText('synthetic contention recovered'), true);
     } finally { holder.kill(); }

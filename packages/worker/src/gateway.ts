@@ -24,7 +24,7 @@ export function assertGatewayVision(g: GatewayConfig): void {
   // https://docs.bigmodel.cn/cn/guide/models/vlm/glm-5.3-flash
   // Do not use MCP/tools as a vision substitute.
   requireValue([g.model, ...Object.values(g.models)].every(v => /^(?:glm-4\.6v(?:-flashx|-flash)?|glm-5\.3-flash)$/i.test(v)), 'GATEWAY_MODEL_VISION_UNSUPPORTED');
-  requireValue(g.vision === 'operator-attested' || g.vision === 'synthetic-test-passed', 'GATEWAY_VISION_NOT_VERIFIED');
+  // Qualification is diagnostic metadata; a supported real task needs no prior paid test.
 }
 export const credentialScript = fileURLToPath(new URL('./gateway-credential.ps1', import.meta.url));
 export function credentialCommand(action: 'add' | 'read' | 'delete', reference: string): { executable: string; args: string[]; env: NodeJS.ProcessEnv } {

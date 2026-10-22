@@ -1,3 +1,4 @@
+import { FolderSource, validateCaptureFolder } from './folder.ts';
 import { displayInventory } from './inventory.ts';
 import { ACTIONS, completedResults, retryableDelivery, retryableChannels, validateHotkeys } from './actions.ts';
 import sharp from 'sharp';
@@ -8,7 +9,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentAdapter, Profile } from '../../contracts/src/index.ts';
 import { requireValue } from '../../core/src/model.ts';
-import { LocalApp } from '../../local/src/app.ts';
+import { LocalApp, readImageFile, validateLocalImage } from '../../local/src/app.ts';
 import type { ClipboardPort } from '../../local/src/clipboard.ts';
 import { CodexAgent, codexProfile } from '../../worker/src/codex.ts';
 import type { CodexPolicy } from '../../worker/src/codex.ts';
@@ -55,6 +56,8 @@ export class DesktopController {
   private credentialStatuses = new Map<string, 'unchecked' | 'available' | 'missing'>();
   private gatewayTests = new Map<string, 'synthetic_test_passed' | 'not_tested' | 'previously_attested'>();
   private actionBusy = false;
+  private folder = new FolderSource();
+  private composer: { id: string; bytes: Buffer; preview: string }[] = [];
   private preview?: string; private previewImage?: object;
   private credentials: DesktopCredentialStore;
   private testGateway: GatewayVisionTest;
@@ -124,6 +127,7 @@ export class DesktopController {
   }
   async start() {
     this.app.state.acquireWorker(); await this.app.arm(); this.armed = true;
+    try { this.armFolder(this.settings); } catch { this.folder.arm(); this.folder.error = 'CAPTURE_FOLDER_UNAVAILABLE'; }
     void this.refreshDiscovery(); void this.refreshSelectedCredential(); void this.drainCredentialCleanup();
   }
   private async createProfile(request: Record<string, unknown>) {
@@ -263,10 +267,32 @@ export class DesktopController {
   private workspaceSuggestion(): string {
     return this.settings.agents?.profiles[0]?.policy.workspace ?? this.settings.codex?.workspace ?? join(process.env.LOCALAPPDATA ?? homedir(), 'Shot2Agent-Workspace');
   }
+  private armFolder(settings: Settings) {
+    const directory = settings.desktop.folderEnabled && !settings.desktop.paused ? settings.desktop.folderDirectory : undefined;
+    if (directory) validateCaptureFolder(directory, [this.root, ...(settings.delivery.saveDirectory ? [settings.delivery.saveDirectory] : [])]);
+    const next = new FolderSource(); next.arm(directory); this.folder = next;
+  }
+  private async addComposer(inputs: Buffer[]) {
+    requireValue(inputs.length > 0 && this.composer.length + inputs.length <= 5, 'BATCH_IMAGE_COUNT');
+    requireValue(this.composer.reduce((n, i) => n + i.bytes.length, 0) + inputs.reduce((n, b) => n + b.length, 0) <= 60 * 1024 * 1024, 'BATCH_OVER_60_MIB');
+    const additions = [];
+    for (const bytes of inputs) {
+      const prepared = await validateLocalImage(bytes);
+      additions.push({ id: randomUUID(), bytes: Buffer.from(prepared.bytes), preview: `data:image/png;base64,${(await sharp(prepared.bytes).resize({ width: 180, height: 120, fit: 'inside', withoutEnlargement: true }).png().toBuffer()).toString('base64')}` });
+    }
+    this.composer.push(...additions);
+  }
   async tick() {
     if (this.closed) return;
-    if (this.isConfigured() && !this.captureError && this.armed && this.settings.desktop.enabled && !this.settings.desktop.paused) {
-      try { await this.app.observe(this.settings.desktop.mode === 'auto'); }
+    if (this.isConfigured() && !this.captureError && this.armed && (this.settings.desktop.enabled || this.settings.desktop.folderEnabled) && !this.settings.desktop.paused) {
+      try {
+        const auto = this.settings.desktop.mode === 'auto';
+        if (this.settings.desktop.enabled) await this.app.observe(auto);
+        if (this.settings.desktop.folderEnabled) await this.folder.poll(async bytes => {
+          const sequence = await this.app.clipboard!.sequence();
+          await this.app.ingest(bytes, auto, { session: this.app.clipboard!.session, sequence }, 'folder');
+        });
+      }
       catch (error) { this.captureError = safeError(error); this.armed = false; this.app.discard(); }
     }
     if (!this.worker && !this.workerError) {
@@ -279,6 +305,7 @@ export class DesktopController {
     const r = raw as Record<string, unknown>;
     requireValue(r.v === 1 && typeof r.command === 'string', 'INVALID_PROTOCOL');
     const allowed: Record<string, string[]> = { snapshot: ['offset', 'query'], 'configure-hotkeys': ['hotkeys'], action: ['action'], configure: ['capture', 'delivery', 'autoConsent', 'alwaysConsent'],
+      'composer-add-files': ['paths'], 'composer-add-clipboard': [], 'composer-add-pending': [], 'composer-move': ['index', 'to'], 'composer-remove': ['index'], 'composer-discard': [], 'composer-submit': [], 'copy-files': ['id'],
       submit: [], current: [], discard: [], pause: ['paused'], copy: ['id'], detail: ['id'], 'retry-delivery': ['id'], recover: [], 'select-agent': ['id', 'version'],
       'archive-agent': ['id', 'version', 'archived', 'confirm'], 'delete-agent': ['id', 'version', 'confirm'], 'cleanup-unused-agents': [],
       'create-profile': ['provider', 'id', 'path', 'workspace', 'prompt', 'endpoint', 'model', 'token', 'editId', 'editVersion', 'reuseExisting', 'enableAfterTest'], 'credential-status': ['id', 'version'], 'test-agent': ['id', 'version', 'confirm'],
@@ -320,7 +347,7 @@ export class DesktopController {
               const next = available[(index + 1) % available.length].profile;
               await this.dispatch({ v: 1, command: 'select-agent', id: next.id, version: next.version }); break;
             }
-            case 'current': requireValue(this.isConfigured(), 'AGENT_SETUP_REQUIRED'); await this.app.capture(false, true); requireValue(this.app.lastCaptureStatus === 'queued', this.app.lastCaptureStatus === 'duplicate' ? 'DUPLICATE_IMAGE' : 'NO_CURRENT_IMAGE'); break;
+            case 'current': requireValue(this.isConfigured(), 'AGENT_SETUP_REQUIRED'); await this.app.capture(true, true); requireValue(this.app.lastCaptureStatus === 'queued', this.app.lastCaptureStatus === 'duplicate' ? 'DUPLICATE_IMAGE' : 'NO_CURRENT_IMAGE'); break;
           }
           this.lastAction = { action: String(r.action), status: 'succeeded', at: Date.now() };
         } catch (error) { this.lastAction = { action: String(r.action), status: safeError(error), at: Date.now() }; throw error; }
@@ -396,20 +423,20 @@ export class DesktopController {
         if (r.capture !== undefined) {
           requireValue(r.capture && typeof r.capture === 'object' && !Array.isArray(r.capture), 'INVALID_CAPTURE_SETTINGS');
           const capture = r.capture as Record<string, unknown>;
-          requireValue(Object.keys(capture).every(k => ['enabled', 'mode'].includes(k)), 'INVALID_CAPTURE_SETTINGS');
+          requireValue(Object.keys(capture).every(k => ['enabled', 'mode', 'folderEnabled', 'folderDirectory'].includes(k)), 'INVALID_CAPTURE_SETTINGS');
           Object.assign(next.desktop, capture);
         }
-        requireValue(!next.desktop.enabled || this.isConfigured(), 'AGENT_SETUP_REQUIRED');
+        requireValue(!(next.desktop.enabled || next.desktop.folderEnabled) || this.isConfigured(), 'AGENT_SETUP_REQUIRED');
         for (const key of ['autoConsent', 'alwaysConsent'] as const) {
           if (r[key] !== undefined) { requireValue(typeof r[key] === 'boolean', 'INVALID_CONSENT'); next.desktop[key] = r[key]; }
         }
         if (r.delivery !== undefined) {
-          requireValue(r.delivery && typeof r.delivery === 'object' && !Array.isArray(r.delivery) && Object.keys(r.delivery).every(k => ['clipboard', 'saveDirectory', 'retry'].includes(k)), 'INVALID_DELIVERY_SETTINGS');
+          requireValue(r.delivery && typeof r.delivery === 'object' && !Array.isArray(r.delivery) && Object.keys(r.delivery).every(k => ['clipboard', 'saveDirectory', 'retry', 'clipboardPayload', 'notification'].includes(k)), 'INVALID_DELIVERY_SETTINGS');
           next.delivery = r.delivery as Settings['delivery'];
         }
         validate(next);
         // A mode/source switch invalidates the staging slot and skips historical content.
-        await this.app.arm(); saveSettings(this.root, next); this.settings = next;
+        this.armFolder(next); await this.app.arm(); saveSettings(this.root, next); this.settings = next;
         for (const key of Object.keys(this.app.config)) delete (this.app.config as unknown as Record<string, unknown>)[key];
         Object.assign(this.app.config, effectiveDelivery(next)); this.armed = true; this.captureError = undefined;
         break;
@@ -417,11 +444,40 @@ export class DesktopController {
       case 'pause':
         requireValue(typeof r.paused === 'boolean', 'INVALID_PAUSE');
         { const next = structuredClone(this.settings); next.desktop.paused = r.paused;
-          await this.app.arm(); saveSettings(this.root, next); this.settings = next; this.armed = true; this.captureError = undefined; } break;
+          this.armFolder(next); await this.app.arm(); saveSettings(this.root, next); this.settings = next; this.armed = true; this.captureError = undefined; } break;
       case 'submit':
         requireValue(this.isConfigured(), 'AGENT_SETUP_REQUIRED');
-        requireValue(this.app.pending, 'NO_PENDING_IMAGE'); await this.app.capture(); break;
-      case 'current': requireValue(this.isConfigured(), 'AGENT_SETUP_REQUIRED'); await this.app.capture(false, true); break;
+        requireValue(this.app.pending, 'NO_PENDING_IMAGE'); await this.app.capture(true); break;
+      case 'current': requireValue(this.isConfigured(), 'AGENT_SETUP_REQUIRED'); await this.app.capture(true, true); break;
+      case 'composer-add-files': {
+        requireValue(Array.isArray(r.paths) && r.paths.length > 0 && r.paths.length + this.composer.length <= 5 && r.paths.every(p => typeof p === 'string' && p.length <= 2048), 'BATCH_IMAGE_COUNT');
+        const inputs: Buffer[] = []; let total = this.composer.reduce((n, i) => n + i.bytes.length, 0);
+        for (const path of r.paths as string[]) { const bytes = readImageFile(path); total += bytes.length; requireValue(total <= 60 * 1024 * 1024, 'BATCH_OVER_60_MIB'); inputs.push(bytes); }
+        await this.addComposer(inputs); break;
+      }
+      case 'composer-add-clipboard': {
+        const image = await this.app.clipboard!.readImage(); requireValue(image, 'NO_CURRENT_IMAGE');
+        await this.addComposer([image.bytes]); break;
+      }
+      case 'composer-add-pending': {
+        requireValue(this.app.pending, 'NO_PENDING_IMAGE'); await this.addComposer([this.app.pending.bytes]); this.app.discard(); break;
+      }
+      case 'composer-move': {
+        requireValue(Number.isInteger(r.index) && Number.isInteger(r.to) && Number(r.index) >= 0 && Number(r.to) >= 0 && Number(r.index) < this.composer.length && Number(r.to) < this.composer.length, 'INVALID_COMPOSER_INDEX');
+        const [image] = this.composer.splice(Number(r.index), 1); this.composer.splice(Number(r.to), 0, image); break;
+      }
+      case 'composer-remove': {
+        requireValue(Number.isInteger(r.index) && Number(r.index) >= 0 && Number(r.index) < this.composer.length, 'INVALID_COMPOSER_INDEX'); this.composer.splice(Number(r.index), 1); break;
+      }
+      case 'composer-discard': this.composer = []; break;
+      case 'composer-submit': {
+        requireValue(this.isConfigured(), 'AGENT_SETUP_REQUIRED'); requireValue(this.composer.length >= 2 && this.composer.length <= 5, 'BATCH_IMAGE_COUNT');
+        const images = this.composer;
+        const sequence = await this.app.clipboard!.sequence();
+        await this.app.submitImages(images.map(i => i.bytes), { session: this.app.clipboard!.session, sequence }, true);
+        this.composer = []; break;
+      }
+      case 'copy-files': await this.app.copy(id(), 'files'); break;
       case 'delete-history': {
         requireValue(Array.isArray(r.ids) && r.ids.length > 0 && r.ids.length <= 500 && r.ids.every(id => typeof id === 'string'), 'INVALID_TASK_DELETE');
         requireValue(r.reviewedUnknown === undefined || typeof r.reviewedUnknown === 'boolean', 'INVALID_HISTORY_REVIEW');
@@ -443,7 +499,7 @@ export class DesktopController {
         const task = this.app.get(id());
         const approved = this.settings.agents?.profiles.find(p => p.policy.id === task.submission.profileId && p.policy.version === task.submission.profileVersion);
         const gateway = approved && approved.provider !== 'codex' ? approved.policy.gateway : undefined;
-        return { gateway: gateway ? { endpoint: gateway.baseUrl, model: gateway.model, vision: gateway.vision } : undefined, id: task.submission.taskId, status: task.status, provider: task.submission.provider, profileId: task.submission.profileId, result: task.result ? { contentMarkdown: task.result.contentMarkdown, summary: task.result.summary, errorCode: task.result.errorCode } : undefined, attempts: task.attempts };
+        return { images: task.submission.images, gateway: gateway ? { endpoint: gateway.baseUrl, model: gateway.model, vision: gateway.vision } : undefined, id: task.submission.taskId, status: task.status, provider: task.submission.provider, profileId: task.submission.profileId, result: task.result ? { contentMarkdown: task.result.contentMarkdown, summary: task.result.summary, errorCode: task.result.errorCode } : undefined, attempts: task.attempts };
       }
       case 'recover':
         // Explicit re-arm, never blindly restart a dead helper or an unconfirmed Agent.
@@ -480,15 +536,15 @@ export class DesktopController {
     });
     const current = this.currentPolicy();
     const selectedAgent = this.app.registry.find(e => e.profile.id === this.app.profile.id && e.profile.version === this.app.profile.version);
-    return { activity: { running: tasks.filter(t => ['leased', 'running'].includes(t.status)).length, queued: tasks.filter(t => t.status === 'queued').length }, hotkeys: this.settings.hotkeys ?? {}, lastAction: this.lastAction, lastHistoryCleanup: this.lastHistoryCleanup, canReviewUnknownHistory: this.app.canReviewUnknownHistory,
+    return { composer: this.composer.map(({ id, preview }) => ({ id, preview })), folderError: this.folder.error, activity: { running: tasks.filter(t => ['leased', 'running'].includes(t.status)).length, queued: tasks.filter(t => t.status === 'queued').length }, hotkeys: this.settings.hotkeys ?? {}, lastAction: this.lastAction, lastHistoryCleanup: this.lastHistoryCleanup, canReviewUnknownHistory: this.app.canReviewUnknownHistory,
       settings: this.settings.desktop, delivery: this.settings.delivery, root: this.root, launchMode: this.launchMode, setupRequired: !this.isConfigured(),
       agents, discovery: this.discovery.map(candidate => ({ provider: candidate.provider, path: candidate.path, selectionPath: candidate.selectionPath ?? candidate.path, version: candidate.version, status: candidate.status })),
       profile: { adapter: selectedAgent?.adapter.name ?? current?.provider ?? 'fake', id: this.isConfigured() ? this.app.profile.id : '', profileVersion: this.isConfigured() ? this.app.profile.version : '',
         workspace: current?.policy.workspace ?? this.settings.codex?.workspace, version: current?.policy.cliVersion ?? this.settings.codex?.cliVersion, sandbox: 'read-only' }, workspaceSuggestion: this.workspaceSuggestion(),
-      status: !this.isConfigured() ? 'setup_required' : this.workerError ? 'worker_error' : this.captureError ? 'capture_error' : this.settings.desktop.paused ? 'paused' : !this.settings.desktop.enabled ? 'capture_off' : 'monitoring',
+      status: !this.isConfigured() ? 'setup_required' : this.workerError ? 'worker_error' : this.captureError ? 'capture_error' : this.settings.desktop.paused ? 'paused' : !(this.settings.desktop.enabled || this.settings.desktop.folderEnabled) ? 'capture_off' : 'monitoring',
       error: this.workerError ?? this.captureError, pending: this.preview ?? null, captureStatus: this.app.lastCaptureStatus,
       total: tasks.length, historyTotal: matching.length, historyOffset, tasks: matching.slice(historyOffset, historyOffset + 50).map(t => ({ id: t.submission.taskId, createdAt: t.createdAt, status: t.status, provider: t.submission.provider ?? t.attempts[0]?.adapterName, profileId: t.submission.profileId, summary: t.result?.summary, error: t.result?.errorCode ?? (t.status === 'queued' && !this.app.registry.some(e => e.profile.id === t.submission.profileId && e.profile.version === t.submission.profileVersion) ? 'PROFILE_UNAVAILABLE' : undefined),
-        save: this.app.state.get(t.submission.taskId, 'save'), clipboard: this.app.state.get(t.submission.taskId, 'clipboard') })) };
+        save: this.app.state.get(t.submission.taskId, 'save'), imageCount: t.submission.images.length, notification: this.app.state.get(t.submission.taskId, 'notification'), clipboard: this.app.state.get(t.submission.taskId, 'clipboard') })) };
   }
   async close() {
     if (this.closed) return; this.closed = true; this.controller.abort();

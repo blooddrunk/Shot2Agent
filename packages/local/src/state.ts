@@ -7,13 +7,15 @@ import { privateDirectory } from '../../core/src/store.ts';
 export interface Baseline { session: string; sequence: string }
 export type DeliveryStatus = 'pending' | 'succeeded' | 'failed' | 'disabled' | 'manual' | 'blocked_by_clipboard_change' | 'interrupted';
 export interface Receipt { status: DeliveryStatus; attempts: number; code?: string;
-  smartGuard?: boolean;
+  smartGuard?: boolean; payload?: 'text' | 'files';
   classification?: 'transient' | 'permanent' | 'conflict' | 'ambiguous'; stopReason?: string;
   history?: { attempt: number; at: number; elapsedMs: number; code: string; classification: string }[] }
 export class LocalState {
   private db: DatabaseSync;
   private workerToken = randomUUID();
+  readonly root: string;
   constructor(root: string) {
+    this.root = root;
     privateDirectory(root); const path = join(root, 'local.sqlite');
     try { requireValue(lstatSync(path).isFile() && !lstatSync(path).isSymbolicLink(), 'UNSAFE_DATABASE'); }
     catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; }

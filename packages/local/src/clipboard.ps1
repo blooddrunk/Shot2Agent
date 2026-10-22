@@ -64,12 +64,24 @@ public static class ShotClipboard {
       }
     } finally { CloseClipboard(); }
   }
+  public static bool WriteFiles(string[] paths, string expected) {
+    if (paths == null || paths.Length < 1 || paths.Length > 5) throw new Exception("INVALID_CLIPBOARD_FILES");
+    foreach (string path in paths) if (!Path.IsPathRooted(path) || !File.Exists(path) || path.IndexOf('\0') >= 0 || (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0) throw new Exception("INVALID_CLIPBOARD_FILES");
+    byte[] names = Encoding.Unicode.GetBytes(String.Join("\0", paths) + "\0\0");
+    byte[] bytes = new byte[20 + names.Length];
+    BitConverter.GetBytes(20).CopyTo(bytes, 0); // DROPFILES.pFiles
+    BitConverter.GetBytes(1).CopyTo(bytes, 16); // DROPFILES.fWide
+    names.CopyTo(bytes, 20);
+    return WritePayload(bytes, 15, expected); // CF_HDROP
+  }
   public static bool WriteText(string text, string expected) {
+    return WritePayload(Encoding.Unicode.GetBytes(text + "\0"), 13, expected);
+  }
+  static bool WritePayload(byte[] bytes, uint format, string expected) {
     // Observe sequence changes even while another writer owns the lock, then recheck
     // under our lock before modifying anything. Never refresh the caller's baseline.
     if (!String.IsNullOrEmpty(expected) && GetClipboardSequenceNumber().ToString() != expected) return false;
     // Allocate before clearing. Comparison and write share one native clipboard lock.
-    byte[] bytes = Encoding.Unicode.GetBytes(text + "\0");
     IntPtr handle = GlobalAlloc(0x42, (UIntPtr)bytes.Length);
     if (handle == IntPtr.Zero) throw new Exception("CLIPBOARD_ALLOC");
     bool owned = true;
@@ -80,13 +92,14 @@ public static class ShotClipboard {
       try {
         // PowerShell coerces $null to an empty string for a C# string parameter.
         if (!String.IsNullOrEmpty(expected) && GetClipboardSequenceNumber().ToString() != expected) return false;
-        if (!EmptyClipboard() || SetClipboardData(13, handle) == IntPtr.Zero) throw new Exception("CLIPBOARD_WRITE_AMBIGUOUS");
+        if (!EmptyClipboard() || SetClipboardData(format, handle) == IntPtr.Zero) throw new Exception("CLIPBOARD_WRITE_AMBIGUOUS");
         owned = false; return true;
       } finally { CloseClipboard(); }
     } finally { if (owned) GlobalFree(handle); }
   }
 }
 '@
+$notificationIcon = $null
 while ($null -ne ($line = [Console]::ReadLine())) {
   try {
     $request = $line | ConvertFrom-Json
@@ -102,12 +115,25 @@ while ($null -ne ($line = [Console]::ReadLine())) {
             if ($before -ne $after) { throw 'CLIPBOARD_CHANGED' }
             $response = @{sequence=$after; data=$data}; break
           }
+          'notify' {
+            if (-not [Environment]::UserInteractive) { throw 'NATIVE_NOTIFICATION_UNAVAILABLE' }
+            if ($null -eq $notificationIcon) {
+              Add-Type -AssemblyName System.Windows.Forms
+              $notificationIcon = New-Object System.Windows.Forms.NotifyIcon
+              $notificationIcon.Icon = [System.Drawing.SystemIcons]::Information
+              $notificationIcon.Text = 'Shot2Agent'
+              $notificationIcon.Visible = $true
+            }
+            $notificationIcon.ShowBalloonTip(5000, 'Shot2Agent', 'Screenshot complete. View the result in Shot2Agent history.', [System.Windows.Forms.ToolTipIcon]::Info)
+            $response = @{notified=$true}; break
+          }
+          'files' { $response = @{written=[ShotClipboard]::WriteFiles([string[]]$request.paths, $request.expected)}; break }
           'write' { $response = @{written=[ShotClipboard]::WriteText($request.text, $request.expected); sequence=[ShotClipboard]::GetClipboardSequenceNumber().ToString()}; break }
           default { throw 'INVALID_OPERATION' }
         }
         break
       } catch {
-        if ($request.op -eq 'write' -or $attempt -eq 5 -or $_.Exception.ToString() -notmatch 'CLIPBOARD_BUSY') { throw }
+        if ($request.op -in @('write','files','notify') -or $attempt -eq 5 -or $_.Exception.ToString() -notmatch 'CLIPBOARD_BUSY') { throw }
         Start-Sleep -Milliseconds (30 * ($attempt + 1))
       }
     }
@@ -115,9 +141,11 @@ while ($null -ne ($line = [Console]::ReadLine())) {
   } catch {
     # Whitelisted phase codes only. Never emit clipboard data or exception text.
     $code = 'CLIPBOARD_UNAVAILABLE_OR_OVERSIZED'
-    foreach ($safe in @('CLIPBOARD_BUSY','CLIPBOARD_ALLOC','CLIPBOARD_WRITE_AMBIGUOUS')) {
+    foreach ($safe in @('CLIPBOARD_BUSY','CLIPBOARD_ALLOC','CLIPBOARD_WRITE_AMBIGUOUS','NATIVE_NOTIFICATION_UNAVAILABLE')) {
       if ($_.Exception.ToString().Contains($safe)) { $code = $safe; break }
     }
     [Console]::WriteLine((@{error=$code} | ConvertTo-Json -Compress))
   }
 }
+
+if ($null -ne $notificationIcon) { $notificationIcon.Dispose() }

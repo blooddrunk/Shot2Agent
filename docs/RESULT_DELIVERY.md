@@ -1,3 +1,5 @@
+> M8-L 0.8.0 implementation: independent text/file (CF_HDROP Markdown) clipboard payload, Markdown save and opt-in native Windows notification now share durable independent receipts. Prior synthetic Gateway testing is optional. See [operation](M8_WINDOWS_RUN.md) and [validation boundaries](M8_VALIDATION.md). Earlier planned/deferred statements below describe historical milestones. Retry delivery never reruns an Agent.
+
 # Result delivery policy — confirmed V1 behavior
 
 > M3-L desktop update: Tauri 2/Vue 3 uses a restricted anonymous-pipe Node child; no network listener or Relay. Windows Job containment owns descendants; EOF/quit aborts and settles work. Versioned capture settings share M2 settings with backup; SQLite tasks are retained. Worker exclusion is transactional and PID-aware. See [desktop operation](M3_WINDOWS_RUN.md) and [evidence](M3_VALIDATION.md).

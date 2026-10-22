@@ -1,3 +1,5 @@
+> M8-L 0.8.0 adds independent Local folder/clipboard intake, ordered 2–5 image GUI tasks, CF_HDROP Markdown output and optional native completion notifications. [Current operation](M8_WINDOWS_RUN.md) and [executed validation / native gaps](M8_VALIDATION.md) supersede historical planned feature labels below. Next release scope is M9-L final Local v1.0, with Remote deferred.
+
 > **M5-L 0.5.0 candidate:** Local Codex/Claude discovery, stopped-Worker explicit approval and immutable new-task Agent selection. Claude native transport qualified only at 2.1.305/2.1.306, personal Pro/Max only; actual model/GUI gates remain separate. See [Windows controls and restrictions](M5_WINDOWS_ACCEPTANCE.md) and [executed validation](M5_VALIDATION.md).
 
 # Implementation roadmap: thin vertical slices and gates
