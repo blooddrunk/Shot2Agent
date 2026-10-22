@@ -11,6 +11,7 @@ export interface ClipboardPort {
   readImage(): Promise<ClipboardImage | undefined>;
   writeText(text: string, expected?: string, timeoutMs?: number): Promise<boolean>;
   writeFiles?(paths: string[], expected?: string, timeoutMs?: number): Promise<boolean>;
+  cleanFileCache?(directory: string): Promise<{ deleted: number; retained: number }>;
   notify?(): Promise<void>;
   close(): void;
 }
@@ -55,7 +56,7 @@ export class WindowsClipboard implements ClipboardPort {
         try {
           const result = JSON.parse(line);
           if (result?.error) {
-            const allowed = ['CLIPBOARD_BUSY', 'CLIPBOARD_WRITE_AMBIGUOUS', 'CLIPBOARD_ALLOC', 'CLIPBOARD_UNAVAILABLE_OR_OVERSIZED', 'CLIPBOARD_HELPER_STOPPED', 'CLIPBOARD_REPLACED_AFTER_WRITE', 'NATIVE_NOTIFICATION_UNAVAILABLE'];
+            const allowed = ['CLIPBOARD_BUSY', 'CLIPBOARD_WRITE_AMBIGUOUS', 'CLIPBOARD_ALLOC', 'CLIPBOARD_UNAVAILABLE_OR_OVERSIZED', 'CLIPBOARD_HELPER_STOPPED', 'CLIPBOARD_REPLACED_AFTER_WRITE', 'NATIVE_NOTIFICATION_UNAVAILABLE', 'UNSAFE_FILE_CACHE', 'FILE_CACHE_CLEANUP_FAILED'];
             reject(new Error(allowed.includes(result.error) ? result.error : 'CLIPBOARD_PROTOCOL')); return;
           }
           requireValue(result && typeof result === 'object', 'CLIPBOARD_PROTOCOL'); resolve(result);
@@ -92,6 +93,12 @@ export class WindowsClipboard implements ClipboardPort {
     requireValue(paths.length > 0 && paths.length <= 5 && paths.every(path => isAbsolute(path) && !path.includes('\0') && path.length <= 2048 && lstatSync(path).isFile() && !lstatSync(path).isSymbolicLink()), 'INVALID_CLIPBOARD_FILES');
     const result = await this.request({ op: 'files', paths, expected: expected ?? null, verifyMilliseconds: Math.min(150, Math.floor((timeoutMs ?? 15000) / 4)) }, timeoutMs);
     requireValue(typeof result.written === 'boolean', 'CLIPBOARD_PROTOCOL'); return result.written;
+  }
+  async cleanFileCache(directory: string): Promise<{ deleted: number; retained: number }> {
+    requireValue(isAbsolute(directory), 'UNSAFE_FILE_CACHE');
+    const result = await this.request({ op: 'clean-cache', directory });
+    requireValue(Number.isInteger(result.deleted) && Number(result.deleted) >= 0 && Number.isInteger(result.retained) && Number(result.retained) >= 0, 'CLIPBOARD_PROTOCOL');
+    return { deleted: Number(result.deleted), retained: Number(result.retained) };
   }
   async notify(): Promise<void> {
     const result = await this.request({ op: 'notify' }, 3000);

@@ -1,0 +1,344 @@
+{
+  "version": "0.8.0",
+  "sourceSha": "3e4e4f3bcb849704b065cab079a50c48d385ea56",
+  "expected": [
+    {
+      "schemaVersion": 1,
+      "mode": "local",
+      "ownerId": "local-user",
+      "originDeviceId": "local-pc",
+      "submission": {
+        "taskId": "d4a70156-4c2e-4e9c-a415-a8648f3a0866",
+        "profileId": "fake-readonly",
+        "profileVersion": "v1",
+        "provider": "fake",
+        "profileFingerprint": "313e86ee063ecd3f8fae04a54d7ef37097611503f6c06ad40f520b3998a6dbde",
+        "images": [
+          {
+            "fileName": "screenshot.png",
+            "contentType": "image/png",
+            "byteSize": 102,
+            "sha256": "5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258"
+          }
+        ]
+      },
+      "status": "succeeded",
+      "createdAt": 1792641362467,
+      "updatedAt": 1792641362483,
+      "inputs": [
+        {
+          "fileId": "6c4746c4-1823-4188-8878-dd0f6c535e85",
+          "fileName": "screenshot.png",
+          "contentType": "image/png",
+          "byteSize": 102,
+          "sha256": "5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258"
+        }
+      ],
+      "activeAttemptId": "30d904db-6b5d-45c1-b752-c53f0caca936",
+      "result": {
+        "status": "succeeded",
+        "summary": "Processed 1 image(s)",
+        "contentMarkdown": "# Fake result\n\n1 image(s)\n1. 5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\n",
+        "artifacts": [
+          {
+            "fileId": "09ebfba2-0901-4695-b93d-cdce1e951fb3",
+            "fileName": "result.txt",
+            "contentType": "text/plain",
+            "dataBase64": "IyBGYWtlIHJlc3VsdAoKMSBpbWFnZShzKQoxLiA1ZWEyOGRhNjhlMjY2ODA0Y2NlNGUzYmMyOTliZjBmODg1OWQyMTYxZmVjN2Y3ZTJlMjMwMGMyMWFiM2RmMjU4Cg==",
+            "sha256": "93a68b7ae58323da9e36e2acc6412bbb78e0e8c04dbf770d3532cab6c55e93c7",
+            "byteSize": 94
+          }
+        ],
+        "taskId": "d4a70156-4c2e-4e9c-a415-a8648f3a0866",
+        "attemptId": "30d904db-6b5d-45c1-b752-c53f0caca936",
+        "profileId": "fake-readonly",
+        "profileVersion": "v1",
+        "workerId": "local-pc",
+        "adapterName": "fake",
+        "adapterVersion": "1",
+        "startedAt": 1792641362469,
+        "finishedAt": 1792641362483
+      },
+      "attempts": [
+        {
+          "attemptId": "30d904db-6b5d-45c1-b752-c53f0caca936",
+          "taskId": "d4a70156-4c2e-4e9c-a415-a8648f3a0866",
+          "workerId": "local-pc",
+          "status": "succeeded",
+          "leasedAt": 1792641362468,
+          "leaseUntil": 1792641392468,
+          "startedAt": 1792641362469,
+          "deadline": 1792641367469,
+          "profileFingerprint": "313e86ee063ecd3f8fae04a54d7ef37097611503f6c06ad40f520b3998a6dbde",
+          "adapterName": "fake",
+          "adapterVersion": "1",
+          "finishedAt": 1792641362483
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "mode": "local",
+      "ownerId": "local-user",
+      "originDeviceId": "local-pc",
+      "submission": {
+        "taskId": "126ddae9-5623-4eef-b45c-83c5bb2e7257",
+        "profileId": "historical-crash",
+        "profileVersion": "v1",
+        "provider": "fake",
+        "profileFingerprint": "313e86ee063ecd3f8fae04a54d7ef37097611503f6c06ad40f520b3998a6dbde",
+        "images": [
+          {
+            "fileName": "screenshot.png",
+            "contentType": "image/png",
+            "byteSize": 102,
+            "sha256": "5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258"
+          }
+        ]
+      },
+      "status": "execution_unknown",
+      "createdAt": 1792641362509,
+      "updatedAt": 1792641362521,
+      "inputs": [
+        {
+          "fileId": "62e1d3ad-36d7-464f-a1e7-e8e4a910ddef",
+          "fileName": "screenshot.png",
+          "contentType": "image/png",
+          "byteSize": 102,
+          "sha256": "5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258"
+        }
+      ],
+      "activeAttemptId": "634c02bf-c99d-4603-8497-e350771021f5",
+      "result": {
+        "status": "execution_unknown",
+        "summary": "Agent interrupted; review before resubmitting",
+        "contentMarkdown": "",
+        "errorCode": "AGENT_INTERRUPTED",
+        "artifacts": [],
+        "taskId": "126ddae9-5623-4eef-b45c-83c5bb2e7257",
+        "attemptId": "634c02bf-c99d-4603-8497-e350771021f5",
+        "profileId": "historical-crash",
+        "profileVersion": "v1",
+        "workerId": "local-pc",
+        "adapterName": "fake",
+        "adapterVersion": "1",
+        "startedAt": 1792641362509,
+        "finishedAt": 1792641362521
+      },
+      "attempts": [
+        {
+          "attemptId": "634c02bf-c99d-4603-8497-e350771021f5",
+          "taskId": "126ddae9-5623-4eef-b45c-83c5bb2e7257",
+          "workerId": "local-pc",
+          "status": "execution_unknown",
+          "leasedAt": 1792641362509,
+          "leaseUntil": 1792641392509,
+          "startedAt": 1792641362509,
+          "deadline": 1792641367509,
+          "profileFingerprint": "313e86ee063ecd3f8fae04a54d7ef37097611503f6c06ad40f520b3998a6dbde",
+          "adapterName": "fake",
+          "adapterVersion": "1",
+          "finishedAt": 1792641362521
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "mode": "local",
+      "ownerId": "local-user",
+      "originDeviceId": "local-pc",
+      "submission": {
+        "taskId": "c35dfc4f-e93b-47f8-9122-1f55f8541b5d",
+        "profileId": "fake-readonly",
+        "profileVersion": "v1",
+        "provider": "fake",
+        "profileFingerprint": "313e86ee063ecd3f8fae04a54d7ef37097611503f6c06ad40f520b3998a6dbde",
+        "images": [
+          {
+            "fileName": "screenshot.png",
+            "contentType": "image/png",
+            "byteSize": 102,
+            "sha256": "5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258"
+          }
+        ]
+      },
+      "status": "queued",
+      "createdAt": 1792641362552,
+      "updatedAt": 1792641362552,
+      "inputs": [
+        {
+          "fileId": "776a7676-6f66-467e-b7aa-36f440483eb3",
+          "fileName": "screenshot.png",
+          "contentType": "image/png",
+          "byteSize": 102,
+          "sha256": "5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258"
+        }
+      ],
+      "attempts": []
+    }
+  ],
+  "files": {
+    "blobs/09ebfba2-0901-4695-b93d-cdce1e951fb3": {
+      "base64": "IyBGYWtlIHJlc3VsdAoKMSBpbWFnZShzKQoxLiA1ZWEyOGRhNjhlMjY2ODA0Y2NlNGUzYmMyOTliZjBmODg1OWQyMTYxZmVjN2Y3ZTJlMjMwMGMyMWFiM2RmMjU4Cg=="
+    },
+    "blobs/62e1d3ad-36d7-464f-a1e7-e8e4a910ddef": {
+      "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAGElEQVQokWNoYGggCTGMamAYDaWG4Zo0ABoIABDA3qs/AAAAAElFTkSuQmCC"
+    },
+    "blobs/6c4746c4-1823-4188-8878-dd0f6c535e85": {
+      "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAGElEQVQokWNoYGggCTGMamAYDaWG4Zo0ABoIABDA3qs/AAAAAElFTkSuQmCC"
+    },
+    "blobs/776a7676-6f66-467e-b7aa-36f440483eb3": {
+      "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAGElEQVQokWNoYGggCTGMamAYDaWG4Zo0ABoIABDA3qs/AAAAAElFTkSuQmCC"
+    },
+    "exports/d4a70156-4c2e-4e9c-a415-a8648f3a0866.md": {
+      "base64": "IyBGYWtlIHJlc3VsdAoKMSBpbWFnZShzKQoxLiA1ZWEyOGRhNjhlMjY2ODA0Y2NlNGUzYmMyOTliZjBmODg1OWQyMTYxZmVjN2Y3ZTJlMjMwMGMyMWFiM2RmMjU4Cg=="
+    },
+    "settings.json": {
+      "text": "{\n  \"adapter\": \"codex\",\n  \"delivery\": {\n    \"clipboard\": \"manual\"\n  },\n  \"desktop\": {\n    \"version\": 1,\n    \"enabled\": false,\n    \"mode\": \"confirm\",\n    \"paused\": false,\n    \"autoConsent\": false,\n    \"alwaysConsent\": false\n  },\n  \"agents\": {\n    \"version\": 1,\n    \"selected\": {\n      \"id\": \"historical-glm\",\n      \"version\": \"m7-374784d7\"\n    },\n    \"profiles\": [\n      {\n        \"provider\": \"claude-compatible-endpoint\",\n        \"policy\": {\n          \"id\": \"historical-glm\",\n          \"version\": \"m7-a854a5f5\",\n          \"workspace\": \"@ROOT@/workspace\",\n          \"program\": {\n            \"executable\": \"/home/jelinenaro/nvm/versions/node/v24.19.0/bin/node\",\n            \"args\": [\n              \"@ROOT@/npm/node_modules/@anthropic-ai/claude-code/cli.js\"\n            ]\n          },\n          \"cliVersion\": \"2.1.305 (Claude Code)\",\n          \"timeoutMs\": 180000,\n          \"prompt\": \"Synthetic upgrade fixture\",\n          \"digest\": \"878076b2dfcf73f46d30945a80c60caa2f99d58cd3a60558f6f6938377107951\",\n          \"gateway\": {\n            \"kind\": \"claude-compatible-endpoint\",\n            \"baseUrl\": \"https://open.bigmodel.cn/api/anthropic\",\n            \"model\": \"glm-5.3-flash\",\n            \"models\": {\n              \"sonnet\": \"glm-5.3-flash\",\n              \"opus\": \"glm-5.3-flash\",\n              \"haiku\": \"glm-5.3-flash\"\n            },\n            \"credentialRef\": \"Shot2Agent-Gateway-791a9222-a4c9-4b9f-93a8-40e949fa131c\",\n            \"vision\": \"synthetic-test-passed\"\n          },\n          \"imageProtocol\": \"windows-jsonl-v1\"\n        }\n      },\n      {\n        \"provider\": \"claude-compatible-endpoint\",\n        \"policy\": {\n          \"id\": \"historical-glm\",\n          \"version\": \"m7-374784d7\",\n          \"workspace\": \"@ROOT@/workspace\",\n          \"program\": {\n            \"executable\": \"/home/jelinenaro/nvm/versions/node/v24.19.0/bin/node\",\n            \"args\": [\n              \"@ROOT@/npm/node_modules/@anthropic-ai/claude-code/cli.js\"\n            ]\n          },\n          \"cliVersion\": \"2.1.305 (Claude Code)\",\n          \"timeoutMs\": 180000,\n          \"prompt\": \"Synthetic edited prompt\",\n          \"digest\": \"878076b2dfcf73f46d30945a80c60caa2f99d58cd3a60558f6f6938377107951\",\n          \"gateway\": {\n            \"kind\": \"claude-compatible-endpoint\",\n            \"baseUrl\": \"https://open.bigmodel.cn/api/anthropic\",\n            \"model\": \"glm-5.3-flash\",\n            \"models\": {\n              \"sonnet\": \"glm-5.3-flash\",\n              \"opus\": \"glm-5.3-flash\",\n              \"haiku\": \"glm-5.3-flash\"\n            },\n            \"credentialRef\": \"Shot2Agent-Gateway-791a9222-a4c9-4b9f-93a8-40e949fa131c\",\n            \"vision\": \"synthetic-test-passed\"\n          },\n          \"imageProtocol\": \"windows-jsonl-v1\"\n        }\n      }\n    ],\n    \"archived\": []\n  }\n}\n"
+    }
+  },
+  "databases": {
+    "local.sqlite": {
+      "userVersion": 0,
+      "tables": [
+        {
+          "name": "local_worker",
+          "sql": "CREATE TABLE local_worker (slot INTEGER PRIMARY KEY, pid INTEGER NOT NULL, token TEXT NOT NULL)",
+          "rows": []
+        },
+        {
+          "name": "captures",
+          "sql": "CREATE TABLE captures (task TEXT PRIMARY KEY, hash TEXT NOT NULL, at INTEGER NOT NULL, baseline TEXT)",
+          "rows": [
+            {
+              "task": "d4a70156-4c2e-4e9c-a415-a8648f3a0866",
+              "hash": "5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258",
+              "at": 1792641362452,
+              "baseline": null
+            },
+            {
+              "task": "126ddae9-5623-4eef-b45c-83c5bb2e7257",
+              "hash": "5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258",
+              "at": 1792641362497,
+              "baseline": null
+            },
+            {
+              "task": "c35dfc4f-e93b-47f8-9122-1f55f8541b5d",
+              "hash": "5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258",
+              "at": 1792641362536,
+              "baseline": null
+            }
+          ]
+        },
+        {
+          "name": "provenance",
+          "sql": "CREATE TABLE provenance (task TEXT PRIMARY KEY, record TEXT NOT NULL)",
+          "rows": [
+            {
+              "task": "d4a70156-4c2e-4e9c-a415-a8648f3a0866",
+              "record": "{\"source\":\"clipboard\",\"images\":[{\"originalHash\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\",\"sentHash\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\",\"transformation\":\"none\",\"width\":16,\"height\":16}],\"originalHash\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\",\"sentHash\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\",\"transformation\":\"none\",\"width\":16,\"height\":16}"
+            },
+            {
+              "task": "126ddae9-5623-4eef-b45c-83c5bb2e7257",
+              "record": "{\"source\":\"clipboard\",\"images\":[{\"originalHash\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\",\"sentHash\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\",\"transformation\":\"none\",\"width\":16,\"height\":16}],\"originalHash\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\",\"sentHash\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\",\"transformation\":\"none\",\"width\":16,\"height\":16}"
+            },
+            {
+              "task": "c35dfc4f-e93b-47f8-9122-1f55f8541b5d",
+              "record": "{\"source\":\"clipboard\",\"images\":[{\"originalHash\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\",\"sentHash\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\",\"transformation\":\"none\",\"width\":16,\"height\":16}],\"originalHash\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\",\"sentHash\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\",\"transformation\":\"none\",\"width\":16,\"height\":16}"
+            }
+          ]
+        },
+        {
+          "name": "delivery",
+          "sql": "CREATE TABLE delivery (task TEXT NOT NULL, channel TEXT NOT NULL, record TEXT NOT NULL, PRIMARY KEY(task,channel))",
+          "rows": [
+            {
+              "task": "d4a70156-4c2e-4e9c-a415-a8648f3a0866",
+              "channel": "save",
+              "record": "{\"status\":\"succeeded\",\"attempts\":1}"
+            },
+            {
+              "task": "d4a70156-4c2e-4e9c-a415-a8648f3a0866",
+              "channel": "clipboard",
+              "record": "{\"status\":\"pending\",\"attempts\":1}"
+            },
+            {
+              "task": "d4a70156-4c2e-4e9c-a415-a8648f3a0866",
+              "channel": "notification",
+              "record": "{\"status\":\"disabled\",\"attempts\":1}"
+            }
+          ]
+        },
+        {
+          "name": "task_deletion",
+          "sql": "CREATE TABLE task_deletion (task TEXT PRIMARY KEY)",
+          "rows": []
+        }
+      ],
+      "indexes": []
+    },
+    "tasks.sqlite": {
+      "userVersion": 2,
+      "tables": [
+        {
+          "name": "settings",
+          "sql": "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+          "rows": [
+            {
+              "key": "mode",
+              "value": "local"
+            }
+          ]
+        },
+        {
+          "name": "tasks",
+          "sql": "CREATE TABLE tasks (id TEXT PRIMARY KEY, owner TEXT NOT NULL, idem TEXT NOT NULL, record TEXT NOT NULL, UNIQUE(owner, idem))",
+          "rows": [
+            {
+              "id": "d4a70156-4c2e-4e9c-a415-a8648f3a0866",
+              "owner": "local-user",
+              "idem": "d4a70156-4c2e-4e9c-a415-a8648f3a0866",
+              "record": "{\"schemaVersion\":1,\"mode\":\"local\",\"ownerId\":\"local-user\",\"originDeviceId\":\"local-pc\",\"submission\":{\"taskId\":\"d4a70156-4c2e-4e9c-a415-a8648f3a0866\",\"profileId\":\"fake-readonly\",\"profileVersion\":\"v1\",\"provider\":\"fake\",\"profileFingerprint\":\"313e86ee063ecd3f8fae04a54d7ef37097611503f6c06ad40f520b3998a6dbde\",\"images\":[{\"fileName\":\"screenshot.png\",\"contentType\":\"image/png\",\"byteSize\":102,\"sha256\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\"}]},\"idempotencyKey\":\"d4a70156-4c2e-4e9c-a415-a8648f3a0866\",\"digest\":\"0caaaac859d3b861e2274d794ef897efcc34c2c4d4dda6d1250b4d9d16f31f73\",\"status\":\"succeeded\",\"createdAt\":1792641362467,\"updatedAt\":1792641362483,\"inputs\":[{\"fileId\":\"6c4746c4-1823-4188-8878-dd0f6c535e85\",\"fileName\":\"screenshot.png\",\"contentType\":\"image/png\",\"byteSize\":102,\"sha256\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\"}],\"activeAttemptId\":\"30d904db-6b5d-45c1-b752-c53f0caca936\",\"result\":{\"status\":\"succeeded\",\"summary\":\"Processed 1 image(s)\",\"contentMarkdown\":\"# Fake result\\n\\n1 image(s)\\n1. 5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\\n\",\"artifacts\":[{\"fileId\":\"09ebfba2-0901-4695-b93d-cdce1e951fb3\",\"fileName\":\"result.txt\",\"contentType\":\"text/plain\",\"dataBase64\":\"IyBGYWtlIHJlc3VsdAoKMSBpbWFnZShzKQoxLiA1ZWEyOGRhNjhlMjY2ODA0Y2NlNGUzYmMyOTliZjBmODg1OWQyMTYxZmVjN2Y3ZTJlMjMwMGMyMWFiM2RmMjU4Cg==\",\"sha256\":\"93a68b7ae58323da9e36e2acc6412bbb78e0e8c04dbf770d3532cab6c55e93c7\",\"byteSize\":94}],\"taskId\":\"d4a70156-4c2e-4e9c-a415-a8648f3a0866\",\"attemptId\":\"30d904db-6b5d-45c1-b752-c53f0caca936\",\"profileId\":\"fake-readonly\",\"profileVersion\":\"v1\",\"workerId\":\"local-pc\",\"adapterName\":\"fake\",\"adapterVersion\":\"1\",\"startedAt\":1792641362469,\"finishedAt\":1792641362483}}"
+            },
+            {
+              "id": "126ddae9-5623-4eef-b45c-83c5bb2e7257",
+              "owner": "local-user",
+              "idem": "126ddae9-5623-4eef-b45c-83c5bb2e7257",
+              "record": "{\"schemaVersion\":1,\"mode\":\"local\",\"ownerId\":\"local-user\",\"originDeviceId\":\"local-pc\",\"submission\":{\"taskId\":\"126ddae9-5623-4eef-b45c-83c5bb2e7257\",\"profileId\":\"historical-crash\",\"profileVersion\":\"v1\",\"provider\":\"fake\",\"profileFingerprint\":\"313e86ee063ecd3f8fae04a54d7ef37097611503f6c06ad40f520b3998a6dbde\",\"images\":[{\"fileName\":\"screenshot.png\",\"contentType\":\"image/png\",\"byteSize\":102,\"sha256\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\"}]},\"idempotencyKey\":\"126ddae9-5623-4eef-b45c-83c5bb2e7257\",\"digest\":\"6f5d0da77ebadb9e120c4192d3f0e7f7f7cbb50fcfb8f9373c967b80b1a17c79\",\"status\":\"execution_unknown\",\"createdAt\":1792641362509,\"updatedAt\":1792641362521,\"inputs\":[{\"fileId\":\"62e1d3ad-36d7-464f-a1e7-e8e4a910ddef\",\"fileName\":\"screenshot.png\",\"contentType\":\"image/png\",\"byteSize\":102,\"sha256\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\"}],\"activeAttemptId\":\"634c02bf-c99d-4603-8497-e350771021f5\",\"result\":{\"status\":\"execution_unknown\",\"summary\":\"Agent interrupted; review before resubmitting\",\"contentMarkdown\":\"\",\"errorCode\":\"AGENT_INTERRUPTED\",\"artifacts\":[],\"taskId\":\"126ddae9-5623-4eef-b45c-83c5bb2e7257\",\"attemptId\":\"634c02bf-c99d-4603-8497-e350771021f5\",\"profileId\":\"historical-crash\",\"profileVersion\":\"v1\",\"workerId\":\"local-pc\",\"adapterName\":\"fake\",\"adapterVersion\":\"1\",\"startedAt\":1792641362509,\"finishedAt\":1792641362521}}"
+            },
+            {
+              "id": "c35dfc4f-e93b-47f8-9122-1f55f8541b5d",
+              "owner": "local-user",
+              "idem": "c35dfc4f-e93b-47f8-9122-1f55f8541b5d",
+              "record": "{\"schemaVersion\":1,\"mode\":\"local\",\"ownerId\":\"local-user\",\"originDeviceId\":\"local-pc\",\"submission\":{\"taskId\":\"c35dfc4f-e93b-47f8-9122-1f55f8541b5d\",\"profileId\":\"fake-readonly\",\"profileVersion\":\"v1\",\"provider\":\"fake\",\"profileFingerprint\":\"313e86ee063ecd3f8fae04a54d7ef37097611503f6c06ad40f520b3998a6dbde\",\"images\":[{\"fileName\":\"screenshot.png\",\"contentType\":\"image/png\",\"byteSize\":102,\"sha256\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\"}]},\"idempotencyKey\":\"c35dfc4f-e93b-47f8-9122-1f55f8541b5d\",\"digest\":\"01f8a32455edd7845bd865fcaec4dc55e5ad84c638d49763ccbf8d9007a9bc40\",\"status\":\"queued\",\"createdAt\":1792641362552,\"updatedAt\":1792641362552,\"inputs\":[{\"fileId\":\"776a7676-6f66-467e-b7aa-36f440483eb3\",\"fileName\":\"screenshot.png\",\"contentType\":\"image/png\",\"byteSize\":102,\"sha256\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\"}]}"
+            }
+          ]
+        },
+        {
+          "name": "attempts",
+          "sql": "CREATE TABLE attempts (id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id), record TEXT NOT NULL)",
+          "rows": [
+            {
+              "id": "30d904db-6b5d-45c1-b752-c53f0caca936",
+              "task_id": "d4a70156-4c2e-4e9c-a415-a8648f3a0866",
+              "record": "{\"attemptId\":\"30d904db-6b5d-45c1-b752-c53f0caca936\",\"taskId\":\"d4a70156-4c2e-4e9c-a415-a8648f3a0866\",\"workerId\":\"local-pc\",\"token\":\"9826adc3-2d75-4fa7-9554-d4f2cea56266\",\"status\":\"succeeded\",\"leasedAt\":1792641362468,\"leaseUntil\":1792641392468,\"startedAt\":1792641362469,\"deadline\":1792641367469,\"profileFingerprint\":\"313e86ee063ecd3f8fae04a54d7ef37097611503f6c06ad40f520b3998a6dbde\",\"adapterName\":\"fake\",\"adapterVersion\":\"1\",\"finishedAt\":1792641362483,\"completionDigest\":\"72a2f8c8b04d2e35aec6c84c24cf3c3191e0812c06479128ab3705f71b75eea0\"}"
+            },
+            {
+              "id": "634c02bf-c99d-4603-8497-e350771021f5",
+              "task_id": "126ddae9-5623-4eef-b45c-83c5bb2e7257",
+              "record": "{\"attemptId\":\"634c02bf-c99d-4603-8497-e350771021f5\",\"taskId\":\"126ddae9-5623-4eef-b45c-83c5bb2e7257\",\"workerId\":\"local-pc\",\"token\":\"69dd9d9b-ab1d-4477-9473-4046bb91206c\",\"status\":\"execution_unknown\",\"leasedAt\":1792641362509,\"leaseUntil\":1792641392509,\"startedAt\":1792641362509,\"deadline\":1792641367509,\"profileFingerprint\":\"313e86ee063ecd3f8fae04a54d7ef37097611503f6c06ad40f520b3998a6dbde\",\"adapterName\":\"fake\",\"adapterVersion\":\"1\",\"finishedAt\":1792641362521,\"completionDigest\":\"b5e647396b48e78accc2cbe6aed512d6cf626784c615869e7f9fa5e07eed15a4\"}"
+            }
+          ]
+        },
+        {
+          "name": "blob_cleanup",
+          "sql": "CREATE TABLE blob_cleanup (file_id TEXT PRIMARY KEY, record TEXT NOT NULL)",
+          "rows": []
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX attempt_task ON attempts(task_id)"
+      ]
+    }
+  }
+}

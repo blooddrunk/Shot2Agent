@@ -136,7 +136,8 @@ impl Bridge {
         let runtime = exe.parent().ok_or("APP_PATH")?.join("runtime");
         let mode = launch_mode(&std::env::args().skip(1).collect::<Vec<_>>())?;
         let root = std::env::var_os("LOCALAPPDATA").ok_or("WINDOWS_USER_SESSION_REQUIRED")?;
-        let root = if std::env::args().any(|a| a == "--smoke") {
+        let root = if mode == "staging" {
+            // Every developer Fake launch gets a fresh disposable root.
             smoke_root().clone()
         } else {
             std::path::PathBuf::from(root).join(match mode {

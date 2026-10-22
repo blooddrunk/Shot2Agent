@@ -1,0 +1,43 @@
+// Run with the extracted ZIP's bundled Node. No target-machine toolchain required.
+import assert from 'node:assert/strict';
+import { readFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { pathToFileURL } from 'node:url';
+import { createHash } from 'node:crypto';
+const bundle = resolve(process.argv[2]);
+const root = mkdtempSync(join(tmpdir(), 'shot-extracted-'));
+const moduleAt = p => import(pathToFileURL(join(bundle, 'runtime/dist', p)).href);
+const { APP_VERSION } = await moduleAt('packages/desktop/src/version.js');
+assert.match(readFileSync(join(bundle, 'BUILD.txt'), 'utf8'), new RegExp(APP_VERSION.replaceAll('.', '\\.')));
+for (const file of ['Shot2Agent.exe', 'runtime/node.exe', 'runtime/dist/packages/local/src/clipboard.ps1', 'runtime/dist/packages/worker/src/claude-policy.ps1', 'runtime/dist/packages/worker/src/gateway-credential.ps1', 'runtime/dist/scripts/fixtures/glm-vision.png', 'Windows instructions.md']) assert.ok(existsSync(join(bundle, file)), file);
+const manifest = JSON.parse(readFileSync(join(bundle, 'MANIFEST.json')));
+for (const [file, hash] of Object.entries(manifest.files)) assert.equal(createHash('sha256').update(readFileSync(join(bundle, file))).digest('hex'), hash, file);
+const { DesktopController } = await moduleAt('packages/desktop/src/controller.js');
+const { WindowsClipboard } = await moduleAt('packages/local/src/clipboard.js');
+const { FakeAgent, FAKE_PROFILE } = await moduleAt('packages/worker/src/fake.js');
+const { defaults, saveSettings } = await moduleAt('packages/desktop/src/settings.js');
+const clipboard = new WindowsClipboard(); let desktop;
+try {
+  desktop = new DesktopController(root, clipboard, undefined, 'codex', async () => []);
+  await desktop.start();
+  const first = await desktop.dispatch({ v: 1, command: 'snapshot' });
+  assert.equal(first.setupRequired, true); assert.equal(first.total, 0); assert.equal(first.appVersion, APP_VERSION);
+  await desktop.close();
+  const settings = defaults(); settings.delivery = { clipboard: 'manual' }; saveSettings(root, settings);
+  desktop = new DesktopController(root, new WindowsClipboard(), { adapter: new FakeAgent(), profile: FAKE_PROFILE }, 'staging', async () => []);
+  const png = readFileSync(join(bundle, 'runtime/dist/scripts/fixtures/glm-vision.png'));
+  const id = await desktop.app.submitImages([png]); await desktop.app.work();
+  await desktop.dispatch({ v: 1, command: 'copy-files', id });
+  const cache = (await desktop.dispatch({ v: 1, command: 'snapshot' })).fileCache;
+  assert.equal(cache.files, 1);
+  assert.deepEqual(await desktop.dispatch({ v: 1, command: 'clean-file-cache', confirm: true }), { deleted: 0, retained: 1 });
+  desktop.app.deleteHistory([id]); assert.equal(existsSync(join(cache.directory, `${id}.md`)), true);
+  const id2 = await desktop.app.submitImages([png, png, png, png, png]); await desktop.app.work();
+  assert.equal(desktop.app.get(id2).submission.images.length, 5);
+  await desktop.close();
+  desktop = new DesktopController(root, new WindowsClipboard(), { adapter: new FakeAgent(), profile: FAKE_PROFILE }, 'staging', async () => []);
+  assert.equal(desktop.app.get(id2).status, 'succeeded'); assert.equal(desktop.app.get(id2).attempts.length, 1);
+  const report = `PASS extracted ZIP ${APP_VERSION}: manifest hashes/resources, fresh GUI onboarding contract (no profile), isolated Fake one/five images, native files/cache, retained files after deletion, restart history. GUI rendering/focus/Explorer paste NOT VERIFIED.`;
+  writeFileSync(join(bundle, 'PORTABLE-VERIFY.txt'), report); process.stdout.write(report + '\n');
+} finally { await desktop?.close(); clipboard.close(); rmSync(root, { recursive: true, force: true }); }

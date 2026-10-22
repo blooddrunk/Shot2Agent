@@ -1,0 +1,339 @@
+{
+  "version": "0.7.2",
+  "sourceSha": "005015bce192ba6beffb3330fffc92fc58ed2177",
+  "expected": [
+    {
+      "schemaVersion": 1,
+      "mode": "local",
+      "ownerId": "local-user",
+      "originDeviceId": "local-pc",
+      "submission": {
+        "taskId": "a6dd3326-4379-4b70-9e9d-c86a9105ac9d",
+        "profileId": "fake-readonly",
+        "profileVersion": "v1",
+        "provider": "fake",
+        "profileFingerprint": "313e86ee063ecd3f8fae04a54d7ef37097611503f6c06ad40f520b3998a6dbde",
+        "images": [
+          {
+            "fileName": "screenshot.png",
+            "contentType": "image/png",
+            "byteSize": 102,
+            "sha256": "5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258"
+          }
+        ]
+      },
+      "status": "succeeded",
+      "createdAt": 1792641360833,
+      "updatedAt": 1792641360850,
+      "inputs": [
+        {
+          "fileId": "e069f0c6-eae5-421f-846f-dee268ceddf9",
+          "fileName": "screenshot.png",
+          "contentType": "image/png",
+          "byteSize": 102,
+          "sha256": "5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258"
+        }
+      ],
+      "activeAttemptId": "bde07c3f-8f60-48b7-8330-edf926cd921d",
+      "result": {
+        "status": "succeeded",
+        "summary": "Processed 1 image(s)",
+        "contentMarkdown": "# Fake result\n\n1 image(s)\n1. 5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\n",
+        "artifacts": [
+          {
+            "fileId": "854b5fb9-a5b5-4cc6-be93-ec196312d998",
+            "fileName": "result.txt",
+            "contentType": "text/plain",
+            "dataBase64": "IyBGYWtlIHJlc3VsdAoKMSBpbWFnZShzKQoxLiA1ZWEyOGRhNjhlMjY2ODA0Y2NlNGUzYmMyOTliZjBmODg1OWQyMTYxZmVjN2Y3ZTJlMjMwMGMyMWFiM2RmMjU4Cg==",
+            "sha256": "93a68b7ae58323da9e36e2acc6412bbb78e0e8c04dbf770d3532cab6c55e93c7",
+            "byteSize": 94
+          }
+        ],
+        "taskId": "a6dd3326-4379-4b70-9e9d-c86a9105ac9d",
+        "attemptId": "bde07c3f-8f60-48b7-8330-edf926cd921d",
+        "profileId": "fake-readonly",
+        "profileVersion": "v1",
+        "workerId": "local-pc",
+        "adapterName": "fake",
+        "adapterVersion": "1",
+        "startedAt": 1792641360835,
+        "finishedAt": 1792641360850
+      },
+      "attempts": [
+        {
+          "attemptId": "bde07c3f-8f60-48b7-8330-edf926cd921d",
+          "taskId": "a6dd3326-4379-4b70-9e9d-c86a9105ac9d",
+          "workerId": "local-pc",
+          "status": "succeeded",
+          "leasedAt": 1792641360834,
+          "leaseUntil": 1792641390834,
+          "startedAt": 1792641360835,
+          "deadline": 1792641365835,
+          "profileFingerprint": "313e86ee063ecd3f8fae04a54d7ef37097611503f6c06ad40f520b3998a6dbde",
+          "adapterName": "fake",
+          "adapterVersion": "1",
+          "finishedAt": 1792641360850
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "mode": "local",
+      "ownerId": "local-user",
+      "originDeviceId": "local-pc",
+      "submission": {
+        "taskId": "ab931137-2ccb-45a6-98eb-4f5073ca41b2",
+        "profileId": "historical-crash",
+        "profileVersion": "v1",
+        "provider": "fake",
+        "profileFingerprint": "313e86ee063ecd3f8fae04a54d7ef37097611503f6c06ad40f520b3998a6dbde",
+        "images": [
+          {
+            "fileName": "screenshot.png",
+            "contentType": "image/png",
+            "byteSize": 102,
+            "sha256": "5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258"
+          }
+        ]
+      },
+      "status": "execution_unknown",
+      "createdAt": 1792641360868,
+      "updatedAt": 1792641360884,
+      "inputs": [
+        {
+          "fileId": "baf0c2b0-aa10-43fa-82ba-ec80b8eacedc",
+          "fileName": "screenshot.png",
+          "contentType": "image/png",
+          "byteSize": 102,
+          "sha256": "5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258"
+        }
+      ],
+      "activeAttemptId": "8fa7d06d-3616-441d-a34a-adcf53bc9fff",
+      "result": {
+        "status": "execution_unknown",
+        "summary": "Agent interrupted; review before resubmitting",
+        "contentMarkdown": "",
+        "errorCode": "AGENT_INTERRUPTED",
+        "artifacts": [],
+        "taskId": "ab931137-2ccb-45a6-98eb-4f5073ca41b2",
+        "attemptId": "8fa7d06d-3616-441d-a34a-adcf53bc9fff",
+        "profileId": "historical-crash",
+        "profileVersion": "v1",
+        "workerId": "local-pc",
+        "adapterName": "fake",
+        "adapterVersion": "1",
+        "startedAt": 1792641360868,
+        "finishedAt": 1792641360884
+      },
+      "attempts": [
+        {
+          "attemptId": "8fa7d06d-3616-441d-a34a-adcf53bc9fff",
+          "taskId": "ab931137-2ccb-45a6-98eb-4f5073ca41b2",
+          "workerId": "local-pc",
+          "status": "execution_unknown",
+          "leasedAt": 1792641360868,
+          "leaseUntil": 1792641390868,
+          "startedAt": 1792641360868,
+          "deadline": 1792641365868,
+          "profileFingerprint": "313e86ee063ecd3f8fae04a54d7ef37097611503f6c06ad40f520b3998a6dbde",
+          "adapterName": "fake",
+          "adapterVersion": "1",
+          "finishedAt": 1792641360884
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "mode": "local",
+      "ownerId": "local-user",
+      "originDeviceId": "local-pc",
+      "submission": {
+        "taskId": "e40b96f9-aaf1-4dd9-bdf7-4a3f48f81280",
+        "profileId": "fake-readonly",
+        "profileVersion": "v1",
+        "provider": "fake",
+        "profileFingerprint": "313e86ee063ecd3f8fae04a54d7ef37097611503f6c06ad40f520b3998a6dbde",
+        "images": [
+          {
+            "fileName": "screenshot.png",
+            "contentType": "image/png",
+            "byteSize": 102,
+            "sha256": "5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258"
+          }
+        ]
+      },
+      "status": "queued",
+      "createdAt": 1792641360900,
+      "updatedAt": 1792641360900,
+      "inputs": [
+        {
+          "fileId": "b142cd51-c584-437d-b5d2-d320bb855c87",
+          "fileName": "screenshot.png",
+          "contentType": "image/png",
+          "byteSize": 102,
+          "sha256": "5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258"
+        }
+      ],
+      "attempts": []
+    }
+  ],
+  "files": {
+    "blobs/854b5fb9-a5b5-4cc6-be93-ec196312d998": {
+      "base64": "IyBGYWtlIHJlc3VsdAoKMSBpbWFnZShzKQoxLiA1ZWEyOGRhNjhlMjY2ODA0Y2NlNGUzYmMyOTliZjBmODg1OWQyMTYxZmVjN2Y3ZTJlMjMwMGMyMWFiM2RmMjU4Cg=="
+    },
+    "blobs/b142cd51-c584-437d-b5d2-d320bb855c87": {
+      "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAGElEQVQokWNoYGggCTGMamAYDaWG4Zo0ABoIABDA3qs/AAAAAElFTkSuQmCC"
+    },
+    "blobs/baf0c2b0-aa10-43fa-82ba-ec80b8eacedc": {
+      "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAGElEQVQokWNoYGggCTGMamAYDaWG4Zo0ABoIABDA3qs/AAAAAElFTkSuQmCC"
+    },
+    "blobs/e069f0c6-eae5-421f-846f-dee268ceddf9": {
+      "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAGElEQVQokWNoYGggCTGMamAYDaWG4Zo0ABoIABDA3qs/AAAAAElFTkSuQmCC"
+    },
+    "exports/a6dd3326-4379-4b70-9e9d-c86a9105ac9d.md": {
+      "base64": "IyBGYWtlIHJlc3VsdAoKMSBpbWFnZShzKQoxLiA1ZWEyOGRhNjhlMjY2ODA0Y2NlNGUzYmMyOTliZjBmODg1OWQyMTYxZmVjN2Y3ZTJlMjMwMGMyMWFiM2RmMjU4Cg=="
+    },
+    "settings.json": {
+      "text": "{\n  \"adapter\": \"codex\",\n  \"delivery\": {\n    \"clipboard\": \"manual\"\n  },\n  \"desktop\": {\n    \"version\": 1,\n    \"enabled\": false,\n    \"mode\": \"confirm\",\n    \"paused\": false,\n    \"autoConsent\": false,\n    \"alwaysConsent\": false\n  },\n  \"agents\": {\n    \"version\": 1,\n    \"selected\": {\n      \"id\": \"historical-glm\",\n      \"version\": \"m7-51ef5910\"\n    },\n    \"profiles\": [\n      {\n        \"provider\": \"claude-compatible-endpoint\",\n        \"policy\": {\n          \"id\": \"historical-glm\",\n          \"version\": \"m7-b25b2ec2\",\n          \"workspace\": \"@ROOT@/workspace\",\n          \"program\": {\n            \"executable\": \"/home/jelinenaro/nvm/versions/node/v24.19.0/bin/node\",\n            \"args\": [\n              \"@ROOT@/npm/node_modules/@anthropic-ai/claude-code/cli.js\"\n            ]\n          },\n          \"cliVersion\": \"2.1.305 (Claude Code)\",\n          \"timeoutMs\": 180000,\n          \"prompt\": \"Synthetic upgrade fixture\",\n          \"digest\": \"aebda8304f1129bf2003c36a915d4ae6f22fdd69def8e79835dbb083d3e76231\",\n          \"gateway\": {\n            \"kind\": \"claude-compatible-endpoint\",\n            \"baseUrl\": \"https://open.bigmodel.cn/api/anthropic\",\n            \"model\": \"glm-5.3-flash\",\n            \"models\": {\n              \"sonnet\": \"glm-5.3-flash\",\n              \"opus\": \"glm-5.3-flash\",\n              \"haiku\": \"glm-5.3-flash\"\n            },\n            \"credentialRef\": \"Shot2Agent-Gateway-a8d9a687-0928-4b67-9d2f-e9581afafc4c\",\n            \"vision\": \"synthetic-test-passed\"\n          },\n          \"imageProtocol\": \"windows-jsonl-v1\"\n        }\n      },\n      {\n        \"provider\": \"claude-compatible-endpoint\",\n        \"policy\": {\n          \"id\": \"historical-glm\",\n          \"version\": \"m7-51ef5910\",\n          \"workspace\": \"@ROOT@/workspace\",\n          \"program\": {\n            \"executable\": \"/home/jelinenaro/nvm/versions/node/v24.19.0/bin/node\",\n            \"args\": [\n              \"@ROOT@/npm/node_modules/@anthropic-ai/claude-code/cli.js\"\n            ]\n          },\n          \"cliVersion\": \"2.1.305 (Claude Code)\",\n          \"timeoutMs\": 180000,\n          \"prompt\": \"Synthetic edited prompt\",\n          \"digest\": \"aebda8304f1129bf2003c36a915d4ae6f22fdd69def8e79835dbb083d3e76231\",\n          \"gateway\": {\n            \"kind\": \"claude-compatible-endpoint\",\n            \"baseUrl\": \"https://open.bigmodel.cn/api/anthropic\",\n            \"model\": \"glm-5.3-flash\",\n            \"models\": {\n              \"sonnet\": \"glm-5.3-flash\",\n              \"opus\": \"glm-5.3-flash\",\n              \"haiku\": \"glm-5.3-flash\"\n            },\n            \"credentialRef\": \"Shot2Agent-Gateway-a8d9a687-0928-4b67-9d2f-e9581afafc4c\",\n            \"vision\": \"synthetic-test-passed\"\n          },\n          \"imageProtocol\": \"windows-jsonl-v1\"\n        }\n      }\n    ],\n    \"archived\": []\n  }\n}\n"
+    }
+  },
+  "databases": {
+    "local.sqlite": {
+      "userVersion": 0,
+      "tables": [
+        {
+          "name": "local_worker",
+          "sql": "CREATE TABLE local_worker (slot INTEGER PRIMARY KEY, pid INTEGER NOT NULL, token TEXT NOT NULL)",
+          "rows": []
+        },
+        {
+          "name": "captures",
+          "sql": "CREATE TABLE captures (task TEXT PRIMARY KEY, hash TEXT NOT NULL, at INTEGER NOT NULL, baseline TEXT)",
+          "rows": [
+            {
+              "task": "a6dd3326-4379-4b70-9e9d-c86a9105ac9d",
+              "hash": "5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258",
+              "at": 1792641360816,
+              "baseline": null
+            },
+            {
+              "task": "ab931137-2ccb-45a6-98eb-4f5073ca41b2",
+              "hash": "5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258",
+              "at": 1792641360853,
+              "baseline": null
+            },
+            {
+              "task": "e40b96f9-aaf1-4dd9-bdf7-4a3f48f81280",
+              "hash": "5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258",
+              "at": 1792641360886,
+              "baseline": null
+            }
+          ]
+        },
+        {
+          "name": "provenance",
+          "sql": "CREATE TABLE provenance (task TEXT PRIMARY KEY, record TEXT NOT NULL)",
+          "rows": [
+            {
+              "task": "a6dd3326-4379-4b70-9e9d-c86a9105ac9d",
+              "record": "{\"originalHash\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\",\"sentHash\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\",\"transformation\":\"none\",\"width\":16,\"height\":16}"
+            },
+            {
+              "task": "ab931137-2ccb-45a6-98eb-4f5073ca41b2",
+              "record": "{\"originalHash\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\",\"sentHash\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\",\"transformation\":\"none\",\"width\":16,\"height\":16}"
+            },
+            {
+              "task": "e40b96f9-aaf1-4dd9-bdf7-4a3f48f81280",
+              "record": "{\"originalHash\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\",\"sentHash\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\",\"transformation\":\"none\",\"width\":16,\"height\":16}"
+            }
+          ]
+        },
+        {
+          "name": "delivery",
+          "sql": "CREATE TABLE delivery (task TEXT NOT NULL, channel TEXT NOT NULL, record TEXT NOT NULL, PRIMARY KEY(task,channel))",
+          "rows": [
+            {
+              "task": "a6dd3326-4379-4b70-9e9d-c86a9105ac9d",
+              "channel": "save",
+              "record": "{\"status\":\"succeeded\",\"attempts\":1}"
+            },
+            {
+              "task": "a6dd3326-4379-4b70-9e9d-c86a9105ac9d",
+              "channel": "clipboard",
+              "record": "{\"status\":\"pending\",\"attempts\":1}"
+            }
+          ]
+        },
+        {
+          "name": "task_deletion",
+          "sql": "CREATE TABLE task_deletion (task TEXT PRIMARY KEY)",
+          "rows": []
+        }
+      ],
+      "indexes": []
+    },
+    "tasks.sqlite": {
+      "userVersion": 2,
+      "tables": [
+        {
+          "name": "settings",
+          "sql": "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+          "rows": [
+            {
+              "key": "mode",
+              "value": "local"
+            }
+          ]
+        },
+        {
+          "name": "tasks",
+          "sql": "CREATE TABLE tasks (id TEXT PRIMARY KEY, owner TEXT NOT NULL, idem TEXT NOT NULL, record TEXT NOT NULL, UNIQUE(owner, idem))",
+          "rows": [
+            {
+              "id": "a6dd3326-4379-4b70-9e9d-c86a9105ac9d",
+              "owner": "local-user",
+              "idem": "a6dd3326-4379-4b70-9e9d-c86a9105ac9d",
+              "record": "{\"schemaVersion\":1,\"mode\":\"local\",\"ownerId\":\"local-user\",\"originDeviceId\":\"local-pc\",\"submission\":{\"taskId\":\"a6dd3326-4379-4b70-9e9d-c86a9105ac9d\",\"profileId\":\"fake-readonly\",\"profileVersion\":\"v1\",\"provider\":\"fake\",\"profileFingerprint\":\"313e86ee063ecd3f8fae04a54d7ef37097611503f6c06ad40f520b3998a6dbde\",\"images\":[{\"fileName\":\"screenshot.png\",\"contentType\":\"image/png\",\"byteSize\":102,\"sha256\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\"}]},\"idempotencyKey\":\"a6dd3326-4379-4b70-9e9d-c86a9105ac9d\",\"digest\":\"2f0961c6f771458fbbe56806a0bfd6b655f10bab6e1992ea59279110d31ccee2\",\"status\":\"succeeded\",\"createdAt\":1792641360833,\"updatedAt\":1792641360850,\"inputs\":[{\"fileId\":\"e069f0c6-eae5-421f-846f-dee268ceddf9\",\"fileName\":\"screenshot.png\",\"contentType\":\"image/png\",\"byteSize\":102,\"sha256\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\"}],\"activeAttemptId\":\"bde07c3f-8f60-48b7-8330-edf926cd921d\",\"result\":{\"status\":\"succeeded\",\"summary\":\"Processed 1 image(s)\",\"contentMarkdown\":\"# Fake result\\n\\n1 image(s)\\n1. 5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\\n\",\"artifacts\":[{\"fileId\":\"854b5fb9-a5b5-4cc6-be93-ec196312d998\",\"fileName\":\"result.txt\",\"contentType\":\"text/plain\",\"dataBase64\":\"IyBGYWtlIHJlc3VsdAoKMSBpbWFnZShzKQoxLiA1ZWEyOGRhNjhlMjY2ODA0Y2NlNGUzYmMyOTliZjBmODg1OWQyMTYxZmVjN2Y3ZTJlMjMwMGMyMWFiM2RmMjU4Cg==\",\"sha256\":\"93a68b7ae58323da9e36e2acc6412bbb78e0e8c04dbf770d3532cab6c55e93c7\",\"byteSize\":94}],\"taskId\":\"a6dd3326-4379-4b70-9e9d-c86a9105ac9d\",\"attemptId\":\"bde07c3f-8f60-48b7-8330-edf926cd921d\",\"profileId\":\"fake-readonly\",\"profileVersion\":\"v1\",\"workerId\":\"local-pc\",\"adapterName\":\"fake\",\"adapterVersion\":\"1\",\"startedAt\":1792641360835,\"finishedAt\":1792641360850}}"
+            },
+            {
+              "id": "ab931137-2ccb-45a6-98eb-4f5073ca41b2",
+              "owner": "local-user",
+              "idem": "ab931137-2ccb-45a6-98eb-4f5073ca41b2",
+              "record": "{\"schemaVersion\":1,\"mode\":\"local\",\"ownerId\":\"local-user\",\"originDeviceId\":\"local-pc\",\"submission\":{\"taskId\":\"ab931137-2ccb-45a6-98eb-4f5073ca41b2\",\"profileId\":\"historical-crash\",\"profileVersion\":\"v1\",\"provider\":\"fake\",\"profileFingerprint\":\"313e86ee063ecd3f8fae04a54d7ef37097611503f6c06ad40f520b3998a6dbde\",\"images\":[{\"fileName\":\"screenshot.png\",\"contentType\":\"image/png\",\"byteSize\":102,\"sha256\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\"}]},\"idempotencyKey\":\"ab931137-2ccb-45a6-98eb-4f5073ca41b2\",\"digest\":\"968489b7bd8ed9f532a9d6410707594f194ad2e5716429359f9674665c6f8899\",\"status\":\"execution_unknown\",\"createdAt\":1792641360868,\"updatedAt\":1792641360884,\"inputs\":[{\"fileId\":\"baf0c2b0-aa10-43fa-82ba-ec80b8eacedc\",\"fileName\":\"screenshot.png\",\"contentType\":\"image/png\",\"byteSize\":102,\"sha256\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\"}],\"activeAttemptId\":\"8fa7d06d-3616-441d-a34a-adcf53bc9fff\",\"result\":{\"status\":\"execution_unknown\",\"summary\":\"Agent interrupted; review before resubmitting\",\"contentMarkdown\":\"\",\"errorCode\":\"AGENT_INTERRUPTED\",\"artifacts\":[],\"taskId\":\"ab931137-2ccb-45a6-98eb-4f5073ca41b2\",\"attemptId\":\"8fa7d06d-3616-441d-a34a-adcf53bc9fff\",\"profileId\":\"historical-crash\",\"profileVersion\":\"v1\",\"workerId\":\"local-pc\",\"adapterName\":\"fake\",\"adapterVersion\":\"1\",\"startedAt\":1792641360868,\"finishedAt\":1792641360884}}"
+            },
+            {
+              "id": "e40b96f9-aaf1-4dd9-bdf7-4a3f48f81280",
+              "owner": "local-user",
+              "idem": "e40b96f9-aaf1-4dd9-bdf7-4a3f48f81280",
+              "record": "{\"schemaVersion\":1,\"mode\":\"local\",\"ownerId\":\"local-user\",\"originDeviceId\":\"local-pc\",\"submission\":{\"taskId\":\"e40b96f9-aaf1-4dd9-bdf7-4a3f48f81280\",\"profileId\":\"fake-readonly\",\"profileVersion\":\"v1\",\"provider\":\"fake\",\"profileFingerprint\":\"313e86ee063ecd3f8fae04a54d7ef37097611503f6c06ad40f520b3998a6dbde\",\"images\":[{\"fileName\":\"screenshot.png\",\"contentType\":\"image/png\",\"byteSize\":102,\"sha256\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\"}]},\"idempotencyKey\":\"e40b96f9-aaf1-4dd9-bdf7-4a3f48f81280\",\"digest\":\"a61a48cc692f2f7f19d316a56a3020dfee115353448eb6e93737fd815883a617\",\"status\":\"queued\",\"createdAt\":1792641360900,\"updatedAt\":1792641360900,\"inputs\":[{\"fileId\":\"b142cd51-c584-437d-b5d2-d320bb855c87\",\"fileName\":\"screenshot.png\",\"contentType\":\"image/png\",\"byteSize\":102,\"sha256\":\"5ea28da68e266804cce4e3bc299bf0f8859d2161fec7f7e2e2300c21ab3df258\"}]}"
+            }
+          ]
+        },
+        {
+          "name": "attempts",
+          "sql": "CREATE TABLE attempts (id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id), record TEXT NOT NULL)",
+          "rows": [
+            {
+              "id": "bde07c3f-8f60-48b7-8330-edf926cd921d",
+              "task_id": "a6dd3326-4379-4b70-9e9d-c86a9105ac9d",
+              "record": "{\"attemptId\":\"bde07c3f-8f60-48b7-8330-edf926cd921d\",\"taskId\":\"a6dd3326-4379-4b70-9e9d-c86a9105ac9d\",\"workerId\":\"local-pc\",\"token\":\"a1f8e06e-1d59-4f21-817c-af98ed73477e\",\"status\":\"succeeded\",\"leasedAt\":1792641360834,\"leaseUntil\":1792641390834,\"startedAt\":1792641360835,\"deadline\":1792641365835,\"profileFingerprint\":\"313e86ee063ecd3f8fae04a54d7ef37097611503f6c06ad40f520b3998a6dbde\",\"adapterName\":\"fake\",\"adapterVersion\":\"1\",\"finishedAt\":1792641360850,\"completionDigest\":\"72a2f8c8b04d2e35aec6c84c24cf3c3191e0812c06479128ab3705f71b75eea0\"}"
+            },
+            {
+              "id": "8fa7d06d-3616-441d-a34a-adcf53bc9fff",
+              "task_id": "ab931137-2ccb-45a6-98eb-4f5073ca41b2",
+              "record": "{\"attemptId\":\"8fa7d06d-3616-441d-a34a-adcf53bc9fff\",\"taskId\":\"ab931137-2ccb-45a6-98eb-4f5073ca41b2\",\"workerId\":\"local-pc\",\"token\":\"b9fd4b38-919e-474e-9f5d-5bb98c936927\",\"status\":\"execution_unknown\",\"leasedAt\":1792641360868,\"leaseUntil\":1792641390868,\"startedAt\":1792641360868,\"deadline\":1792641365868,\"profileFingerprint\":\"313e86ee063ecd3f8fae04a54d7ef37097611503f6c06ad40f520b3998a6dbde\",\"adapterName\":\"fake\",\"adapterVersion\":\"1\",\"finishedAt\":1792641360884,\"completionDigest\":\"b5e647396b48e78accc2cbe6aed512d6cf626784c615869e7f9fa5e07eed15a4\"}"
+            }
+          ]
+        },
+        {
+          "name": "blob_cleanup",
+          "sql": "CREATE TABLE blob_cleanup (file_id TEXT PRIMARY KEY, record TEXT NOT NULL)",
+          "rows": []
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX attempt_task ON attempts(task_id)"
+      ]
+    }
+  }
+}

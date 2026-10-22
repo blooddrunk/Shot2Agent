@@ -1,3 +1,5 @@
+import { fileCacheUsage } from '../../local/src/file-cache.ts';
+import { APP_VERSION } from './version.ts';
 import { FolderSource, validateCaptureFolder } from './folder.ts';
 import { displayInventory } from './inventory.ts';
 import { ACTIONS, completedResults, retryableDelivery, retryableChannels, validateHotkeys } from './actions.ts';
@@ -305,7 +307,7 @@ export class DesktopController {
     const r = raw as Record<string, unknown>;
     requireValue(r.v === 1 && typeof r.command === 'string', 'INVALID_PROTOCOL');
     const allowed: Record<string, string[]> = { snapshot: ['offset', 'query'], 'configure-hotkeys': ['hotkeys'], action: ['action'], configure: ['capture', 'delivery', 'autoConsent', 'alwaysConsent'],
-      'composer-add-files': ['paths'], 'composer-add-clipboard': [], 'composer-add-pending': [], 'composer-move': ['index', 'to'], 'composer-remove': ['index'], 'composer-discard': [], 'composer-submit': [], 'copy-files': ['id'],
+      'composer-add-files': ['paths'], 'composer-add-clipboard': [], 'composer-add-pending': [], 'composer-move': ['index', 'to'], 'composer-remove': ['index'], 'composer-discard': [], 'composer-submit': [], 'copy-files': ['id'], 'clean-file-cache': ['confirm'],
       submit: [], current: [], discard: [], pause: ['paused'], copy: ['id'], detail: ['id'], 'retry-delivery': ['id'], recover: [], 'select-agent': ['id', 'version'],
       'archive-agent': ['id', 'version', 'archived', 'confirm'], 'delete-agent': ['id', 'version', 'confirm'], 'cleanup-unused-agents': [],
       'create-profile': ['provider', 'id', 'path', 'workspace', 'prompt', 'endpoint', 'model', 'token', 'editId', 'editVersion', 'reuseExisting', 'enableAfterTest'], 'credential-status': ['id', 'version'], 'test-agent': ['id', 'version', 'confirm'],
@@ -477,6 +479,13 @@ export class DesktopController {
         await this.app.submitImages(images.map(i => i.bytes), { session: this.app.clipboard!.session, sequence }, true);
         this.composer = []; break;
       }
+      case 'clean-file-cache': {
+        requireValue(r.confirm === true, 'CACHE_CLEANUP_CONFIRMATION_REQUIRED');
+        const usage = fileCacheUsage(this.root);
+        requireValue(this.app.clipboard?.cleanFileCache, 'FILE_CACHE_CLEANUP_UNAVAILABLE');
+        if (!existsSync(usage.directory)) return { deleted: 0, retained: 0 };
+        return this.app.clipboard.cleanFileCache(usage.directory);
+      }
       case 'copy-files': await this.app.copy(id(), 'files'); break;
       case 'delete-history': {
         requireValue(Array.isArray(r.ids) && r.ids.length > 0 && r.ids.length <= 500 && r.ids.every(id => typeof id === 'string'), 'INVALID_TASK_DELETE');
@@ -536,7 +545,9 @@ export class DesktopController {
     });
     const current = this.currentPolicy();
     const selectedAgent = this.app.registry.find(e => e.profile.id === this.app.profile.id && e.profile.version === this.app.profile.version);
-    return { composer: this.composer.map(({ id, preview }) => ({ id, preview })), folderError: this.folder.error, activity: { running: tasks.filter(t => ['leased', 'running'].includes(t.status)).length, queued: tasks.filter(t => t.status === 'queued').length }, hotkeys: this.settings.hotkeys ?? {}, lastAction: this.lastAction, lastHistoryCleanup: this.lastHistoryCleanup, canReviewUnknownHistory: this.app.canReviewUnknownHistory,
+    let fileCache;
+    try { fileCache = fileCacheUsage(this.root); } catch { fileCache = { error: 'UNSAFE_FILE_CACHE' }; }
+    return { appVersion: APP_VERSION, fileCache, composer: this.composer.map(({ id, preview }) => ({ id, preview })), folderError: this.folder.error, activity: { running: tasks.filter(t => ['leased', 'running'].includes(t.status)).length, queued: tasks.filter(t => t.status === 'queued').length }, hotkeys: this.settings.hotkeys ?? {}, lastAction: this.lastAction, lastHistoryCleanup: this.lastHistoryCleanup, canReviewUnknownHistory: this.app.canReviewUnknownHistory,
       settings: this.settings.desktop, delivery: this.settings.delivery, root: this.root, launchMode: this.launchMode, setupRequired: !this.isConfigured(),
       agents, discovery: this.discovery.map(candidate => ({ provider: candidate.provider, path: candidate.path, selectionPath: candidate.selectionPath ?? candidate.path, version: candidate.version, status: candidate.status })),
       profile: { adapter: selectedAgent?.adapter.name ?? current?.provider ?? 'fake', id: this.isConfigured() ? this.app.profile.id : '', profileVersion: this.isConfigured() ? this.app.profile.version : '',

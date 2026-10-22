@@ -47,8 +47,23 @@ jobs:
           Get-Content build/Shot2Agent/SMOKE.txt
           if ($proc.ExitCode -ne 0) { throw "packaged IPC smoke exit $($proc.ExitCode)" }
           Compress-Archive -Path build/Shot2Agent -DestinationPath build/Shot2Agent-Windows-x64.zip
+          $zipHash = (Get-FileHash build/Shot2Agent-Windows-x64.zip -Algorithm SHA256).Hash.ToLower()
+          Set-Content build/SHA256SUMS.txt "$zipHash  Shot2Agent-Windows-x64.zip"
+          $extracted = Join-Path $env:RUNNER_TEMP 'Shot2Agent-extracted'
+          Expand-Archive build/Shot2Agent-Windows-x64.zip $extracted
+          $bundle = Join-Path $extracted 'Shot2Agent'
+          & "$bundle/runtime/node.exe" scripts/windows/portable-verify.mjs $bundle
+          if ($LASTEXITCODE -ne 0) { throw "extracted portable verification exit $LASTEXITCODE" }
+          $proc = Start-Process -FilePath "$bundle/Shot2Agent.exe" -ArgumentList '--staging','--smoke' -PassThru
+          if (-not $proc.WaitForExit(45000)) { $proc.Kill(); throw 'extracted EXE smoke exceeded 45 seconds' }
+          Get-Content "$bundle/SMOKE.txt"
+          if ($proc.ExitCode -ne 0) { throw "extracted EXE IPC smoke exit $($proc.ExitCode)" }
+          Copy-Item "$bundle/PORTABLE-VERIFY.txt" build/PORTABLE-VERIFY.txt
       - uses: actions/upload-artifact@v4
         with:
           name: Shot2Agent-Windows-x64
-          path: build/Shot2Agent-Windows-x64.zip
+          path: |
+            build/Shot2Agent-Windows-x64.zip
+            build/SHA256SUMS.txt
+            build/PORTABLE-VERIFY.txt
           if-no-files-found: error

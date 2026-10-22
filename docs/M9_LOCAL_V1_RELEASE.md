@@ -1,6 +1,6 @@
 # M9-L — close Local v1.0 as the FIRST usable product release
 
-**Status: next implementation plan, NOT accepted or tagged.** Written 2026-10-22 against merged main `1d17690c5bfe488e428f8069a8e05babcd667213`. **Read the current main and open PRs again before starting work.**
+**Status: implemented as 1.0.0-rc.1 candidate; formal Local v1.0 is NOT accepted.** [Implementation validation and native boundary](M9_VALIDATION.md). Written 2026-10-22 against merged main `1d17690c5bfe488e428f8069a8e05babcd667213`. **Read the current main and open PRs again before starting work.**
 
 ## Verified baseline and remaining proof
 

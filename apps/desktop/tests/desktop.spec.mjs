@@ -28,6 +28,7 @@ test.beforeEach(async ({ page }) => {
     async writeText() {
       return true;
     },
+    async cleanFileCache() { return { deleted: 0, retained: 0 }; },
     close() {},
   };
   const discovery = async () =>
@@ -669,4 +670,15 @@ test("M8 Copy files distinguishes native replacement from verified success witho
   await page.getByRole("button", { name: "复制文件", exact: true }).click();
   await expect(page.getByText(/^已写入并验证 Markdown 文件/)).toBeVisible(); expect(writes).toBe(2);
   expect(desktop.app.list()[0].attempts.length).toBe(1);
+});
+
+// Browser/controller evidence only. Actual locked clipboard cleanup runs in Windows CI.
+test("M9 settings show version, cache, backup guidance and confirmed cleanup", async ({ page }) => {
+  await nav(page, "设置");
+  await expect(page.getByRole("heading", { name: "Shot2Agent 1.0.0-rc.1" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "文件复制缓存" })).toContainText("0 / 1000");
+  await page.getByRole("button", { name: "清理旧复制缓存" }).click();
+  await expect(page.getByText(/已清理 0 个旧缓存文件/)).toBeVisible();
+  await expect(page.getByRole("region", { name: "版本与备份" })).toContainText("Windows 凭据管理器");
+  await expect(page.getByRole("button", { name: "清理旧复制缓存" })).toBeEnabled();
 });

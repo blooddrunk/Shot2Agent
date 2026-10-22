@@ -55,6 +55,8 @@ type Discovery = {
   status: string;
 };
 type Snapshot = {
+  appVersion?: string;
+  fileCache?: { directory?: string; files?: number; bytes?: number; maxFiles?: number; maxBytes?: number; error?: string };
   activity: { running: number; queued: number };
   hotkeys: Hotkeys;
   hotkeyStatus?: string;
@@ -137,6 +139,11 @@ const statusText: Record<string, string> = {
   capture_error: "剪贴板读取暂停 · 可重新连接",
 };
 const errorText: Record<string, string> = {
+  FILE_CLIPBOARD_CACHE_FULL: "文件复制缓存已满。请到设置中的文件复制缓存清理旧文件。",
+  UNSAFE_FILE_CACHE: "缓存含有无法安全清理的文件或链接。请保留原目录并检查数据位置。",
+  FILE_CACHE_CLEANUP_UNAVAILABLE: "当前无法检查 Windows 剪贴板，未清理缓存。请重启应用后再试。",
+  FILE_CACHE_CLEANUP_FAILED: "缓存清理未完成，可能已有部分旧文件被删除。当前剪贴板文件仍保留；请刷新后重试。",
+
   BATCH_IMAGE_COUNT: "多图任务需要 2–5 张图片；最多可添加 5 张。",
   BATCH_OVER_60_MIB: "图片合计超过 60 MiB，请减少图片或文件大小。",
   INVALID_IMAGE: "图片不完整或格式不支持，请选择已保存完成的 PNG/JPEG/WebP。",
@@ -146,7 +153,6 @@ const errorText: Record<string, string> = {
   FOLDER_IMAGE_INVALID_OR_UNREADABLE: "已跳过无法读取的图片，请检查文件是否完整。",
   NO_CURRENT_IMAGE: "当前剪贴板中没有图片，请先截图。",
   NATIVE_NOTIFICATION_UNAVAILABLE: "Windows 通知不可用；请检查系统通知设置，其他输出仍可使用。",
-  FILE_CLIPBOARD_CACHE_FULL: "文件复制缓存已满，请保留需要的文件后清理缓存，再手动复制。",
   CLIPBOARD_BUSY: "剪贴板正被其他程序占用，尚未写入；请稍后手动复制。",
   CLIPBOARD_REPLACED_AFTER_WRITE: "文件已写入，但随后被其他剪贴板活动替换；请稍后手动复制并在资源管理器粘贴。",
   CLIPBOARD_WRITE_AMBIGUOUS: "无法确认剪贴板写入结果，未自动重试；请检查后手动复制。",
@@ -422,6 +428,10 @@ async function refresh() {
     polling = false;
   }
 }
+async function cleanFileCache() {
+  if (!window.confirm("清理超过 10 分钟的旧复制缓存？当前剪贴板引用的文件会保留。导出的 Markdown、任务历史和截图不会删除。")) return;
+  await action("clean-file-cache", { confirm: true });
+}
 async function action(command: string, args: Record<string, unknown> = {}) {
   if (busy.value) return;
   busy.value = true;
@@ -432,7 +442,7 @@ async function action(command: string, args: Record<string, unknown> = {}) {
     if (command === "detail") detail.value = result as typeof detail.value;
     else if (command !== "quit")
       hydrate(
-        page.value === "history"
+        (page.value === "history" || command === "clean-file-cache")
           ? ((await rpc("snapshot", snapshotArgs())) as Snapshot)
           : (result as Snapshot),
       );
@@ -482,6 +492,10 @@ async function action(command: string, args: Record<string, unknown> = {}) {
       message.value = args.paused
         ? "捕获已暂停。"
         : "捕获已恢复，已有图片不会自动提交。";
+    if (command === "clean-file-cache") {
+      const cleanup = result as { deleted: number; retained: number };
+      message.value = `已清理 ${cleanup.deleted} 个旧缓存文件；保留 ${cleanup.retained} 个当前剪贴板引用或最近 10 分钟的文件。`;
+    }
     if (command === "copy-files") message.value = "已写入并验证 Markdown 文件，请在资源管理器按 Ctrl+V 粘贴（Win+V 不作为文件粘贴依据）。";
     if (command === "composer-submit") message.value = "多张图片已作为一个任务提交。";
     if (command === "retry-delivery")
@@ -1253,6 +1267,20 @@ onUnmounted(() => clearInterval(timer));
             }}：{{ data.lastAction.status }}
           </p>
         </details>
+        <section aria-label="文件复制缓存">
+          <h3>文件复制缓存</h3>
+          <p class="hint">{{ data?.fileCache?.files ?? 0 }} / 1000 个文件 · {{ ((data?.fileCache?.bytes ?? 0) / 1048576).toFixed(2) }} / 256 MiB</p>
+          <p class="hint">只清理超过 10 分钟的旧复制缓存。保留当前剪贴板引用的文件；导出的 Markdown、历史和截图不受影响。</p>
+          <p v-if="data?.fileCache?.error" class="error">{{ errorText[data.fileCache.error] }}</p>
+          <button :disabled="busy || !data || !!data.fileCache?.error" @click="cleanFileCache">清理旧复制缓存</button>
+          <p class="path">{{ data?.fileCache?.directory }}</p>
+        </section>
+        <section aria-label="版本与备份">
+          <h3>Shot2Agent {{ data?.appVersion }}</h3>
+          <p class="hint">Local · 完整构建提交见解压目录 BUILD.txt。</p>
+          <p class="path">数据目录：{{ data?.root }}</p>
+          <p class="hint">升级前从托盘退出应用，再复制整个数据目录作为备份。完整解压新版到另一个目录后启动，会继续使用原数据。Token 由 Windows 凭据管理器保管，不包含在目录备份中；换电脑需重新填写。回退时先退出应用，保留当前数据副本后恢复整份旧备份。不要在运行时只复制 SQLite 文件。</p>
+        </section>
         <details class="advanced">
           <summary>高级设置</summary>
           <details>

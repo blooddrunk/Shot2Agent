@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { serve, waitForParent } from './protocol.ts';
@@ -29,6 +30,7 @@ try {
   } : undefined, staging ? 'staging' : mode === '--codex' ? 'codex' : 'legacy');
   process.stderr.write('PHASE_CLIPBOARD_START\n');
   await desktop.start();
+  if (staging) await desktop.app.ingest(readFileSync(new URL('../../../scripts/fixtures/glm-vision.png', import.meta.url)), false, undefined, 'synthetic');
   process.stderr.write('PHASE_SERVING\n');
   const finish = serve(desktop, process.stdin, process.stdout);
   process.on('SIGTERM', () => { void finish(); }); process.on('SIGINT', () => { void finish(); });
