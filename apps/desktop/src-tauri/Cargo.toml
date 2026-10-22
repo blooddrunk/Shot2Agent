@@ -1,6 +1,6 @@
 [package]
 name = "shot2agent-desktop"
-version = "0.8.1"
+version = "1.0.0-rc.1"
 edition = "2021"
 
 [build-dependencies]

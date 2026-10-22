@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, readdirSync, realpathSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, readdirSync, realpathSync, symlinkSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, isAbsolute } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -268,6 +268,30 @@ test('Windows native helper synthetic DIB capture, Unicode copy and atomic seque
       const ole = oleRead(); assert.equal(ole.status, 0, ole.stderr);
       const data = JSON.parse(ole.stdout); assert.deepEqual(data.paths, expectedFiles); assert.equal(data.effect, 1);
     }
+    // M9: native cleanup holds the clipboard lock, preserves current/recent files,
+    // and permits recovery after replacement without touching exports/history.
+    const { randomUUID } = await import('node:crypto');
+    const cache = join(dir, 'file-clipboard');
+    const oldFile = join(cache, `${randomUUID()}.md`);
+    const recentFile = join(cache, `${randomUUID()}.md`);
+    writeFileSync(oldFile, '# stale synthetic cache'); writeFileSync(recentFile, '# recent cache');
+    const oldTime = new Date(Date.now() - 3600000);
+    utimesSync(oldFile, oldTime, oldTime); utimesSync(paths[0], oldTime, oldTime);
+    await clipboard.writeFiles(paths);
+    const unsafe = join(cache, 'foreign.txt'); writeFileSync(unsafe, 'must not delete');
+    await assert.rejects(clipboard.cleanFileCache(cache), /UNSAFE_FILE_CACHE/);
+    assert.equal(existsSync(oldFile), true); assert.equal(existsSync(paths[0]), true); rmSync(unsafe);
+    const sequenceBeforeCleanup = await clipboard.sequence();
+    assert.deepEqual(await clipboard.cleanFileCache(cache), { deleted: 1, retained: 2 });
+    assert.equal(await clipboard.sequence(), sequenceBeforeCleanup);
+    assert.equal(existsSync(oldFile), false); assert.equal(existsSync(paths[0]), true);
+    app.deleteHistory([id]); assert.equal(existsSync(paths[0]), true);
+    assert.equal(existsSync(secondFile), true);
+    await clipboard.writeText('synthetic replacement permits old cache removal');
+    assert.deepEqual(await clipboard.cleanFileCache(cache), { deleted: 1, retained: 1 });
+    assert.equal(existsSync(recentFile), true); assert.equal(existsSync(secondFile), true);
+    // Re-create a retained real path for the following native sequence tests.
+    writeFileSync(paths[0], '# Synthetic retained result');
     // External replacement during post-write verification is a conflict, never another write.
     await clipboard.writeText('synthetic pre-replacement baseline');
     const replacer = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Sta', '-Command',
@@ -304,9 +328,18 @@ test('Windows native helper synthetic DIB capture, Unicode copy and atomic seque
       });
       await assert.rejects(clipboard.writeText('synthetic contention probe'), /CLIPBOARD_BUSY/);
       await assert.rejects(clipboard.writeFiles(paths), /CLIPBOARD_BUSY/);
+      await assert.rejects(clipboard.cleanFileCache(cache), /CLIPBOARD_BUSY/);
+      assert.equal(existsSync(recentFile), true);
       assert.equal(await exited, 0);
       assert.equal(await clipboard.writeText('synthetic contention recovered'), true);
     } finally { holder.kill(); }
+    utimesSync(paths[0], oldTime, oldTime); await clipboard.writeFiles(paths);
+    clipboard.close();
+    const restartedHelper = new WindowsClipboard();
+    try {
+      assert.deepEqual(await restartedHelper.cleanFileCache(cache), { deleted: 0, retained: 2 });
+      assert.equal(existsSync(paths[0]), true);
+    } finally { restartedHelper.close(); }
 
   } finally { app.close(); await removeOwnedDirectory(dir); }
 });

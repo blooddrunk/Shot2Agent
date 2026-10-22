@@ -1,3 +1,5 @@
+> **M9-L candidate 1.0.0-rc.1:** GUI cache maintenance, historical upgrade checks and extracted portable-package verification. [Two-minute Windows guide](docs/LOCAL_V1_GUIDE.md) · [Validation and remaining native gate](docs/M9_VALIDATION.md). Formal v1.0.0 awaits final Explorer paste acceptance.
+
 > **Latest Local 0.8.1 (merged):** M8-L input/output features and native Windows Copy files / capture-status stabilization shipped in [PR #17](https://github.com/blooddrunk/Shot2Agent/pull/17) and [PR #18](https://github.com/blooddrunk/Shot2Agent/pull/18). Merged-main CI and Windows portable package passed. The operator's post-fix Explorer paste is **not yet independently retested**. [Windows GUI usage](docs/M8_WINDOWS_RUN.md) · [Evidence](docs/M8_VALIDATION.md) · [Next: M9-L Local v1.0 release plan](docs/M9_LOCAL_V1_RELEASE.md).
 
 # Shot2Agent

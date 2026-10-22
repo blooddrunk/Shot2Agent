@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 [Console]::InputEncoding = New-Object System.Text.UTF8Encoding($false)
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
-Add-Type -ReferencedAssemblies System.Drawing,System -TypeDefinition @'
+Add-Type -ReferencedAssemblies System.Drawing,System,System.Core -TypeDefinition @'
 using System;
 using System.IO;
 using System.Text;
@@ -106,6 +106,46 @@ public static class ShotClipboard {
       }
     } finally { CloseClipboard(); }
   }
+  // Hold OpenClipboard across inspection and deletion: replacement cannot race cleanup.
+  // Keep recent files too, allowing already-started Explorer copies to settle.
+  public static int[] CleanCache(string directory) {
+    if (!Path.IsPathRooted(directory) || Path.GetFileName(directory) != "file-clipboard") throw new Exception("UNSAFE_FILE_CACHE");
+    string full = Path.GetFullPath(directory);
+    for (DirectoryInfo d = new DirectoryInfo(full); d != null; d = d.Parent)
+      if ((d.Attributes & FileAttributes.ReparsePoint) != 0) throw new Exception("UNSAFE_FILE_CACHE");
+    Lock();
+    try {
+      HashSet<string> keep = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+      if (IsClipboardFormatAvailable(15)) {
+        IntPtr drop = GetClipboardData(15);
+        if (drop == IntPtr.Zero) throw new Exception("FILE_CACHE_CLEANUP_FAILED");
+        uint count = DragQueryFile(drop, 0xffffffff, null, 0);
+        if (count == 0 || count > 1000) throw new Exception("FILE_CACHE_CLEANUP_FAILED");
+        for (uint i = 0; i < count; i++) {
+          uint size = DragQueryFile(drop, i, null, 0);
+          if (size == 0 || size > 32767) throw new Exception("FILE_CACHE_CLEANUP_FAILED");
+          StringBuilder name = new StringBuilder((int)size + 1);
+          if (DragQueryFile(drop, i, name, size + 1) != size) throw new Exception("FILE_CACHE_CLEANUP_FAILED");
+          keep.Add(Path.GetFullPath(name.ToString()));
+        }
+      }
+      string[] paths = Directory.GetFileSystemEntries(full);
+      if (paths.Length > 1100) throw new Exception("UNSAFE_FILE_CACHE");
+      // Validate the whole set before any delete; never recurse or follow reparse points.
+      foreach (string path in paths) {
+        string name = Path.GetFileName(path);
+        if ((File.GetAttributes(path) & (FileAttributes.ReparsePoint | FileAttributes.Directory)) != 0 ||
+            !System.Text.RegularExpressions.Regex.IsMatch(name, @"^(?:[0-9a-f-]{36}\.md|\.[0-9a-f-]{36}-[0-9a-f-]{36}\.tmp)$")) throw new Exception("UNSAFE_FILE_CACHE");
+      }
+      int deleted = 0, retained = 0;
+      DateTime cutoff = DateTime.UtcNow.AddMinutes(-10);
+      foreach (string path in paths) {
+        if (keep.Contains(path) || File.GetLastWriteTimeUtc(path) >= cutoff) { retained++; continue; }
+        try { File.Delete(path); deleted++; } catch { throw new Exception("FILE_CACHE_CLEANUP_FAILED"); }
+      }
+      return new int[] { deleted, retained };
+    } finally { CloseClipboard(); }
+  }
   public static bool WriteFiles(string[] paths, string expected, int verifyMilliseconds) {
     if (paths == null || paths.Length < 1 || paths.Length > 5) throw new Exception("INVALID_CLIPBOARD_FILES");
     foreach (string path in paths) if (!Path.IsPathRooted(path) || !File.Exists(path) || path.IndexOf('\0') >= 0 || (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0) throw new Exception("INVALID_CLIPBOARD_FILES");
@@ -201,13 +241,14 @@ while ($null -ne ($line = [ShotClipboard]::NextRequest())) {
             $notificationIcon.ShowBalloonTip(5000, 'Shot2Agent', 'Screenshot complete. View the result in Shot2Agent history.', [System.Windows.Forms.ToolTipIcon]::Info)
             $response = @{notified=$true}; break
           }
+          'clean-cache' { $counts = [ShotClipboard]::CleanCache([string]$request.directory); $response = @{deleted=$counts[0]; retained=$counts[1]}; break }
           'files' { $response = @{written=[ShotClipboard]::WriteFiles([string[]]$request.paths, $request.expected, [int]$request.verifyMilliseconds)}; break }
           'write' { $response = @{written=[ShotClipboard]::WriteText($request.text, $request.expected); sequence=[ShotClipboard]::GetClipboardSequenceNumber().ToString()}; break }
           default { throw 'INVALID_OPERATION' }
         }
         break
       } catch {
-        if ($request.op -in @('write','files','notify') -or $attempt -eq 5 -or $_.Exception.ToString() -notmatch 'CLIPBOARD_BUSY') { throw }
+        if ($request.op -in @('write','files','notify','clean-cache') -or $attempt -eq 5 -or $_.Exception.ToString() -notmatch 'CLIPBOARD_BUSY') { throw }
         Start-Sleep -Milliseconds (30 * ($attempt + 1))
       }
     }
@@ -215,7 +256,7 @@ while ($null -ne ($line = [ShotClipboard]::NextRequest())) {
   } catch {
     # Whitelisted phase codes only. Never emit clipboard data or exception text.
     $code = 'CLIPBOARD_UNAVAILABLE_OR_OVERSIZED'
-    foreach ($safe in @('CLIPBOARD_BUSY','CLIPBOARD_ALLOC','CLIPBOARD_WRITE_AMBIGUOUS','CLIPBOARD_REPLACED_AFTER_WRITE','NATIVE_NOTIFICATION_UNAVAILABLE')) {
+    foreach ($safe in @('CLIPBOARD_BUSY','CLIPBOARD_ALLOC','CLIPBOARD_WRITE_AMBIGUOUS','CLIPBOARD_REPLACED_AFTER_WRITE','NATIVE_NOTIFICATION_UNAVAILABLE','UNSAFE_FILE_CACHE','FILE_CACHE_CLEANUP_FAILED')) {
       if ($_.Exception.ToString().Contains($safe)) { $code = $safe; break }
     }
     [Console]::WriteLine((@{error=$code} | ConvertTo-Json -Compress))

@@ -1,4 +1,5 @@
-import { closeSync, fsyncSync, lstatSync, openSync, readFileSync, linkSync, rmSync, writeFileSync, realpathSync, readdirSync } from 'node:fs';
+import { fileCacheUsage, CACHE_MAX_FILES, CACHE_MAX_BYTES } from './file-cache.ts';
+import { closeSync, fsyncSync, lstatSync, openSync, readFileSync, linkSync, rmSync, writeFileSync, realpathSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { TaskView } from '../../core/src/model.ts';
@@ -51,9 +52,11 @@ export function resultFiles(task: TaskView, state: LocalState): string[] {
   requireValue(task.status === 'succeeded' && task.result, 'RESULT_UNAVAILABLE');
   const directory = join(state.root, 'file-clipboard'); privateDirectory(directory);
   requireValue(realpathSync(directory) === directory, 'UNSAFE_SAVE_PATH');
-  const id = task.submission.taskId; const entries = readdirSync(directory);
-  if (!entries.includes(`${id}.md`)) {
-    requireValue(entries.length < 1000 && entries.reduce((n, name) => n + lstatSync(join(directory, name)).size, 0) + Buffer.byteLength(task.result.contentMarkdown) <= 256 * 1024 * 1024, 'FILE_CLIPBOARD_CACHE_FULL');
+  const id = task.submission.taskId; const usage = fileCacheUsage(state.root);
+  try { lstatSync(join(directory, `${id}.md`)); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    requireValue(usage.files < CACHE_MAX_FILES && usage.bytes + Buffer.byteLength(task.result.contentMarkdown) <= CACHE_MAX_BYTES, 'FILE_CLIPBOARD_CACHE_FULL');
   }
   atomicSave(directory, id, task.result.contentMarkdown);
   return [join(directory, `${id}.md`)];
