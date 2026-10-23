@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod hotkeys;
+mod tray;
 use serde_json::{json, Value};
 use std::{
     io::{BufRead, BufReader, Read, Write},
@@ -8,8 +9,7 @@ use std::{
     time::Duration,
 };
 use tauri::{
-    menu::{Menu, MenuItem},
-    tray::TrayIconBuilder,
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager,
 };
 
@@ -111,14 +111,14 @@ fn launch_mode(args: &[String]) -> Result<&'static str, &'static str> {
             "--codex" => "codex",
             "--staging" => "staging",
             "--legacy" => "legacy",
-            "--smoke" => continue,
+            "--smoke" | "--tray-smoke" => continue,
             _ => return Err("INVALID_LAUNCH_MODE"),
         };
         if mode.replace(next).is_some() {
             return Err("CONFLICTING_LAUNCH_MODE");
         }
     }
-    if args.iter().any(|a| a == "--smoke") && mode != Some("staging") {
+    if args.iter().any(|a| a == "--smoke" || a == "--tray-smoke") && mode != Some("staging") {
         return Err("SMOKE_REQUIRES_STAGING");
     }
     Ok(mode.unwrap_or("codex"))
@@ -309,6 +309,22 @@ async fn rpc(app: tauri::AppHandle, request: Value) -> Result<Value, String> {
             .lock()
             .map_err(|_| "HOTKEY_TRANSACTION_LOCK")?;
         let is_quit = request.get("command").and_then(Value::as_str) == Some("quit");
+        if request["command"] == "staging-fault" && request["kind"] == "coordinator" {
+            if launch_mode(&std::env::args().skip(1).collect::<Vec<_>>())? != "staging" {
+                return Err("STAGING_ONLY".into());
+            }
+            if let Ok(bridge) = transaction_state
+                .bridge
+                .lock()
+                .map_err(|_| "COORDINATOR_LOCK")?
+                .as_mut()
+            {
+                let _ = bridge.child.kill();
+            }
+            refresh_tray(&app);
+            return Err("COORDINATOR_STOPPED_RESTART_APP".into());
+        }
+
         let mut response =
             if request.get("command").and_then(Value::as_str) == Some("configure-hotkeys") {
                 let state = app.state::<State>();
@@ -335,6 +351,7 @@ async fn rpc(app: tauri::AppHandle, request: Value) -> Result<Value, String> {
                 call(&app.state::<State>(), request)
             };
         if is_quit {
+            app.state::<tray::Runtime>().shutdown();
             app.exit(0);
         }
         if let Ok(value) = response.as_mut() {
@@ -350,18 +367,8 @@ async fn rpc(app: tauri::AppHandle, request: Value) -> Result<Value, String> {
                 );
             }
         }
+        refresh_tray(&app);
         let response = response?;
-        if let Some(status) = response.pointer("/value/status").and_then(Value::as_str) {
-            if let Some(tray) = app.tray_by_id("local") {
-                let _ = tray.set_tooltip(Some(format!(
-                    "Shot2Agent · {} · {status}",
-                    mode_label(
-                        launch_mode(&std::env::args().skip(1).collect::<Vec<_>>())
-                            .unwrap_or("invalid")
-                    )
-                )));
-            }
-        }
         Ok(response)
     })
     .await
@@ -371,7 +378,40 @@ async fn rpc(app: tauri::AppHandle, request: Value) -> Result<Value, String> {
 fn hide_window(window: tauri::WebviewWindow) {
     let _ = window.hide();
 }
+fn open_preview(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.eval("window.dispatchEvent(new Event('shot2agent-open-preview'))");
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+}
+fn refresh_tray(app: &tauri::AppHandle) {
+    let runtime = app.state::<tray::Runtime>();
+    let Ok(mut previous) = runtime.update.lock() else {
+        return;
+    };
+    if *runtime.stop.0.lock().unwrap_or_else(|e| e.into_inner()) {
+        return;
+    }
+    let response = call(&app.state::<State>(), json!({"v":1,"command":"snapshot"}));
+    let view = tray::view(&response);
+    // Only cache a completed native update; a failed setter is retried next poll.
+    if tray::apply(app, &view, previous.as_ref()).is_ok() {
+        *previous = Some(view);
+    }
+}
+fn tray_action(app: tauri::AppHandle, action: String) {
+    tauri::async_runtime::spawn_blocking(move || {
+        let _ = call(
+            &app.state::<State>(),
+            json!({"v":1,"command":"action","action":action}),
+        );
+        refresh_tray(&app);
+    });
+}
 fn quit(app: tauri::AppHandle) {
+    app.state::<tray::Runtime>().shutdown();
+
     tauri::async_runtime::spawn_blocking(move || {
         let _ = call(&app.state::<State>(), json!({"v":1,"command":"quit"}));
         app.exit(0);
@@ -458,6 +498,7 @@ fn main() {
     }
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .manage(tray::Runtime::default())
         .manage(State {
             hotkey_transaction: Mutex::new(()),
             bridge: Mutex::new(Bridge::start()),
@@ -477,6 +518,7 @@ fn main() {
                         &handle.state::<State>(),
                         json!({"v":1,"command":"action","action":action}),
                     );
+                    refresh_tray(&handle);
                     busy.store(false, std::sync::atomic::Ordering::SeqCst);
                 });
             });
@@ -494,127 +536,74 @@ fn main() {
             if let Some(window) = app.get_webview_window("main") {
                 window.set_title(&format!("Shot2Agent · {}", mode_label(mode)))?;
             }
-            let show = MenuItem::with_id(app, "show", "Show Shot2Agent", true, None::<&str>)?;
-            let hide = MenuItem::with_id(app, "hide", "Hide", true, None::<&str>)?;
-            let pause = MenuItem::with_id(app, "pause", "Pause capture", true, None::<&str>)?;
-            let resume = MenuItem::with_id(app, "resume", "Resume capture", true, None::<&str>)?;
-            let copy_latest =
-                MenuItem::with_id(app, "copy-latest", "Copy latest result", true, None::<&str>)?;
-            let retry_latest = MenuItem::with_id(
-                app,
-                "retry-latest-delivery",
-                "Retry latest failed delivery",
-                true,
-                None::<&str>,
-            )?;
-            let cycle_agent = MenuItem::with_id(
-                app,
-                "cycle-agent",
-                "Cycle approved Agent",
-                true,
-                None::<&str>,
-            )?;
-            let current = MenuItem::with_id(
-                app,
-                "current",
-                "Submit current clipboard image",
-                true,
-                None::<&str>,
-            )?;
-            let exit = MenuItem::with_id(app, "quit", "Quit Shot2Agent", true, None::<&str>)?;
-            let menu = Menu::with_items(
-                app,
-                &[
-                    &show,
-                    &hide,
-                    &pause,
-                    &resume,
-                    &copy_latest,
-                    &retry_latest,
-                    &cycle_agent,
-                    &current,
-                    &exit,
-                ],
-            )?;
-            let mut pixels = vec![0u8; 32 * 32 * 4];
-            for y in 4..28 {
-                for x in 4..28 {
-                    let i = (y * 32 + x) * 4;
-                    pixels[i..i + 4].copy_from_slice(if x < 8 || x > 23 || y < 8 || y > 23 {
-                        &[39, 99, 76, 255]
-                    } else {
-                        &[246, 248, 245, 255]
-                    });
-                }
-            }
+            let initial = tray::offline();
             TrayIconBuilder::with_id("local")
-                .icon(tauri::image::Image::new_owned(pixels, 32, 32))
-                .tooltip(format!("Shot2Agent · {}", mode_label(mode)))
-                .menu(&menu)
-                .on_menu_event(|app, event| match event.id.as_ref() {
-                    "show" => {
-                        if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.show();
-                            let _ = w.set_focus();
+                .icon(tauri::image::Image::new_owned(
+                    tray::pixels("error", 32),
+                    32,
+                    32,
+                ))
+                .tooltip(initial["tooltip"].as_str().unwrap_or("Shot2Agent"))
+                .menu(&tray::menu(app.handle(), &initial)?)
+                .show_menu_on_left_click(false)
+                .on_tray_icon_event(|tray, event| {
+                    if matches!(
+                        event,
+                        TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
                         }
+                    ) {
+                        open_preview(tray.app_handle());
                     }
+                })
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show" => open_preview(app),
                     "hide" => {
                         if let Some(w) = app.get_webview_window("main") {
                             let _ = w.hide();
                         }
                     }
-                    "pause" | "resume" => {
-                        let a = app.clone();
-                        let paused = event.id.as_ref() == "pause";
-                        tauri::async_runtime::spawn_blocking(move || {
-                            let _ = call(
-                                &a.state::<State>(),
-                                json!({"v":1,"command":"pause","paused":paused}),
-                            );
-                        });
-                    }
-                    "copy-latest" | "retry-latest-delivery" | "cycle-agent" | "current" => {
-                        let handle = app.clone();
-                        let action = event.id.as_ref().to_string();
-                        tauri::async_runtime::spawn_blocking(move || {
-                            let _ = call(
-                                &handle.state::<State>(),
-                                json!({"v":1,"command":"action","action":action}),
-                            );
-                        });
-                    }
+                    "toggle-pause"
+                    | "copy-latest"
+                    | "retry-latest-delivery"
+                    | "cycle-agent"
+                    | "current" => tray_action(app.clone(), event.id.as_ref().to_string()),
                     "quit" => quit(app.clone()),
                     _ => {}
                 })
                 .build(app)?;
-            // Tray status stays live even when WebView timers are throttled while hidden.
+            if std::env::args().any(|a| a == "--tray-smoke") {
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    let result = tray::native_smoke(&handle);
+                    if let Ok(exe) = std::env::current_exe() { if let Some(dir) = exe.parent() {
+                        let _ = std::fs::write(dir.join("TRAY-SMOKE.txt"), match &result { Ok(()) => "PASS native tray image/menu/tooltip setters, menu eligibility readback, update coalescing, offline and cleanup; visual appearance NOT VERIFIED".into(), Err(e) => format!("FAIL {e}") });
+                    }}
+                    handle.state::<tray::Runtime>().shutdown();
+                    let _ = call(&handle.state::<State>(), json!({"v":1,"command":"quit"}));
+                    let _ = std::fs::remove_dir_all(smoke_root());
+                    handle.exit(if result.is_ok() { 0 } else { 1 });
+                });
+                return Ok(());
+            }
+            // Native polling continues while the WebView is hidden/throttled.
+            // Setters marshal to Tauri's main thread; never block that thread on RPC.
             let handle = app.handle().clone();
+            let stop = app.state::<tray::Runtime>().stop.clone();
             std::thread::spawn(move || loop {
-                std::thread::sleep(Duration::from_secs(2));
-                let response = call(
-                    &handle.state::<State>(),
-                    json!({"v":1,"command":"snapshot"}),
-                );
-                let status = response
-                    .as_ref()
-                    .ok()
-                    .and_then(|r| r.pointer("/value/status"))
-                    .and_then(Value::as_str)
-                    .unwrap_or("coordinator unavailable; quit and restart");
-                let action_status = response
-                    .as_ref()
-                    .ok()
-                    .and_then(|r| r.pointer("/value/lastAction/status"))
-                    .and_then(Value::as_str)
-                    .unwrap_or("");
-                if let Some(tray) = handle.tray_by_id("local") {
-                    let _ = tray.set_tooltip(Some(format!(
-                        "Shot2Agent · {} · {status} · {action_status}",
-                        mode_label(
-                            launch_mode(&std::env::args().skip(1).collect::<Vec<_>>())
-                                .unwrap_or("invalid")
-                        )
-                    )));
+                refresh_tray(&handle);
+                let (lock, wake) = &*stop;
+                let stopped = lock.lock().unwrap_or_else(|e| e.into_inner());
+                if *stopped {
+                    break;
+                }
+                let (stopped, _) = wake
+                    .wait_timeout(stopped, Duration::from_secs(2))
+                    .unwrap_or_else(|e| e.into_inner());
+                if *stopped {
+                    break;
                 }
             });
             Ok(())
@@ -629,6 +618,8 @@ fn main() {
         .expect("Shot2Agent startup failed")
         .run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<tray::Runtime>().shutdown();
+                let _ = app.remove_tray_by_id("local");
                 let _ = app.state::<hotkeys::Hotkeys>().configure(json!({}));
             }
 
@@ -652,9 +643,15 @@ mod launch_tests {
     fn fixed_launch_modes_fail_closed() {
         assert_eq!(launch_mode(&args(&[])), Ok("codex"));
         assert_eq!(launch_mode(&args(&["--legacy"])), Ok("legacy"));
+        assert_eq!(
+            launch_mode(&args(&["--staging", "--tray-smoke"])),
+            Ok("staging")
+        );
         assert_eq!(launch_mode(&args(&["--smoke", "--staging"])), Ok("staging"));
         for a in [
             &["--smoke"][..],
+            &["--tray-smoke"],
+            &["--codex", "--tray-smoke"],
             &["--staging", "--codex"],
             &["--root=private"],
             &["--codex", "--codex"],

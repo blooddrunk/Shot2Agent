@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { actionFeedback, trayView, type TrayViewState } from "../../../packages/desktop/src/tray";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import AppNavigation from "./components/AppNavigation.vue";
@@ -25,6 +26,7 @@ type Task = {
   save?: Receipt;
   notification?: Receipt;
   imageCount?: number;
+  retryableChannels: string[];
 };
 type Hotkeys = Record<string, string>;
 type Agent = {
@@ -56,6 +58,7 @@ type Discovery = {
   status: string;
 };
 type Snapshot = {
+  tray: TrayViewState;
   appVersion?: string;
   fileCache?: { directory?: string; files?: number; bytes?: number; maxFiles?: number; maxBytes?: number; error?: string };
   activity: { running: number; queued: number };
@@ -131,15 +134,15 @@ const cliStatusText: Record<string, string> = {
   unverified_auth: "已发现",
   scan_incomplete: "检测未完成",
 };
-const statusText: Record<string, string> = {
-  monitoring: "正在监听新图片",
-  paused: "捕获已暂停",
-  capture_off: "捕获已关闭",
-  setup_required: "先选择或配置一个 Agent",
-  worker_error: "Worker 已停止 · 请检查后重启",
-  capture_error: "剪贴板读取暂停 · 可重新连接",
-};
 const errorText: Record<string, string> = {
+  CLIPBOARD_HELPER_STOPPED: "剪贴板连接已断开。请点“重新连接剪贴板”；已有任务继续处理。",
+  STAGING_WORKER_STOPPED: "隔离测试的处理服务故障。请退出并重新启动 Start acceptance.cmd。",
+  RESTART_APP_AFTER_CHECKING_AGENT: "请先确认 AI 助手进程已停止，再退出并重新打开应用；不要重复提交不确定的任务。",
+  NO_ELIGIBLE_FAILED_DELIVERY: "没有可重试的失败通道，可在历史中手动复制结果。",
+  DELIVERY_STILL_FAILED: "结果投递仍未完成，请检查下方通道状态；没有重新请求 AI。",
+  PROFILE_UNAVAILABLE: "此任务绑定的助手配置不可用，请在 AI 助手页恢复对应配置；不会自动换用其他助手。",
+  SAVE_CONFLICT: "目标文件已存在且内容不同，未覆盖；请在历史中复制结果或另选保存目录。",
+
   FILE_CLIPBOARD_CACHE_FULL: "文件复制缓存已满。请到设置中的文件复制缓存清理旧文件。",
   UNSAFE_FILE_CACHE: "缓存含有无法安全清理的文件或链接。请保留原目录并检查数据位置。",
   FILE_CACHE_CLEANUP_UNAVAILABLE: "当前无法检查 Windows 剪贴板，未清理缓存。请重启应用后再试。",
@@ -225,7 +228,7 @@ const hotkeys = ref<Hotkeys>({});
 const hotkeyDirty = ref(false);
 const showProfileForm = ref(false);
 const profileDirty = ref(false);
-const setupProvider = ref("claude-compatible-endpoint");
+const setupProvider = ref("");
 const profileId = ref("claude-gateway-readonly");
 const cliPath = ref("");
 const workspace = ref("");
@@ -251,26 +254,18 @@ function changeTheme(value: Theme) {
     ? `已切换为${value === "dark" ? "深色" : "浅色"}主题。`
     : "主题已切换，但无法保存外观偏好；下次启动可能恢复默认主题。";
 }
-const workerText = computed(() => {
-  if (!data.value) return "正在连接处理服务";
-  if (data.value.status === "worker_error") return "处理服务已停止";
-  if (data.value.setupRequired) return "等待配置 AI 助手";
-  const activity = data.value.activity;
-  if (activity.running)
-    return `正在处理 ${activity.running} 项${activity.queued ? ` · 排队 ${activity.queued} 项` : ""}`;
-  return activity.queued ? `等待处理 ${activity.queued} 项` : "处理服务空闲";
-});
-// Report saved, effective capture state; draft form fields are intentionally separate.
+const presentation = computed(() => transportError.value ? trayView() : data.value?.tray);
+const workerText = computed(() => presentation.value?.work ?? "正在连接处理服务");
 const captureSummary = computed(() => {
   const snapshot = data.value;
   if (!snapshot) return "正在读取捕获状态";
-  const modeText = snapshot.settings.mode === "auto" ? "自动提交" : "确认后提交";
-  if (snapshot.setupRequired) return `${modeText} · 等待配置 Agent`;
-  if (snapshot.settings.paused) return `${modeText} · 捕获已暂停`;
-  if (snapshot.status === "capture_error") return `${modeText} · 捕获读取已暂停`;
-  const sources = [snapshot.settings.enabled ? "剪贴板" : "", snapshot.settings.folderEnabled ? "文件夹" : ""].filter(Boolean);
-  return `${modeText} · ${sources.length ? `捕获已开启（${sources.join(" + ")}）` : "捕获已关闭"}`;
+  return `${snapshot.settings.mode === "auto" ? "自动提交" : "确认后提交"} · ${presentation.value?.capture}`;
 });
+function friendlyError(code: string) {
+  if (/COORDINATOR|^Error: COORDINATOR/.test(code)) return "本地处理服务失联。请从托盘退出并重新打开应用；结果不确定的任务不会自动重跑。";
+  return errorText[code] ?? "操作未完成。请检查本机程序、目录及网络后再试；执行结果不确定的任务不会自动重跑。";
+}
+function openPreview() { page.value = "home"; detail.value = undefined; void refresh(); }
 const page = ref("home");
 const search = ref("");
 const historyOffset = ref(0);
@@ -369,7 +364,7 @@ function isDeletable(task: Task) {
   );
 }
 function providerForDiscovery() {
-  return setupProvider.value === "codex" ? "codex" : "claude";
+  return setupProvider.value === "codex" ? "codex" : setupProvider.value ? "claude" : "";
 }
 function chooseDetectedPath() {
   const candidate = data.value?.discovery.find(
@@ -491,7 +486,7 @@ async function action(command: string, args: Record<string, unknown> = {}) {
     if (command === "discover-agents") message.value = "本机程序检测已更新。";
     if (command === "pause")
       message.value = args.paused
-        ? "捕获已暂停。"
+        ? "捕获已暂停；已提交的任务继续处理。"
         : "捕获已恢复，已有图片不会自动提交。";
     if (command === "clean-file-cache") {
       const cleanup = result as { deleted: number; retained: number };
@@ -513,7 +508,7 @@ async function action(command: string, args: Record<string, unknown> = {}) {
             : "图片已提交到本地队列。";
   } catch (e) {
     const code = e instanceof Error ? e.message : String(e);
-    error.value = errorText[code] ? `${code}：${errorText[code]}` : code;
+    error.value = friendlyError(code);
   } finally {
     busy.value = false;
   }
@@ -591,8 +586,9 @@ function editProfile(agent: Agent) {
 function addProfile() {
   error.value = "";
   message.value = "";
-  setupProvider.value = "claude-compatible-endpoint";
-  profileId.value = "glm-personal";
+  const providers = [...new Set(data.value?.discovery.filter(c => c.status === "unverified_auth").map(c => c.provider))];
+  setupProvider.value = providers.length === 1 ? providers[0] : "";
+  profileId.value = setupProvider.value === "codex" ? "my-codex" : setupProvider.value === "claude" ? "my-claude" : "";
   cliPath.value = "";
   reuseExisting.value = false;
   editId.value = "";
@@ -608,6 +604,7 @@ function addProfile() {
   void showEditor();
 }
 async function saveProfile() {
+  if (!setupProvider.value) { error.value = "请先选择 AI 助手类型。"; return; }
   if (!reuseExisting.value && !cliPath.value.trim()) {
     error.value = "请选择已安装的 Codex CLI 或 Claude Code。";
     return;
@@ -820,12 +817,13 @@ function permanentlyDelete(agent: Agent) {
     });
 }
 onMounted(() => {
+  window.addEventListener("shot2agent-open-preview", openPreview);
   void refresh();
   timer = setInterval(() => {
     void refresh();
   }, 1000);
 });
-onUnmounted(() => clearInterval(timer));
+onUnmounted(() => { clearInterval(timer); window.removeEventListener("shot2agent-open-preview", openPreview); });
 </script>
 
 <template>
@@ -843,11 +841,11 @@ onUnmounted(() => clearInterval(timer));
         <div class="runtime-status" role="status" aria-label="运行状态">
           <span
             class="dot"
-            :class="{ active: data?.status === 'monitoring' }"
+            :class="{ active: presentation?.icon === 'monitoring' }"
           ></span>
           本地运行
           <p>
-            {{ data ? statusText[data.status] || data.status : "正在连接…" }}
+            {{ presentation?.capture ?? "正在连接…" }}
           </p>
           <p>{{ workerText }}</p>
         </div>
@@ -876,10 +874,10 @@ onUnmounted(() => clearInterval(timer));
         <span class="status-pill" role="status"
           ><span
             class="dot"
-            :class="{ active: data?.status === 'monitoring' }"
+            :class="{ active: presentation?.icon === 'monitoring' }"
           ></span
           >{{
-            data ? statusText[data.status] || data.status : "正在连接…"
+            presentation?.label ?? "正在连接…"
           }}</span
         >
       </header>
@@ -889,7 +887,7 @@ onUnmounted(() => clearInterval(timer));
           class="error"
           role="alert"
         >
-          <AppIcon name="alert" />{{ error || transportError || data?.error }}
+          <AppIcon name="alert" />{{ error || friendlyError(transportError || data?.error || "") }}
           <button
             v-if="data?.status === 'capture_error'"
             @click="action('recover')"
@@ -897,6 +895,7 @@ onUnmounted(() => clearInterval(timer));
             重新连接剪贴板
           </button>
         </p>
+        <p v-if="data?.tray.feedback" class="hint" role="status">{{ data.tray.feedback }}</p>
         <p v-if="message" class="notice" role="status"><AppIcon name="check" />{{ message }}</p>
       </div>
       <section v-if="page === 'home'" aria-label="截图处理">
@@ -1199,8 +1198,8 @@ onUnmounted(() => clearInterval(timer));
             >剪贴板返回<select v-model="clipboard">
               <option value="off">关闭</option>
               <option value="manual">手动复制</option>
-              <option value="smart">Smart · 保护后来复制的内容</option>
-              <option value="always">Always · 总是覆盖</option>
+              <option value="smart">自动复制 · 保护后来复制的内容（Smart）</option>
+              <option value="always">自动复制 · 总是覆盖（Always）</option>
             </select></label
           >
           <label>自动复制内容<select v-model="clipboardPayload"><option value="text">文本 · 粘贴到编辑器</option><option value="files">Markdown 文件 · 粘贴到资源管理器</option></select></label>
@@ -1265,7 +1264,7 @@ onUnmounted(() => clearInterval(timer));
             {{
               globalActions.find((a) => a.id === data?.lastAction?.action)
                 ?.label
-            }}：{{ data.lastAction.status }}
+            }}：{{ actionFeedback(data.lastAction.status) }}
           </p>
         </details>
         <section aria-label="文件复制缓存">
@@ -1278,6 +1277,14 @@ onUnmounted(() => clearInterval(timer));
         </section>
         <section aria-label="版本与备份">
           <h3><AppIcon name="drive" />Shot2Agent {{ data?.appVersion }}</h3>
+          <div v-if="data?.launchMode === 'staging'" class="staging-tools">
+            <p class="hint">隔离 Fake 验收：仅使用合成图片。模拟故障后可重新启动 Start acceptance.cmd，得到全新的测试数据目录。</p>
+            <div class="quick-actions" role="group" aria-label="隔离故障测试">
+              <button @click="action('staging-fault', { kind: 'capture' })" :disabled="busy">模拟捕获故障</button>
+              <button @click="action('staging-fault', { kind: 'worker' })" :disabled="busy">模拟处理服务故障</button>
+              <button @click="action('staging-fault', { kind: 'coordinator' })" :disabled="busy">模拟协调器失联</button>
+            </div>
+          </div>
           <p class="hint">Local · 完整构建提交见解压目录 BUILD.txt。</p>
           <p class="path">数据目录：{{ data?.root }}</p>
           <p class="hint">升级前从托盘退出应用，再复制整个数据目录作为备份。完整解压新版到另一个目录后启动，会继续使用原数据。Token 由 Windows 凭据管理器保管，不包含在目录备份中；换电脑需重新填写。回退时先退出应用，保留当前数据副本后恢复整份旧备份。不要在运行时只复制 SQLite 文件。</p>
@@ -1445,29 +1452,35 @@ onUnmounted(() => clearInterval(timer));
                 "等待结果"
               }}
             </p>
-            <p v-if="page === 'history'" class="hint">{{ task.imageCount ?? 1 }} 张图片 · 通知：{{ receiptText[task.notification?.status || ''] || task.notification?.status || '等待结果' }}<span v-if="task.notification?.code"> · {{ errorText[task.notification.code] || task.notification.code }}</span></p>
+            <p v-if="page === 'history'" class="hint">{{ task.imageCount ?? 1 }} 张图片 · 通知：{{ receiptText[task.notification?.status || ''] || task.notification?.status || '等待结果' }}<span v-if="task.notification?.code"> · {{ friendlyError(task.notification.code) }}</span></p>
             <p class="hint" v-if="task.clipboard?.code">
-              剪贴板：{{ errorText[task.clipboard.code] || task.clipboard.code }} ·
-              {{ task.clipboard.classification }} ·
+              剪贴板：{{ friendlyError(task.clipboard.code) }} ·
+
               {{ task.clipboard.attempts }} 次
             </p>
             <p class="hint" v-if="task.save?.code">
-              保存：{{ task.save.code }} · {{ task.save.classification }} ·
+              保存：{{ friendlyError(task.save.code) }} ·
               {{ task.save.attempts }} 次
             </p>
             <p class="error" v-if="task.error">
-              {{ task.error }} · 此任务不会自动重跑。
+              {{ friendlyError(task.error) }} · 此任务不会自动重跑。
             </p>
             <p
               class="notice"
               v-if="task.clipboard?.status === 'blocked_by_clipboard_change'"
             >
-              Smart 已保护较新的剪贴板内容，可手动复制结果。
+              已保留你后来复制的内容，可手动复制此结果。
             </p>
+            <p class="hint" v-if="task.retryableChannels?.length">结果已保留。重试只重新复制、保存或通知，不会重新请求 AI。</p>
+            <details v-if="task.error || task.clipboard?.code || task.save?.code || task.notification?.code" class="hint">
+              <summary>技术详情</summary>
+              <p>{{ task.error }} {{ task.clipboard?.code }} {{ task.clipboard?.classification }} {{ task.save?.code }} {{ task.save?.classification }} {{ task.notification?.code }}</p>
+            </details>
             <div class="task-actions" v-if="task.status === 'succeeded'">
               <button @click="action('copy', { id: task.id })" :disabled="busy">
                 <AppIcon name="copy" />复制文本</button
               ><button @click="action('copy-files', { id: task.id })" :disabled="busy"><AppIcon name="copy-file" />复制文件</button><button
+                v-if="task.retryableChannels?.length"
                 @click="action('retry-delivery', { id: task.id })"
                 :disabled="busy"
               >
@@ -1586,10 +1599,11 @@ onUnmounted(() => clearInterval(timer));
               v-model="setupProvider"
               @change="providerChanged"
             >
+              <option disabled value="">请选择 Codex / Claude Code / GLM</option>
               <option value="codex">Codex CLI</option>
               <option value="claude">Claude Code 个人登录</option>
               <option value="claude-compatible-endpoint">
-                Claude Code + GLM Gateway
+                GLM（通过 Claude Code）
               </option>
             </select></label
           >

@@ -35,7 +35,7 @@ Shot2Agent 自带运行环境，不需要另外为它安装 Node、pnpm 或 Git�
 
 ![Shot2Agent 首页](docs/assets/home.png)
 
-关闭窗口会隐藏到系统托盘，应用仍在后台。要完全退出，请在托盘菜单选择 **Quit Shot2Agent**。
+关闭窗口会隐藏到系统托盘，应用仍在后台。要完全退出，请在托盘菜单选择 **退出 Shot2Agent**。
 
 ## 接下来可以做什么
 
