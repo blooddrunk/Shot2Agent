@@ -21,17 +21,19 @@
 | 命令或检查 | 退出码 / 结论 | 范围 |
 | --- | --- | --- |
 | `corepack pnpm install --frozen-lockfile` | 0 | 锁文件未变化 |
-| `node --experimental-strip-types --test packages/desktop/test/tray.test.mjs` | 0，15/15 | 状态表、独立维度、故障、快速转换、快照资格、失败/成功反馈及不重新执行 |
-| `npm run check` | 0：231 tests / 206 passed / 25 platform skipped（新增末项回归后会更新） | lint、TS/Vue、完整 Node 回归、编译与 smoke |
-| `npm run desktop:test-ui` | 原 21 项通过；新增用例首次 22 pass/3 fail，测试前提已修正，复跑中 | 真 Vue + 隔离 controller，非原生托盘证据 |
+| `node --experimental-strip-types --test packages/desktop/test/tray.test.mjs` | 0，初始 15/15；增补后的 16 项由完整 check 覆盖 | 状态表、独立维度、故障、快速转换、快照资格、失败/成功反馈及不重新执行 |
+| `npm run check` | 0：232 tests / 207 passed / 25 platform skipped | lint、TS/Vue、完整 Node 回归、编译与 smoke |
+| `npm run desktop:test-ui` | 0：26/26；包括 off+running 和隔离 GUI 故障按钮，最终 CI 另见 PR checks | 真 Vue + 隔离 controller，非原生托盘证据 |
 | `cargo fmt --check --manifest-path apps/desktop/src-tauri/Cargo.toml` | 0 | Rust 格式 |
 | 本机 `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --no-default-features` | 101，环境失败 | WSL 缺少 dbus-1.pc；未安装系统包；不作为 Windows 测试通过 |
-| Windows Rust release tests / desktop build / package | CI 待填写 | 使用 Windows CI，非 WSL EXE |
-| 完整 ZIP 解压、manifest 全文件哈希、helper/fixture、EXE IPC/quit/后代清理 | CI 待填写 | 原有 portable-verify 与 smoke 保留 |
-| `Shot2Agent.exe --staging --tray-smoke`（打包目录及解压目录） | CI 待填写 | 创建真实原生 tray/menu/image，setter 与菜单 enabled readback、更新去重、杀掉本次自有协调器后的异常状态、移除托盘；不证明实见外观/真实点击 |
-| impeccable detector / diff whitespace | detector 0、无发现；最终 diff 待填写 | 机械检查不能替代视觉检查 |
+| Windows Rust release tests / desktop build / package | 0：8/8 Rust release tests；build/package 成功 | 使用 Windows CI，非 WSL EXE |
+| 完整 ZIP 解压、manifest 全文件哈希、helper/fixture、EXE IPC/quit/后代清理 | 0：打包及解压目录均 PASS | 原有 portable-verify 与 smoke 保留 |
+| `Shot2Agent.exe --staging --tray-smoke`（打包目录及解压目录） | 0：打包及解压目录均 PASS | 创建真实原生 tray/menu/image，setter 与菜单 enabled readback、更新去重、杀掉本次自有协调器后的异常状态、移除托盘；不证明实见外观/真实点击 |
+| impeccable detector / diff whitespace | detector 0、无发现；git diff --check 0 | 机械检查不能替代视觉检查 |
 
-早期新增测试产生的 lint 错误（structuredClone/Event 的测试全局声明）已修正；最终完整检查单独记录。浏览器截图检查包括深浅主题、1040/720/480 宽度及预览、设置、历史、编辑器。源码 SHA、最终 CI URL、测试数量和 ZIP 校验值将在本 PR 的最终证据中填写，不将旧版本证据挪用为本版本 PASS。
+已执行代码源 `3d9dba0a62745182391428ba5ed382b14ab81b6a` 的 [Node 22/24 Linux/Windows + 25 Vue tests](https://github.com/blooddrunk/Shot2Agent/actions/runs/39895556862) 和 [Windows Rust/package/完整解压 EXE/原生 tray smoke](https://github.com/blooddrunk/Shot2Agent/actions/runs/39895556832) 均成功；Windows Node 每档 232 tests / 230 passed / 2 skipped，Linux 每档 232 / 207 / 25。PR workflow 的 BUILD/MANIFEST 记录合并测试提交，不能把 branch SHA 与构建 SHA 混称。最后增补仅增加预览收费说明、off+running/隔离故障按钮 GUI 回归和原生菜单文字 readback；**最终分支 SHA、精确 HEAD 的 CI 和 ZIP 哈希见 [实现 PR #23](https://github.com/blooddrunk/Shot2Agent/pull/23) 的描述与 checks**，不可用本段较早提交的通过覆盖后续失败。
+
+早期新增测试产生的 lint 错误（structuredClone/Event 的测试全局声明），以及 3 项测试前提错误（未进入助手页/漏设手动复制），均修正后通过；没有跳过失败测试。浏览器截图检查包括深浅主题、1040/720/480 宽度及预览、设置、历史、编辑器。源码 SHA、最终 CI URL、测试数量和 ZIP 校验值将在本 PR 的最终证据中填写，不将旧版本证据挪用为本版本 PASS。
 
 ## 一次最小的 Windows Fake 原生验收
 

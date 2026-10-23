@@ -933,7 +933,7 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener("shot2agent
           <img :src="data.pending" alt="待确认的截图预览" />
           <div>
             <strong>等待确认</strong>
-            <p>仅此预览会被提交。</p>
+            <p>尚未发送。点击提交后，仅此预览会交给当前助手；云模型可能收费。</p>
             <button class="primary" @click="action('submit')" :disabled="busy">
               <AppIcon name="send" />提交图片</button
             ><button @click="action('composer-add-pending')" :disabled="busy || (data?.composer?.length ?? 0) >= 5"><AppIcon name="images" />加入多图任务</button><button @click="action('discard')" :disabled="busy"><AppIcon name="trash" />丢弃</button>

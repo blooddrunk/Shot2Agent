@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
 import { DesktopController } from "../../../packages/desktop/src/controller.ts";
-import { FakeAgent } from "../../../packages/worker/src/fake.ts";
+import { FakeAgent, FAKE_PROFILE } from "../../../packages/worker/src/fake.ts";
 import { makeCli, credentialStore } from "./fixtures.mjs";
 
 let desktop, root, workspace, testsSent, gatewayFailureCode, pickerSelection;
@@ -454,6 +454,9 @@ test("sidebar reports global running and queued work even when history is filter
     await page.screenshot({
       path: "build/ui-evidence/status-paused-running.png",
     });
+    await desktop.dispatch({v:1,command:'configure',capture:{enabled:false},delivery:{clipboard:'manual'}});
+    await expect(status).toContainText('捕获已关闭');
+    await expect(status).toContainText('正在处理 1 项');
     release();
     await work;
     await expect(status).toContainText("等待处理 1 项");
@@ -784,4 +787,21 @@ test("v1.0.1 faults show Chinese recovery and refuse staging controls in normal 
   await expect(page.locator('.status-pill')).toContainText('正在监听');
   await nav(page,'设置');
   await page.screenshot({path:'build/ui-evidence/v101-recovery-settings.png',fullPage:true});
+});
+
+test("v1.0.1 isolated Fake controls expose recoverable capture and persistent Worker faults", async ({ page }) => {
+  const cb = desktop.app.clipboard;
+  await desktop.close();
+  desktop = new DesktopController(root,cb,{adapter:new FakeAgent(),profile:FAKE_PROFILE},'staging',async()=>[]);
+  await desktop.start(); await page.reload(); await nav(page,'设置');
+  await expect(page.getByRole('group',{name:'隔离故障测试'})).toBeVisible();
+  await page.getByRole('button',{name:'模拟捕获故障',exact:true}).click();
+  await expect(page.getByRole('alert')).toContainText('剪贴板连接已断开');
+  await page.getByRole('button',{name:'重新连接剪贴板',exact:true}).click();
+  await expect(page.locator('.status-pill')).not.toContainText('需要处理');
+  await page.getByRole('button',{name:'模拟处理服务故障',exact:true}).click();
+  await expect(page.getByRole('alert')).toContainText('隔离测试的处理服务故障');
+  await expect(page.locator('.status-pill')).toContainText('需要处理');
+  await page.screenshot({path:'build/ui-evidence/v101-fake-fault-tools.png',fullPage:true});
+  expect(desktop.app.list()).toHaveLength(0); expect(testsSent).toBe(0);
 });

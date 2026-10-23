@@ -448,7 +448,7 @@ fn main() {
                 std::thread::sleep(Duration::from_millis(20));
             }
             drop(bridge);
-            // Fault injection stays inside developer smoke, never in the UI/IPC command set.
+            // Process-tree injection here is confined to the developer smoke's own child.
             let mut interrupted = Bridge::start()?;
             interrupted.request(json!({"v":1,"command":"snapshot"}))?;
             let _ = interrupted.child.kill();

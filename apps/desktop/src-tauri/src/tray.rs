@@ -229,6 +229,16 @@ pub fn native_smoke(app: &tauri::AppHandle) -> Result<(), String> {
                 return Err("NATIVE_MENU_ELIGIBILITY".into());
             }
         }
+        let toggle = menu
+            .get("toggle-pause")
+            .and_then(|x| x.as_menuitem().cloned())
+            .ok_or("NATIVE_TOGGLE_MISSING")?;
+        if toggle.text().map_err(|e| e.to_string())? != text(&v["menu"], "toggleLabel")
+            || menu.get("pause").is_some()
+            || menu.get("resume").is_some()
+        {
+            return Err("NATIVE_TOGGLE_LABEL".into());
+        }
         apply(app, &v, Some(&v)).map_err(|e| e.to_string())?;
         previous = Some(v);
     }
