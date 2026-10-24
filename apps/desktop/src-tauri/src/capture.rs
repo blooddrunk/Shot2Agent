@@ -199,6 +199,9 @@ mod platform {
                     access.GetInterface().map_err(|_| "CAPTURE_DEVICE_FAILED")?;
                 let mut desc = D3D11_TEXTURE2D_DESC::default();
                 texture.GetDesc(&mut desc);
+                if desc.Width < size.Width as u32 || desc.Height < size.Height as u32 {
+                    return Err("CAPTURE_MONITOR_CHANGED".into());
+                }
                 desc.Usage = D3D11_USAGE_STAGING;
                 desc.BindFlags = 0;
                 desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ.0 as u32;

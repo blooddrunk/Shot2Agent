@@ -2,6 +2,8 @@
 mod capture;
 mod hotkeys;
 mod native;
+#[cfg(all(test, windows))]
+mod native_api_tests;
 mod tray;
 mod typing;
 use serde_json::{json, Value};

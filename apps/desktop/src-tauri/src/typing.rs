@@ -56,7 +56,7 @@ fn run(
     text: &str,
     target: &mut impl Target,
     cancel: impl Fn() -> bool,
-    mut progress: impl FnMut(usize) -> bool,
+    mut progress: impl FnMut(usize) -> Result<(), String>,
 ) -> Result<(), String> {
     for (i, c) in text.chars().enumerate() {
         if cancel() {
@@ -66,9 +66,7 @@ fn run(
             return Err("TYPING_FOCUS_CHANGED".into());
         }
         target.send(&keys(c))?;
-        if !progress(i + 1) {
-            return Err("TYPING_CANCELED".into());
-        }
+        progress(i + 1)?;
     }
     Ok(())
 }
@@ -172,9 +170,22 @@ impl Typing {
                             this.update("typing", n, total);
                             let until =
                                 Instant::now() + Duration::from_secs_f64(1.0 / speed as f64);
-                            this.wait(until, || {
+                            if !this.wait(until, || {
                                 !platform::escape() && observed.focused() && !platform::modifiers()
-                            }) && started.elapsed() < Duration::from_secs(300)
+                            }) {
+                                return Err(if !observed.focused() {
+                                    "TYPING_FOCUS_CHANGED"
+                                } else if platform::modifiers() {
+                                    "TYPING_RELEASE_MODIFIERS"
+                                } else {
+                                    "TYPING_CANCELED"
+                                }
+                                .into());
+                            }
+                            if started.elapsed() >= Duration::from_secs(300) {
+                                return Err("TYPING_TIME_LIMIT".into());
+                            }
+                            Ok(())
                         },
                     )
                 }
@@ -245,8 +256,37 @@ pub mod platform {
             self.focused() && !modifiers()
         }
         fn send(&mut self, keys: &[Key]) -> Result<(), String> {
-            let inputs: Vec<INPUT> = keys
+            inject(keys)
+        }
+    }
+    pub(crate) fn inject(keys: &[Key]) -> Result<(), String> {
+        let inputs: Vec<INPUT> = keys
+            .iter()
+            .map(|k| INPUT {
+                r#type: INPUT_KEYBOARD,
+                Anonymous: INPUT_0 {
+                    ki: KEYBDINPUT {
+                        wVk: k.vk,
+                        wScan: k.scan,
+                        dwFlags: k.flags,
+                        time: 0,
+                        dwExtraInfo: 0,
+                    },
+                },
+            })
+            .collect();
+        if unsafe {
+            SendInput(
+                inputs.len() as u32,
+                inputs.as_ptr(),
+                std::mem::size_of::<INPUT>() as i32,
+            )
+        } != inputs.len() as u32
+        {
+            // A partial insertion may leave a key down. Release only; never replay text.
+            let ups: Vec<INPUT> = keys
                 .iter()
+                .filter(|k| k.flags & 2 != 0)
                 .map(|k| INPUT {
                     r#type: INPUT_KEYBOARD,
                     Anonymous: INPUT_0 {
@@ -260,42 +300,16 @@ pub mod platform {
                     },
                 })
                 .collect();
-            if unsafe {
+            unsafe {
                 SendInput(
-                    inputs.len() as u32,
-                    inputs.as_ptr(),
+                    ups.len() as u32,
+                    ups.as_ptr(),
                     std::mem::size_of::<INPUT>() as i32,
-                )
-            } != inputs.len() as u32
-            {
-                // A partial insertion may leave a key down. Release only; never replay text.
-                let ups: Vec<INPUT> = keys
-                    .iter()
-                    .filter(|k| k.flags & 2 != 0)
-                    .map(|k| INPUT {
-                        r#type: INPUT_KEYBOARD,
-                        Anonymous: INPUT_0 {
-                            ki: KEYBDINPUT {
-                                wVk: k.vk,
-                                wScan: k.scan,
-                                dwFlags: k.flags,
-                                time: 0,
-                                dwExtraInfo: 0,
-                            },
-                        },
-                    })
-                    .collect();
-                unsafe {
-                    SendInput(
-                        ups.len() as u32,
-                        ups.as_ptr(),
-                        std::mem::size_of::<INPUT>() as i32,
-                    );
-                }
-                return Err("TYPING_INJECTION_FAILED".into());
+                );
             }
-            Ok(())
+            return Err("TYPING_INJECTION_FAILED".into());
         }
+        Ok(())
     }
     pub fn clipboard_text() -> Result<String, String> {
         use windows::Win32::System::{DataExchange::*, Memory::*};
@@ -406,19 +420,19 @@ mod tests {
             fail: false,
         };
         assert_eq!(
-            run("中ab", &mut m, || false, |_| true),
+            run("中ab", &mut m, || false, |_| Ok(())),
             Err("TYPING_FOCUS_CHANGED".into())
         );
         assert_eq!(m.sent, vec![0x4e2d, 97]);
         m.left = 10;
         assert_eq!(
-            run("x", &mut m, || true, |_| true),
+            run("x", &mut m, || true, |_| Ok(())),
             Err("TYPING_CANCELED".into())
         );
         assert_eq!(m.sent.len(), 2);
         m.fail = true;
         assert_eq!(
-            run("x", &mut m, || false, |_| true),
+            run("x", &mut m, || false, |_| Ok(())),
             Err("TYPING_INJECTION_FAILED".into())
         );
         assert_eq!(m.sent.len(), 2);

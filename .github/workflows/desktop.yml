@@ -26,6 +26,8 @@ jobs:
       - run: npm run desktop:build
       - run: cargo fmt --check --manifest-path apps/desktop/src-tauri/Cargo.toml
       - run: cargo test --release --features tauri/custom-protocol --manifest-path apps/desktop/src-tauri/Cargo.toml
+      - name: Isolated hosted WGC and Unicode target API acceptance
+        run: node scripts/windows/native-api-smoke.mjs
       - run: npm run desktop:package
       - name: Exercise packaged Rust to Node pipes and clean shutdown
         shell: pwsh

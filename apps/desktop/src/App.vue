@@ -173,6 +173,7 @@ const errorText: Record<string, string> = {
   TYPING_FOCUS_CHANGED: "目标焦点已改变，输入已停止。请检查已输入部分。",
   TYPING_RELEASE_MODIFIERS: "请松开 Ctrl、Alt、Shift 和 Windows 键后重试。",
   TYPING_CANCELED: "输入已停止，已输入的内容保留。",
+  TYPING_TIME_LIMIT: "已达到 5 分钟输入上限，剩余文字未发送。请检查已输入部分。",
   INVALID_NATIVE_SETTINGS: "请检查原生截图和输入设置的取值。",
   REMOTE_OTHER_DEVICE_REQUIRED: "请选择另一台电脑的助手。本机处理请使用 Local；接收远程任务无需选择远程目标。",
   INVALID_REMOTE_TOKEN: "设备 Token 格式无效。请只粘贴 Token 内容（32–256 个可打印字符），不要包含文件名、说明或中间空格。",
