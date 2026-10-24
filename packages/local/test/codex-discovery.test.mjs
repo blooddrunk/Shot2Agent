@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { setTimeout as delay } from 'node:timers/promises';
 import { discover, programDigest, resolveProgram } from '../../worker/src/discovery.ts';
 
 const windows = { skip: process.platform !== 'win32' };
@@ -21,6 +22,9 @@ function installation(t, executable = join(process.env.SystemRoot, 'System32', '
 }
 
 test('Windows native Codex junction selection pins the real file; manual and automatic scans agree', windows, async t => {
+  // This contract checks canonical identity, not wall-clock discovery budget. A busy
+  // hosted runner can consume the 5 s budget launching the synthetic where.exe.
+  t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
   const fixture = installation(t);
   const canonical = realpathSync(fixture.path);
   assert.notEqual(canonical, fixture.path);
@@ -53,6 +57,22 @@ test('Windows native Codex default directory is discovered without inherited PAT
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
     }
   }
+});
+
+test('Windows discovery still stops before another installation after its scan time budget', windows, async t => {
+  const fixture = installation(t); t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
+  const directory = join(fixture.root, 'npm'); const bin = join(directory, 'node_modules', '@openai', 'codex', 'bin'); mkdirSync(bin, { recursive: true });
+  const marker = join(fixture.root, 'version-started'); const release = join(fixture.root, 'release-version');
+  writeFileSync(join(directory, 'codex.cmd'), 'synthetic shim; never interpreted');
+  writeFileSync(join(bin, '..', 'package.json'), JSON.stringify({ name: '@openai/codex', bin: { codex: 'bin/codex.js' } }));
+  writeFileSync(join(bin, 'codex.js'), `const fs=require('node:fs');fs.writeFileSync(${JSON.stringify(marker)},'started');const t=setInterval(()=>{if(fs.existsSync(${JSON.stringify(release)})){clearInterval(t);console.log('synthetic incompatible version');}},5);`);
+  const pending = discover('codex', fixture.root, { directories: [directory, fixture.visible] });
+  try {
+    for (let i = 0; i < 200 && !existsSync(marker); i++) await delay(5);
+    assert.equal(existsSync(marker), true); t.mock.timers.tick(6000);
+  } finally { writeFileSync(release, 'release'); }
+  const candidates = await pending;
+  assert.equal(candidates.length, 2); assert.equal(candidates[0].status, 'unsupported'); assert.equal(candidates[1].status, 'scan_incomplete');
 });
 
 test('Windows native Codex junction retargeting never repins an approved program', windows, async t => {
