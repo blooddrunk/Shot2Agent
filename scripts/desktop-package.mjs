@@ -41,8 +41,8 @@ cpSync('docs/LOCAL_V1_GUIDE.md', join(out, 'Windows instructions.md'));
 cpSync('docs/LOCAL_V1_GUIDE.md', join(out, 'LOCAL_V1_GUIDE.md'));
 cpSync('docs/USER_GUIDE.md', join(out, 'USER_GUIDE.md'));
 cpSync('THIRD_PARTY_NOTICES.md', join(out, 'THIRD_PARTY_NOTICES.md'));
-cpSync('docs/V1_0_1_VALIDATION.md', join(out, 'Validation and acceptance.md'));
-cpSync('docs/V1_0_1_VALIDATION.md', join(out, 'V1_0_1_VALIDATION.md'));
+cpSync('docs/V1_0_2_VALIDATION.md', join(out, 'Validation and acceptance.md'));
+cpSync('docs/V1_0_2_VALIDATION.md', join(out, 'V1_0_2_VALIDATION.md'));
 process.stdout.write(`PASS portable layout: ${out}\n`);
 
 const files = {};

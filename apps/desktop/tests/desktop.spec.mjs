@@ -723,7 +723,7 @@ test("M8 Copy files distinguishes native replacement from verified success witho
 // Browser/controller evidence only. Actual locked clipboard cleanup runs in Windows CI.
 test("M9 settings show version, cache, backup guidance and confirmed cleanup", async ({ page }) => {
   await nav(page, "设置");
-  await expect(page.getByRole("heading", { name: "Shot2Agent 1.0.1" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Shot2Agent 1.0.2" })).toBeVisible();
   await expect(page.getByRole("region", { name: "文件复制缓存" })).toContainText("0 / 1000");
   await page.getByRole("button", { name: "清理旧复制缓存" }).click();
   await expect(page.getByText(/已清理 0 个旧缓存文件/)).toBeVisible();

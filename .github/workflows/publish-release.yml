@@ -1,0 +1,166 @@
+name: Publish Windows Local Release
+
+on:
+  workflow_run:
+    workflows: ['Windows desktop package']
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: shot2agent-local-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - name: Validate explicit release request and completed CI
+        id: gate
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          main_sha="$(gh api "repos/$REPO/branches/main" --jq '.commit.sha')"
+          if [[ "$SOURCE_SHA" != "$main_sha" ]]; then
+            echo 'Skip: build is no longer the main branch head.'
+            exit 0
+          fi
+          if [[ ! -f .github/release-request.json ]]; then
+            echo 'Skip: no release request.'
+            exit 0
+          fi
+          request_commit="$(git log -1 --format=%H -- .github/release-request.json)"
+          if [[ "$request_commit" != "$SOURCE_SHA" ]]; then
+            echo 'Skip: release request was not introduced at this exact build commit.'
+            exit 0
+          fi
+          tag="$(jq -er '.tag' .github/release-request.json)"
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo 'Invalid release tag in request.' >&2
+            exit 1
+          fi
+          version="${tag#v}"
+          jq -e --arg v "$version" '.version == $v' apps/desktop/src-tauri/tauri.conf.json > /dev/null
+          grep -Fqx "export const APP_VERSION = '$version';" packages/desktop/src/version.ts
+          grep -Fqx "version = \"$version\"" apps/desktop/src-tauri/Cargo.toml
+          awk -v ver="$version" '$0 == "name = \"shot2agent-desktop\"" { getline; if ($0 == "version = \"" ver "\"") found=1 } END {exit !found}' apps/desktop/src-tauri/Cargo.lock
+          test -s "docs/releases/$tag.md"
+          if gh release view "$tag" --repo "$REPO" > /dev/null 2>&1; then
+            echo "Skip: release $tag already exists, never overwrite it."
+            exit 0
+          fi
+          if gh api "repos/$REPO/git/ref/tags/$tag" > /dev/null 2>&1; then
+            echo "Refuse: tag $tag exists without a Release." >&2
+            exit 1
+          fi
+          ci_id=''
+          for attempt in $(seq 1 80); do
+            response="$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?branch=main&event=push&per_page=50")"
+            match="$(printf '%s' "$response" | jq -r --arg sha "$SOURCE_SHA" '[.workflow_runs[] | select(.head_sha == $sha)] | first | if . == null then "missing::" else (.status + ":" + (.conclusion // "") + ":" + (.id | tostring)) end')"
+            IFS=: read -r status conclusion run_id <<< "$match"
+            if [[ "$status" == completed && "$conclusion" == success ]]; then
+              ci_id="$run_id"
+              break
+            fi
+            if [[ "$status" == completed ]]; then
+              echo "Required CI did not succeed: $match" >&2
+              exit 1
+            fi
+            sleep 15
+          done
+          if [[ -z "$ci_id" ]]; then
+            echo "Required CI missing or timed out for $SOURCE_SHA" >&2
+            exit 1
+          fi
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "ci_run_id=$ci_id" >> "$GITHUB_OUTPUT"
+      - name: Download and verify exact Windows package
+        id: artifact
+        if: steps.gate.outputs.publish == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+          WINDOWS_RUN: ${{ github.event.workflow_run.id }}
+          VERSION: ${{ steps.gate.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          gh run download "$WINDOWS_RUN" --repo "$REPO" --name Shot2Agent-Windows-x64 --dir release-assets
+          (cd release-assets && sha256sum -c SHA256SUMS.txt)
+          zip='release-assets/Shot2Agent-Windows-x64.zip'
+          unzip -tq "$zip"
+          unzip -p "$zip" Shot2Agent/BUILD.txt > release-assets/BUILD.txt
+          grep -Fqx "Commit: $SOURCE_SHA" release-assets/BUILD.txt
+          unzip -p "$zip" Shot2Agent/MANIFEST.json | jq -e --arg sha "$SOURCE_SHA" --arg v "$VERSION" '.sourceSha == $sha and .version == $v' > /dev/null
+          unzip -p "$zip" Shot2Agent/LOCAL_V1_GUIDE.md > release-assets/LOCAL_V1_GUIDE.md
+          unzip -p "$zip" Shot2Agent/USER_GUIDE.md > release-assets/USER_GUIDE.md
+          unzip -p "$zip" "Shot2Agent/V${VERSION//./_}_VALIDATION.md" > "release-assets/V${VERSION//./_}_VALIDATION.md"
+          test -s release-assets/PORTABLE-VERIFY.txt
+          test -s release-assets/TRAY-SMOKE.txt
+          test -s release-assets/BUILD.txt
+          test -s release-assets/USER_GUIDE.md
+          zip_sha="$(sha256sum "$zip" | awk '{print $1}')"
+          echo "zip_sha=$zip_sha" >> "$GITHUB_OUTPUT"
+      - name: Create and publish verified GitHub Release
+        if: steps.gate.outputs.publish == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+          WINDOWS_RUN: ${{ github.event.workflow_run.id }}
+          TAG: ${{ steps.gate.outputs.tag }}
+          VERSION: ${{ steps.gate.outputs.version }}
+          CI_RUN: ${{ steps.gate.outputs.ci_run_id }}
+          ZIP_SHA: ${{ steps.artifact.outputs.zip_sha }}
+        run: |
+          set -euo pipefail
+          current_main="$(gh api "repos/$REPO/branches/main" --jq '.commit.sha')"
+          if [[ "$current_main" != "$SOURCE_SHA" ]]; then
+            echo 'Refuse publication: main moved after validation.' >&2
+            exit 1
+          fi
+          cp "docs/releases/$TAG.md" release-assets/RELEASE_NOTES.md
+          {
+            echo
+            echo '## 本次正式构建的验证身份'
+            echo
+            echo "- 源码提交：$SOURCE_SHA。"
+            echo "- [Windows Release 打包与原生 smoke](https://github.com/$REPO/actions/runs/$WINDOWS_RUN)：PASS。"
+            echo "- [Node 22/24 Linux/Windows、Vue 测试](https://github.com/$REPO/actions/runs/$CI_RUN)：PASS。"
+            echo "- ZIP SHA-256：$ZIP_SHA；附件 SHA256SUMS.txt 可重复校验。"
+          } >> release-assets/RELEASE_NOTES.md
+          gh release create "$TAG" \
+            release-assets/Shot2Agent-Windows-x64.zip \
+            release-assets/SHA256SUMS.txt \
+            release-assets/PORTABLE-VERIFY.txt \
+            release-assets/TRAY-SMOKE.txt \
+            release-assets/BUILD.txt \
+            release-assets/LOCAL_V1_GUIDE.md \
+            release-assets/USER_GUIDE.md \
+            "release-assets/V${VERSION//./_}_VALIDATION.md" \
+            --repo "$REPO" --target "$SOURCE_SHA" --draft \
+            --title "Shot2Agent Local $VERSION — Windows portable" \
+            --notes-file release-assets/RELEASE_NOTES.md
+          gh release edit "$TAG" --repo "$REPO" --draft=false --latest
+          gh release view "$TAG" --repo "$REPO" --json isDraft,assets --jq '{draft: .isDraft, assets: [.assets[].name]}'
