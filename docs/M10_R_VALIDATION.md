@@ -6,6 +6,10 @@
 
 ## 已通过的候选身份与门禁
 
+2026-10-24 能力发现反馈修正（基于 `23bacc2`）：历史版本曾随全量执行注册表进入远程选择器，单个实例也会出现很多行。现在 presence 保留不可变执行版本，但用受控 `selectable`/`isDefault` 标记当前可选项；`/v1/workers` 隐藏请求设备本身与历史/已移除版本，兼容旧发布者按 Agent id 取最后批准版本。GUI 按电脑名称/设备 ID/状态分组，显示对方默认和已选电脑，并解释 B 接收无需选择远程目标。能力/claim 上限由 20 对齐现有 32 项批准注册表，避免仅因保留旧版本而使整个 Worker 拒绝请求；无存储迁移或版本替换。
+
+实际本机冻结安装退出 0；完整 `npm run check` 退出 0，262 tests / 259 PASS / 3 SKIPPED / 0 FAIL；完整 `npm run desktop:test-ui` 退出 0，33/33。新增真实 mock-CLI 配置编辑/归档后，公开列表只剩当前版本，但更新前已入 Relay 的旧版本任务仍完成且仅一次 attempt；同时验证 32/33 项边界、旧发布者、多台同名电脑、自身隐藏与默认标记。所有任务/Token/图片均为临时合成；VPS 更新和此修正的精确 SHA CI/ZIP 身份另记于 PR 交付，不能沿用前一候选门禁。
+
 2026-10-24 配置反馈修正（基于 `28ec78c`）：在用户所用的同树打包程序中，用隔离临时目录和合成 Token 实际复现首尾空白导致 `INVALID_REMOTE_TOKEN`、无空白可成功保存；不读取用户输入，不把这个复现推定成用户实际失败的唯一原因。现在保存会去除地址/名称/Token 首尾空白，OS 凭据保存后校验读回，失败保留原连接并给出分阶段中文提示；GUI 失败时保留遮蔽输入，未保存的新 Token 禁止测试旧连接；三个连接按钮复用通用 8px flex gap 并可换行。
 
 该修正本机实际执行：`corepack pnpm install --frozen-lockfile` 退出 0；`npm run check` 退出 0，260 tests / 257 PASS / 3 SKIPPED / 0 FAIL；`npm run desktop:test-ui` 退出 0，32/32。新增 Windows 真实 Credential Manager/controller 测试只使用临时 Token/目录，覆盖保存、读回、重启、更新、测试连接与删除；另有损坏输入、写入/读回/设置落盘失败的原连接保护，以及三个窗口宽度的实际按钮间距断言。提取 ZIP 验证也新增实际打包 controller 的 Remote 保存/读回/删除（不联网）。首轮 lint 因浏览器测试中的裸 `getComputedStyle` 实际 FAIL，改为 `window.getComputedStyle` 后完整 check PASS。此修正精确 SHA 的后续 CI/ZIP 身份见 PR 当前交付；尚未实际运行的打包门禁不沿用旧包冒称通过。

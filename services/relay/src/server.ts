@@ -7,7 +7,7 @@ import { CoreError, requireValue } from '../../../packages/core/src/model.ts';
 import type { Identity } from '../../../packages/core/src/model.ts';
 import type { LeaseProof } from '../../../packages/contracts/src/index.ts';
 import { IMAGE_LIMITS, validateSubmissionMetadata } from '../../../packages/contracts/src/index.ts';
-import { capabilities } from './capabilities.ts';
+import { capabilities, selectableCapabilities } from './capabilities.ts';
 import type { Presence } from './capabilities.ts';
 export interface Device extends Identity { token: string; role: 'capture' | 'viewer' | 'worker' | 'desktop' }
 export function validateDevices(devices: readonly Device[]): void {
@@ -53,7 +53,10 @@ export async function createRelay(core: TaskCore, devices: readonly Device[], re
   };
   app.get('/healthz', async () => ({ ok: true, protocol: 1 }));
   app.get('/v1/session', async request => { const d = identities.get(request)!; return { ownerId: d.ownerId, deviceId: d.deviceId, role: d.role }; });
-  app.get('/v1/workers', async request => presences(identity(request, 'read').ownerId));
+  app.get('/v1/workers', async request => {
+    const device = identity(request, 'read');
+    return presences(device.ownerId).filter(p => p.deviceId !== device.deviceId).map(p => ({ ...p, profiles: selectableCapabilities(p.profiles) }));
+  });
   app.post('/v1/worker/presence', async request => {
     const d = identity(request, 'worker'); const b = record(request.body);
     requireValue(typeof b.label === 'string' && b.label.length > 0 && b.label.length <= 80 && ![...b.label].some(c => c.charCodeAt(0) < 32) && typeof b.accepting === 'boolean', 'INVALID_PRESENCE');

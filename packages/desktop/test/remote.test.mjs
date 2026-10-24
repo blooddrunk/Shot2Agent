@@ -15,7 +15,8 @@ import { openCore } from '../../core/src/core.ts';
 import { sha256 } from '../../core/src/blobs.ts';
 import { syntheticSubmission } from '../../../apps/cli/src/fixture.ts';
 import { FAKE_PROFILE, FakeAgent } from '../../worker/src/fake.ts';
-import { credentialStore } from '../../../apps/desktop/tests/fixtures.mjs';
+import { credentialStore, makeCli } from '../../../apps/desktop/tests/fixtures.mjs';
+import { capabilities, selectableCapabilities } from '../../../services/relay/src/capabilities.ts';
 const devices = ['a', 'b', 'c'].map(deviceId => ({ ownerId: 'test-owner', deviceId, token: deviceId.repeat(40), role: 'desktop' }));
 const caps = [{ id: FAKE_PROFILE.id, version: FAKE_PROFILE.version, fingerprint: FAKE_PROFILE.fingerprint, provider: 'fake' }];
 const info = { profileFingerprint: FAKE_PROFILE.fingerprint, adapterName: 'fake', adapterVersion: '1', timeoutMs: 5000 };
@@ -25,6 +26,56 @@ function clipboard() { return { session: 'isolated-remote', seq: '1', image: und
   async writeFiles(files, expected) { if (expected && expected !== this.seq) return false; for (const f of files) assert.match(readFileSync(f, 'utf8'), /Fake result/); this.files.push(files); return true; },
   async notify() { this.notices++; }, close() {} }; }
 const rpc = (d, command, args = {}) => d.dispatch({ v: 1, command, ...args });
+
+test('Remote capability discovery keeps current versions, supports legacy publishers and bounds the full approved registry', async t => {
+  const h = await harness(t); const worker = new RemoteClient(h.url, devices[1].token);
+  assert.equal((await h.client().workers()).some(w => w.deviceId === 'a'), false);
+  const profiles = Array.from({ length: 32 }, (_, i) => ({ ...caps[0], id: `approved-${i}` }));
+  await worker.presence('32 approved profiles', profiles, true);
+  assert.equal((await h.client().workers()).find(w => w.deviceId === 'b').profiles.length, 32);
+  assert.equal(await worker.claim(profiles), null);
+  await assert.rejects(worker.presence('over limit', [...profiles, { ...caps[0], id: 'overflow' }], true), /RELAY_400/);
+  await assert.rejects(worker.claim([...profiles, { ...caps[0], id: 'overflow' }]), /RELAY_403|RELAY_400/);
+  assert.throws(() => capabilities([{ ...caps[0], selectable: 'yes' }]), /INVALID_CAPABILITIES/);
+  assert.throws(() => capabilities([{ ...caps[0], isDefault: 'yes' }]), /INVALID_CAPABILITIES/);
+  const old = { ...caps[0], version: 'old' }, current = { ...caps[0], version: 'current', isDefault: true };
+  assert.deepEqual(selectableCapabilities([old, current]), [current]);
+  assert.deepEqual(selectableCapabilities([{ ...old, selectable: false }, current]), [current]);
+});
+
+test('Remote discovery hides historical and archived versions while queued tasks execute their exact retained version', async t => {
+  const h = await harness(t); const dir = join(h.root, 'approved-worker'); mkdirSync(dir);
+  const workspace = join(dir, 'workspace'); mkdirSync(workspace); const cli = makeCli(dir, 'codex');
+  const b = new DesktopController(dir, clipboard(), undefined, 'codex', async () => [], { credentials: credentialStore() });
+  h.addCleanup(() => b.close()); await b.start();
+  const fields = { provider: 'codex', id: 'approved-codex', path: cli, workspace: realpathSync(workspace) };
+  await rpc(b, 'create-profile', fields); const original = b.app.profile;
+  await rpc(b, 'remote-configure', { url: h.url, token: devices[1].token, receive: true }); await rpc(b, 'remote-test');
+  const { metadata, images } = await syntheticSubmission();
+  const submission = { ...metadata, profileId: original.id, profileVersion: original.version, profileFingerprint: original.fingerprint, provider: 'codex', targetWorkerId: 'b' };
+  await h.client().submit(submission.taskId, submission, images);
+  await rpc(b, 'create-profile', { ...fields, editId: original.id, editVersion: original.version, reuseExisting: true });
+  const current = b.app.profile;
+  await rpc(b, 'create-profile', { ...fields, id: 'removed-codex' }); const archived = b.app.profile;
+  await rpc(b, 'select-agent', { id: current.id, version: current.version });
+  await rpc(b, 'archive-agent', { id: archived.id, version: archived.version, archived: true, confirm: true });
+  let executions = 0;
+  const mock = { name: 'codex', version: 'synthetic', async execute(...args) { executions++; return new FakeAgent().execute(...args); } };
+  b.app.setRegistry(b.app.registry.map(e => ({ profile: e.profile, adapter: mock })), current.id, current.version);
+  await rpc(b, 'remote-test');
+  const listed = (await h.client().workers()).find(w => w.deviceId === 'b').profiles;
+  assert.deepEqual(listed.map(p => [p.id, p.version, p.isDefault]), [[current.id, current.version, true]]);
+  const retained = JSON.parse(h.core.store.metadata('worker:test-owner:').find(row => row.key === 'worker:test-owner:b').value);
+  assert.equal(retained.profiles.length, 3); assert.equal(retained.profiles.filter(p => p.selectable === false).length, 2);
+  // Retry the original accepted upload after the capability update; it is still the same task.
+  await h.client().submit(submission.taskId, submission, images);
+  assert.equal(await b.app.work(undefined, new RemoteClient(h.url, devices[1].token)), true);
+  const completed = await h.client().get(submission.taskId);
+  assert.equal(completed.status, 'succeeded'); assert.equal(completed.submission.profileVersion, original.version);
+  assert.equal(completed.result.profileVersion, original.version); assert.equal(completed.attempts.length, 1); assert.equal(executions, 1);
+  await h.sync(h.a);
+  await assert.rejects(rpc(h.a, 'remote-select', { deviceId: 'a', id: FAKE_PROFILE.id, version: FAKE_PROFILE.version }), /REMOTE_OTHER_DEVICE_REQUIRED/);
+});
 
 test('Remote save trims pasted edges, rejects malformed tokens and preserves the previous connection', async t => {
   const h = await harness(t);

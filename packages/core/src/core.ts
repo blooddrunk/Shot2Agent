@@ -102,7 +102,7 @@ export class TaskCore {
     });
   }
   claim(identity: Identity, profiles: { id: string; version: string }[]): Claim | null {
-    requireValue(Array.isArray(profiles) && profiles.length > 0 && profiles.length <= 20 && profiles.every(p => p && typeof p.id === 'string' && typeof p.version === 'string'), 'INVALID_CAPABILITIES');
+    requireValue(Array.isArray(profiles) && profiles.length > 0 && profiles.length <= 32 && profiles.every(p => p && typeof p.id === 'string' && typeof p.version === 'string'), 'INVALID_CAPABILITIES');
     return this.store.transaction(() => {
       this.recover();
       const tasks = this.store.tasks();

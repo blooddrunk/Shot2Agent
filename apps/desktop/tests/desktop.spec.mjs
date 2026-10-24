@@ -164,6 +164,42 @@ test('Remote save errors preserve masked input, explain the failing stage and al
   expect(testsSent).toBe(0);
 });
 
+test('Remote picker groups other computers, hides historical versions and identifies their default Agent', async ({ page }) => {
+  await add(page, 'codex', 'this-pc-agent');
+  const core = openCore(join(root, 'picker-relay'), 'remote');
+  const relay = await createRelay(core, ['a', 'b', 'c'].map(id => ({ ownerId: 'picker', deviceId: id, role: 'desktop', token: id.repeat(40) })));
+  try {
+    const url = await relay.listen({ host: '127.0.0.1', port: 0 });
+    const profile = { id: 'remote-codex', version: 'current', fingerprint: FAKE_PROFILE.fingerprint, provider: 'codex' };
+    await new RemoteClient(url, 'b'.repeat(40)).presence('Shared name', [{ ...profile, version: 'historical', selectable: false }, { ...profile, selectable: true, isDefault: true }], true);
+    await new RemoteClient(url, 'c'.repeat(40)).presence('Shared name', [{ ...profile, id: 'other-agent' }], false);
+    await nav(page, '设置');
+    await page.getByLabel('Relay HTTPS 地址', { exact: true }).fill(url);
+    await page.getByLabel('这台电脑的名称', { exact: true }).fill('Shared name');
+    await page.getByLabel('设备 Token', { exact: true }).fill('a'.repeat(40));
+    await page.getByRole('button', { name: '保存连接', exact: true }).click();
+    await page.getByRole('button', { name: '测试连接 / 刷新电脑', exact: true }).click();
+    const picker = page.getByLabel('远程电脑及已批准 Agent', { exact: true });
+    await expect(picker.locator('optgroup')).toHaveCount(2);
+    await expect(picker.locator('optgroup').nth(0)).toHaveAttribute('label', 'Shared name · b · 在线');
+    await expect(picker.locator('optgroup').nth(1)).toHaveAttribute('label', 'Shared name · c · 已暂停接收');
+    await expect(picker.locator('option')).toHaveCount(3);
+    await expect(picker).toContainText('Codex CLI · remote-codex · 对方默认');
+    await expect(picker).not.toContainText('historical'); await expect(picker).not.toContainText('this-pc-agent');
+    await expect(page.getByText(/本机作为 B 接收任务时，无需选择远程目标/)).toBeVisible();
+    await expect(page.getByText(/本机可接收任务的当前助手/)).toContainText('this-pc-agent（本机默认）');
+    await picker.selectOption(JSON.stringify(['b', 'remote-codex', 'current']));
+    await expect(page.getByText('已选远程电脑：Shared name · b · 在线', { exact: true })).toBeVisible();
+    await page.getByRole('group', { name: '跨设备处理', exact: true }).screenshot({ path: 'build/ui-evidence/m10-current-agents.png' });
+    expect(desktop.settings.remote.target.version).toBe('current'); expect(testsSent).toBe(0);
+    // With only this computer online, receiving remains available without a target selection.
+    desktop.remote.workers = desktop.remote.workers.filter(w => w.deviceId === 'a');
+    await page.reload(); await nav(page, '设置');
+    await expect(picker.locator('optgroup')).toHaveCount(0);
+    await expect(page.getByText(/尚未发现其他电脑的当前助手/)).toBeVisible();
+  } finally { await relay.close(); core.close(); }
+});
+
 test('hotkeys save before Agent setup even when CLI discovery is invalid', async ({ page }) => {
   desktop.discovery = [{ provider: 'codex', path: '', status: 'invalid' }];
   await nav(page, '设置');

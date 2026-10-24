@@ -62,8 +62,9 @@ type Discovery = {
 type Snapshot = {
   remote?: {
     mode: string; url: string; label: string; receive: boolean; hasToken: boolean; status: string; error?: string; lastSync?: number;
+    identity?: { ownerId: string; deviceId: string };
     target?: { deviceId: string; id: string; version: string; provider: string };
-    workers: { deviceId: string; label: string; accepting: boolean; lastSeen: number; profiles: { id: string; version: string; provider: string }[] }[];
+    workers: { deviceId: string; label: string; accepting: boolean; lastSeen: number; profiles: { id: string; version: string; provider: string; selectable?: boolean; isDefault?: boolean }[] }[];
   };
   tray: TrayViewState;
   appVersion?: string;
@@ -142,6 +143,7 @@ const cliStatusText: Record<string, string> = {
   scan_incomplete: "检测未完成",
 };
 const errorText: Record<string, string> = {
+  REMOTE_OTHER_DEVICE_REQUIRED: "请选择另一台电脑的助手。本机处理请使用 Local；接收远程任务无需选择远程目标。",
   INVALID_REMOTE_TOKEN: "设备 Token 格式无效。请只粘贴 Token 内容（32–256 个可打印字符），不要包含文件名、说明或中间空格。",
   INVALID_REMOTE_SETTINGS: "跨设备设置无效。请填写 Relay HTTPS 地址和这台电脑的名称（最多 80 个字符）。",
   REMOTE_TOKEN_SAVE_FAILED: "Windows 凭据管理器未能保存设备 Token；连接设置未更改。请从托盘退出并重新打开应用后再试。",
@@ -228,10 +230,20 @@ const errorText: Record<string, string> = {
 };
 const data = ref<Snapshot>();
 const remoteUrl = ref(''); const remoteLabel = ref('Windows PC'); const remoteToken = ref(''); const remoteDirty = ref(false);
-const remoteOptions = computed(() => (data.value?.remote?.workers ?? []).flatMap(w => w.profiles.map(p => ({
-  key: JSON.stringify([w.deviceId, p.id, p.version]), label: `${w.label} · ${p.id} / ${p.version} (${providerText[p.provider] ?? p.provider}) · ${w.accepting && Date.now() - w.lastSeen < 60000 ? '在线' : '离线 / 已暂停'}`, deviceId: w.deviceId, ...p,
-}))));
+const remoteGroups = computed(() => (data.value?.remote?.workers ?? []).filter(w => w.deviceId !== data.value?.remote?.identity?.deviceId).map(w => {
+  const profiles = new Map<string, (typeof w.profiles)[number]>();
+  for (const profile of w.profiles) if (profile.selectable !== false) profiles.set(profile.id, profile);
+  const status = Date.now() - w.lastSeen >= 60000 ? '离线' : w.accepting ? '在线' : '已暂停接收';
+  return { deviceId: w.deviceId, label: `${w.label} · ${w.deviceId} · ${status}`, options: [...profiles.values()].map(p => ({
+    key: JSON.stringify([w.deviceId, p.id, p.version]), label: `${providerText[p.provider] ?? p.provider} · ${p.id}${p.isDefault ? ' · 对方默认' : ''}`, deviceId: w.deviceId, ...p,
+  })) };
+}).filter(w => w.options.length));
+const remoteOptions = computed(() => remoteGroups.value.flatMap(w => w.options));
 const remoteSelection = computed(() => { const t = data.value?.remote?.target; return t ? JSON.stringify([t.deviceId, t.id, t.version]) : ''; });
+const selectedRemoteComputer = computed(() => remoteGroups.value.find(g => g.options.some(p => p.key === remoteSelection.value))?.label);
+const remoteTargetUnavailable = computed(() => !!remoteSelection.value && !remoteOptions.value.some(p => p.key === remoteSelection.value));
+const localReceiverAgents = computed(() => (data.value?.agents ?? []).filter(a => !a.archived && !a.historical)
+  .map(a => `${providerText[a.provider] ?? a.provider} · ${a.id}${a.id === data.value?.profile.id && a.version === data.value?.profile.profileVersion ? '（本机默认）' : ''}`).join('；'));
 async function saveRemote() {
   await action('remote-configure', { url: remoteUrl.value.trim(), label: remoteLabel.value.trim(), ...(remoteToken.value ? { token: remoteToken.value.trim() } : {}) });
   if (!error.value) {
@@ -1211,10 +1223,17 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener("shot2agent
           <p v-if="data?.remote?.error" class="error">{{ friendlyError(data.remote.error) }} · {{ data.remote.error }}</p>
           <label>远程电脑及已批准 Agent
             <select aria-label="远程电脑及已批准 Agent" :value="remoteSelection" :disabled="busy || !data?.remote?.hasToken" @change="selectRemote">
-              <option value="" disabled>先测试连接，再选择远程 Agent</option>
-              <option v-for="option in remoteOptions" :key="option.key" :value="option.key">{{ option.label }}</option>
+              <option value="" disabled>发送到另一台电脑时，在此选择助手</option>
+              <option v-if="remoteTargetUnavailable" :value="remoteSelection" disabled>原目标暂不可选，请刷新或重新选择</option>
+              <optgroup v-for="group in remoteGroups" :key="group.deviceId" :label="group.label">
+                <option v-for="option in group.options" :key="option.key" :value="option.key">{{ option.label }}</option>
+              </optgroup>
             </select>
           </label>
+          <p v-if="selectedRemoteComputer" class="hint">已选远程电脑：{{ selectedRemoteComputer }}</p>
+          <p class="hint">本机作为 B 接收任务时，无需选择远程目标。请在 A 电脑选择本机及其助手；“对方默认”表示该电脑当前选中的助手。</p>
+          <p v-if="!remoteGroups.length && data?.remote?.status === 'connected'" class="hint">尚未发现其他电脑的当前助手。只在本机接收任务时，可直接开启下方接收开关。</p>
+          <p v-if="localReceiverAgents" class="hint">本机可接收任务的当前助手：{{ localReceiverAgents }}</p>
           <label class="check"><input type="checkbox" :checked="data?.remote?.receive" :disabled="busy || !data?.remote?.hasToken || data.setupRequired" @change="action('remote-configure', { receive: ($event.target as HTMLInputElement).checked })" />在本机接收远程任务（与本机任务共用一个执行槽）</label>
           <button :disabled="busy || !data?.remote?.hasToken" @click="action('remote-retry')">重试上传 / 同步结果</button>
           <p class="hint">离线任务保留在这台电脑上，不会转到 Local 执行。暂停接收仅影响下一项远程任务，当前 Agent 会继续完成。</p>

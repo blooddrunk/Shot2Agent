@@ -83,3 +83,6 @@ For M4, Remote mode fetches pending results using authenticated outbound request
 - Atomically claim; leases expire using server time rather than trusting worker clocks.
 - Test idempotency same-input replay, key collision, double claim, stale heartbeat/complete, restart persistence, poisoned file names, and crash-before/after-start.
 - See the executable starter in `packages/contracts/src/index.ts`. It validates immutable submission metadata, shared lifecycle and bounded Agent results. The shared core and adapters enforce byte integrity, identity and attempt fencing.
+## Remote capability discovery
+
+Worker presence retains approved execution versions for immutable queued tasks. Optional capability booleans `selectable` and `isDefault` distinguish current new-task choices from retained historical/archived execution entries. `/v1/workers` returns other devices only and filters nonselectable entries; older publishers without flags are reduced to their last approved version per Agent id. Claims still validate against the retained full presence, and start/fencing still check the exact task fingerprint. Devices/workspaces/programs/credentials are never selected by these display hints. Capability and claim lists are bounded to 32 entries, matching the existing approved registry limit.

@@ -119,12 +119,18 @@ export class DesktopController {
     this.remoteConnection = { url: settings.url, reference: settings.credentialRef, client }; return client;
   }
   private remoteRegistry() { return this.isLocalConfigured() ? this.app.registry : []; }
+  private remoteCapabilities() {
+    const selectable = this.settings.agents || this.settings.codex ? this.selectableProfileKeys() : undefined;
+    return this.remoteRegistry().map(e => ({ id: e.profile.id, version: e.profile.version, fingerprint: e.profile.fingerprint, provider: e.adapter.name,
+      selectable: !selectable || selectable.has(profileKey(e.profile.id, e.profile.version)),
+      isDefault: e.profile.id === this.app.profile.id && e.profile.version === this.app.profile.version }));
+  }
   private async syncRemote() {
     const settings = structuredClone(this.settings.remote);
     if (!settings?.credentialRef || !settings.url || !settings.identity) return;
     try {
       const client = await this.remoteClient(settings); const registry = this.remoteRegistry();
-      await client.presence(settings.label, registry.map(e => ({ id: e.profile.id, version: e.profile.version, fingerprint: e.profile.fingerprint, provider: e.adapter.name })), settings.receive && registry.length > 0);
+      await client.presence(settings.label, this.remoteCapabilities(), settings.receive && registry.length > 0);
       await this.remote.sync(settings, client);
     } catch (e) { this.remote.status = 'disconnected'; this.remote.error = safeError(e) === 'LOCAL_OPERATION_FAILED' ? 'REMOTE_NETWORK_UNAVAILABLE' : safeError(e); }
   }
@@ -425,6 +431,7 @@ export class DesktopController {
         this.remote.retry(); this.nextRemoteSync = 0; break;
       }
       case 'remote-select': {
+        requireValue(r.deviceId !== this.settings.remote?.identity?.deviceId, 'REMOTE_OTHER_DEVICE_REQUIRED');
         const device = this.remote.workers.find(w => w.deviceId === r.deviceId); const profile = device?.profiles.find(p => p.id === r.id && p.version === r.version);
         requireValue(device && profile, 'UNAPPROVED_TARGET');
         const next = structuredClone(this.settings); requireValue(next.remote?.identity, 'REMOTE_SETUP_REQUIRED');
