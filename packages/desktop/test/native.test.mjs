@@ -16,7 +16,7 @@ function fixture(t) {
   const base = realpathSync(mkdtempSync(join(tmpdir(), 'shot-native-'))), root = join(base, 'private'), out = join(base, 'images'); mkdirSync(out);
   const calls = { read: 0, sequence: 0, write: 0, image: 0 }; let sequence = 1;
   const clipboard = { session: 'synthetic-only', async sequence() { calls.sequence++; return String(sequence); }, async readImage() { calls.read++; }, async writeText() { calls.write++; return true; }, async writeImage() { calls.image++; return String(++sequence); }, close() {} };
-  const host = new DesktopController(root, clipboard, { adapter: new FakeAgent(), profile: FAKE_PROFILE });
+  const host = new DesktopController(root, clipboard, { adapter: new FakeAgent(), profile: FAKE_PROFILE }, 'staging', async () => []);
   const path = join(base, 'synthetic.png'); writeFileSync(path, png);
   t.after(async () => { await host.close(); rmSync(base, { recursive: true, force: true }); });
   const rpc = (command, args = {}) => host.dispatch({ v: 1, command, ...args });
