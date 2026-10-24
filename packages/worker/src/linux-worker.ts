@@ -12,7 +12,7 @@ import { runOnce } from './worker.ts';
 import type { ExecutionEntry } from './worker.ts';
 import { FakeAgent, FAKE_PROFILE } from './fake.ts';
 import { LinuxProcessOwner, linuxProcesses, privateFile, privateRoot, atomicPrivate, linuxRuntime } from './linux-platform.ts';
-import { inspectClaude, programDigest, resolveProgram } from './discovery.ts';
+import { inspectClaude, programDigest, resolveLinuxProgram } from './discovery.ts';
 import { inspectCodex } from './codex.ts';
 import { assertLinuxClaudePolicy } from './claude.ts';
 import { boundedProcess } from './process.ts';
@@ -123,7 +123,7 @@ export async function approveLinux(c: LinuxWorkerConfig, provider: 'codex' | 'cl
   requireValue(!/\.(cmd|ps1|bat|exe)$/i.test(executable), 'LINUX_EXECUTABLE_REQUIRED');
   requireValue(credentialFile !== c.tokenFile && ![c.stateRoot, c.scratchRoot, c.workspace].some(dir => !relative(dir, credentialFile).startsWith('..')), 'WORKER_SECRET_ISOLATION');
   const linux = { platform: 'linux' as const, uid: process.getuid!(), credentialFile, stateRoot: c.stateRoot };
-  const program = resolveProgram(provider === 'codex' ? 'codex' : 'claude', executable);
+  const program = resolveLinuxProgram(provider === 'codex' ? 'codex' : 'claude', executable);
   const session = linuxRuntime(linux, provider === 'codex' ? 'codex' : 'claude', provider === 'claude-compatible-endpoint');
   let cliVersion: string;
   try { cliVersion = provider === 'codex' ? await inspectCodex(program, c.workspace, session.runtime) : await inspectClaude(program, c.workspace, undefined, session.runtime); }

@@ -18,9 +18,9 @@ function regular(path: string): string {
   return realpathSync(path);
 }
 /** Never interpret shim text as code. Only map a known package's exact, contained bin entry. */
-export function resolveProgram(provider: Provider, path: string, node = process.execPath): Program {
-  if (process.platform === 'linux' && !/\.(cmd|ps1|bat)$/i.test(path)) {
-    requireValue(isAbsolute(path), 'LOCAL_ABSOLUTE_PATH_REQUIRED');
+export function resolveLinuxProgram(provider: Provider, path: string, node = process.execPath): Program {
+    requireValue(process.platform === 'linux', 'LINUX_REQUIRED');
+    requireValue(isAbsolute(path) && !path.startsWith('//') && !path.startsWith('\\\\'), 'LOCAL_ABSOLUTE_PATH_REQUIRED');
     path = realpathSync(path); // npm and native installers both publish symlinks.
     regular(path); accessSync(path, constants.X_OK);
     if (/\.(m?js|cjs)$/i.test(path)) {
@@ -36,7 +36,7 @@ export function resolveProgram(provider: Provider, path: string, node = process.
         const vendor = join(dirname(metadata), 'vendor', triple);
         const binary = [join(vendor, 'bin', 'codex'), join(vendor, 'codex', 'codex')].find(existsSync);
         requireValue(binary, 'LINUX_CODEX_BINARY_UNAVAILABLE');
-        return resolveProgram(provider, binary, node); // Pin actual native payload, not its npm launcher.
+        return resolveLinuxProgram(provider, binary, node); // Pin actual native payload, not its npm launcher.
       }
       return { executable: regular(realpathSync(node)), args: [path] };
     }
@@ -45,7 +45,9 @@ export function resolveProgram(provider: Provider, path: string, node = process.
     try { readSync(fd, magic, 0, 4, 0); } finally { closeSync(fd); }
     requireValue(magic.equals(Buffer.from([127, 69, 76, 70])), 'NATIVE_CLI_REQUIRED');
     return { executable: path, args: [] };
-  }
+}
+/** Existing desktop/Local selection retains its strict no-symlink contract. */
+export function resolveProgram(provider: Provider, path: string, node = process.execPath): Program {
   // The standalone Windows Codex installer exposes bin through directory junctions.
   // Resolve only a new native selection; stored programs and digest checks stay strict.
   if (process.platform === 'win32' && provider === 'codex' && /\.exe$/i.test(path)) {
@@ -107,8 +109,12 @@ export async function inspectCandidate(provider: Provider, path: string, cwd: st
   return base;
 }
 /** Enumerate only bounded known local directories; never recursively search or execute a shell. */
-export async function discover(provider: Provider, cwd: string, options: { manual?: string; approved?: { program: Program; version: string; digest?: string }; directories?: string[] } = {}): Promise<Candidate[]> {
-  if (options.manual) return [await inspectCandidate(provider, options.manual, cwd)];
+export async function discover(provider: Provider, cwd: string, options: { manual?: string; approved?: { program: Program; version: string; digest?: string }; directories?: string[]; linux?: boolean } = {}): Promise<Candidate[]> {
+  const resolver = options.linux ? resolveLinuxProgram : resolveProgram;
+  if (options.manual) {
+    try { return [await inspectCandidate(provider, options.manual, cwd, undefined, resolver(provider, options.manual))]; }
+    catch { return [{ provider, path: options.manual, status: 'invalid' }]; }
+  }
   if (options.approved) return [await inspectCandidate(provider, options.approved.program.executable, cwd, options.approved, options.approved.program)];
   const user = process.env.USERPROFILE ?? homedir();
   const dirs = options.directories ?? [...(process.env.PATH ?? process.env.Path ?? '').split(delimiter), join(user, '.local', 'bin'),
@@ -123,9 +129,9 @@ export async function discover(provider: Provider, cwd: string, options: { manua
       const path = join(dir, name); if (!existsSync(path)) continue;
       if (Date.now() > deadline) return [...candidates, { provider, path: '', status: 'scan_incomplete' }];
       let resolved: Program | undefined;
-      try { resolved = resolveProgram(provider, path); } catch { /* invalid candidates are reported below */ }
+      try { resolved = resolver(provider, path); } catch { /* invalid candidates are reported below */ }
       if (resolved && seen.has(JSON.stringify(resolved))) continue;
-      const c = await inspectCandidate(provider, path, cwd, undefined, resolved);
+      const c: Candidate = options.linux && !resolved ? { provider, path, status: 'invalid' } : await inspectCandidate(provider, path, cwd, undefined, resolved);
       const key = c.program ? JSON.stringify(c.program) : path;
       if (!seen.has(key)) { seen.add(key); candidates.push(c); }
       if (candidates.length >= 16) return [...candidates, { provider, path: '', status: 'scan_incomplete' }];

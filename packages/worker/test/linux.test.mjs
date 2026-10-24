@@ -10,7 +10,7 @@ import { randomBytes } from 'node:crypto';
 import sharp from 'sharp';
 import { LinuxWorkerState, DurableWorkerPort, validateLinuxConfig, approveLinux, linuxEntries, preflightLinux, loadLinuxProfiles } from '../src/linux-worker.ts';
 import { LinuxProcessOwner, linuxProcesses, privateFile, stopLinuxGroup } from '../src/linux-platform.ts';
-import { resolveProgram, programDigest } from '../src/discovery.ts';
+import { resolveLinuxProgram as resolveProgram, programDigest } from '../src/discovery.ts';
 import { boundedProcess } from '../src/process.ts';
 import { executionRegistry } from '../src/registry.ts';
 import { runOnce } from '../src/worker.ts';

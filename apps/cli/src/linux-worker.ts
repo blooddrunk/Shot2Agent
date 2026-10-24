@@ -23,7 +23,7 @@ try {
     try {
       await new LinuxProcessOwner(config.stateRoot).recover();
       if (command === 'discover') {
-        for (const name of ['codex', 'claude'] as const) process.stdout.write(JSON.stringify(await discover(name, config.workspace)) + '\n');
+        for (const name of ['codex', 'claude'] as const) process.stdout.write(JSON.stringify(await discover(name, config.workspace, { linux: true })) + '\n');
       } else if (command === 'approve' && ['codex', 'claude', 'claude-compatible-endpoint'].includes(provider) && executable && id) {
         await approveLinux(config, provider as 'codex' | 'claude' | 'claude-compatible-endpoint', executable, id,
           env.SHOT2AGENT_AGENT_SECRET_FILE ?? '/run/worker-secrets/agent-secret', env.SHOT2AGENT_GLM_ENDPOINT ?? 'https://open.bigmodel.cn/api/anthropic', env.SHOT2AGENT_GLM_MODEL ?? 'glm-5.3-flash');

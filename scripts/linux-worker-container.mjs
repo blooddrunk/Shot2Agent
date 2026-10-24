@@ -45,6 +45,8 @@ try {
   console.error(compose('logs', '--tail', '30', 'worker', 'relay')); throw error;
 } finally {
   try { compose('down', '--volumes', '--remove-orphans'); } catch { /* preserve original failure */ }
+  // Return our own test directories to the host test uid before recursive cleanup.
+  docker('run', '--rm', '--user', '0', '--network', 'none', '-v', `${root}:/provision`, image, 'node', '-e', `const fs=require('fs');for(const d of ['relay-secrets','worker-secrets']){const p='/provision/'+d;fs.chownSync(p,${process.getuid()},${process.getgid()});for(const f of fs.readdirSync(p))fs.chownSync(p+'/'+f,${process.getuid()},${process.getgid()})}`);
   // root is exactly the temporary directory created above; no production path is enumerated.
   rmSync(root, { recursive: true, force: true });
 }
