@@ -1,3 +1,4 @@
+import { nativeErrorText } from './native-options.ts';
 /** Read-only presentation shared by the WebView and native tray. Never persisted. */
 export interface TrayInput {
   setupRequired: boolean;
@@ -25,7 +26,7 @@ export function actionFeedback(status: string): string {
     NO_CURRENT_IMAGE: '剪贴板中没有图片，请先截图', DUPLICATE_IMAGE: '刚刚已提交相同图片，请查看历史',
     CLIPBOARD_BUSY: '剪贴板被占用，请稍后手动复制', AGENT_SETUP_REQUIRED: '请先在 AI 助手页完成配置',
   };
-  return known[status] ?? '操作未完成，请打开应用查看原因；不要重复提交 AI 任务';
+  return known[status] ?? nativeErrorText[status] ?? '操作未完成，请打开应用查看原因；不要重复提交 AI 任务';
 }
 export function trayView(s?: TrayInput) {
   const online = !!s;

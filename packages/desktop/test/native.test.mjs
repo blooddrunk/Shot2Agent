@@ -9,6 +9,7 @@ import { nativeDefaults, publishCapture, validateNative } from '../src/native.ts
 import { defaults, loadSettings, saveSettings } from '../src/settings.ts';
 import { validateHotkeys } from '../src/actions.ts';
 import { FolderSource } from '../src/folder.ts';
+import { actionFeedback } from '../src/tray.ts';
 import { FakeAgent, FAKE_PROFILE } from '../../worker/src/fake.ts';
 const png = await sharp({ create: { width: 64, height: 32, channels: 3, background: '#45a879' } }).png().toBuffer();
 function fixture(t) {
@@ -92,6 +93,8 @@ test('M11 native settings migrate without altering old profile, delivery or hotk
   saveSettings(f.root, stored);
   validateHotkeys({ 'capture-monitor': 'Ctrl+Alt+S', 'type-latest': 'Ctrl+Alt+T', 'stop-typing': 'Ctrl+Alt+X' });
   assert.throws(() => validateHotkeys({ 'capture-monitor': 'Ctrl+Alt+S', 'type-latest': 'Ctrl+Alt+S' }), /DUPLICATE_HOTKEY/);
+  assert.match(actionFeedback('TYPING_EMPTY'), /没有可输入/);
+  assert.match(actionFeedback('TYPING_INVALID_TARGET'), /文字输入位置/);
 });
 test('M11 watcher ignores partial files; a different external PNG still arrives', async t => {
   const f = fixture(t); const watcher = new FolderSource(); watcher.arm(f.out);

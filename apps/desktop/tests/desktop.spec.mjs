@@ -76,6 +76,7 @@ test.beforeEach(async ({ page }) => {
         nativeRequests.push(request);
         if (request.command === 'native-monitors') return { ok: true, value: [{ id: 'synthetic-display', width: 3840, height: 2160, primary: true }] };
         if (request.command === 'capture-monitor') await new Promise(resolve => setTimeout(resolve, 250));
+        if (request.command === 'type-clipboard') await desktop.dispatch({ v: 1, command: 'native-feedback', action: 'type-clipboard', status: 'preparing' });
         const value = await desktop.dispatch({ v: 1, command: 'snapshot' });
         nativeRuntime = { capturing: false, captureStatus: 'saved', typing: request.command === 'capture-monitor' ? {} : { phase: request.command === 'stop-typing' ? 'TYPING_CANCELED' : 'preparing', active: request.command !== 'stop-typing', sent: 0, total: 20 } };
         value.nativeRuntime = nativeRuntime;
@@ -1000,6 +1001,7 @@ for (const width of [1040, 720, 480]) test(`M11 native configuration and respons
   await page.getByRole('button', { name: '恢复捕获', exact: true }).click();
   await page.getByRole('button', { name: '输入剪贴板文本', exact: true }).click();
   await expect(page.getByLabel('直接输入进度')).toContainText('准备输入');
+  await expect(page.getByText('输入剪贴板文本：准备输入，请选择目标并松开快捷键', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: '停止输入', exact: true }).click();
   await expect(page.getByLabel('直接输入进度')).toContainText('输入已停止');
   expect(nativeRequests.map(r => r.command)).toEqual(['native-monitors', 'capture-monitor', 'type-clipboard', 'stop-typing']);

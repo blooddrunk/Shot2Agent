@@ -6,7 +6,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import AppNavigation from "./components/AppNavigation.vue";
 import AppIcon from "./components/AppIcon.vue";
 import { loadTheme, saveTheme, type Theme } from "./theme";
-import { nativeDefaults, type NativeOptions } from "../../../packages/desktop/src/native-options";
+import { nativeDefaults, nativeErrorText, type NativeOptions } from "../../../packages/desktop/src/native-options";
 
 type Receipt = {
   status: string;
@@ -151,30 +151,7 @@ const cliStatusText: Record<string, string> = {
   scan_incomplete: "检测未完成",
 };
 const errorText: Record<string, string> = {
-  CAPTURE_PAUSED: "截图已暂停，请先恢复捕获。",
-  CAPTURE_BUSY: "正在截图，请稍候。",
-  CAPTURE_DIRECTORY_REQUIRED: "请选择截图保存目录。",
-  CAPTURE_OUTPUT_REQUIRED: "请至少选择一种截图去向。",
-  CAPTURE_STORAGE_FAILED: "截图保存失败，请检查目录权限、磁盘空间及文件系统。",
-  UNSAFE_CAPTURE_DIRECTORY: "截图目录不可用，请选择实际本地目录。",
-  CAPTURE_UNSUPPORTED: "此设备不支持 Windows 原生截图。",
-  CAPTURE_ACCESS_DENIED: "Windows 拒绝截图，请检查系统的屏幕捕获权限或限制。",
-  CAPTURE_DEVICE_FAILED: "显示设备暂不可用，请检查显示器后重试。",
-  CAPTURE_MONITORS_UNAVAILABLE: "未发现可用显示器。",
-  CAPTURE_MONITOR_REMOVED: "所选显示器已断开，请刷新并重新选择。",
-  CAPTURE_MONITOR_CHANGED: "截图时显示器尺寸发生变化，请重试。",
-  CAPTURE_FRAME_TIMEOUT: "未收到屏幕画面，请确认桌面未锁定后重试。",
-  CAPTURE_SETTINGS_CHANGED: "截图期间设置发生变化，未提交；请重新截图。",
-  TYPING_EMPTY: "没有可输入的文字。",
-  TYPING_BUSY: "正在输入，请先停止当前操作。",
-  TYPING_TEXT_LIMIT: "文字过长或含有不支持的空字符，请选取较短的结果。",
-  TYPING_INVALID_TARGET: "请选择其他应用的文字输入位置，然后重试。",
-  TYPING_INJECTION_FAILED: "Windows 未接受全部输入，可能受权限限制。已停止，请检查已输入部分；不会自动重试或改用粘贴。",
-  TYPING_FOCUS_CHANGED: "目标焦点已改变，输入已停止。请检查已输入部分。",
-  TYPING_RELEASE_MODIFIERS: "请松开 Ctrl、Alt、Shift 和 Windows 键后重试。",
-  TYPING_CANCELED: "输入已停止，已输入的内容保留。",
-  TYPING_TIME_LIMIT: "已达到 5 分钟输入上限，剩余文字未发送。请检查已输入部分。",
-  INVALID_NATIVE_SETTINGS: "请检查原生截图和输入设置的取值。",
+  ...nativeErrorText,
   REMOTE_OTHER_DEVICE_REQUIRED: "请选择另一台电脑的助手。本机处理请使用 Local；接收远程任务无需选择远程目标。",
   INVALID_REMOTE_TOKEN: "设备 Token 格式无效。请只粘贴 Token 内容（32–256 个可打印字符），不要包含文件名、说明或中间空格。",
   INVALID_REMOTE_SETTINGS: "跨设备设置无效。请填写 Relay HTTPS 地址和这台电脑的名称（最多 80 个字符）。",
@@ -1019,7 +996,7 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener("shot2agent
             重新连接剪贴板
           </button>
         </p>
-        <p v-if="data?.tray.feedback" class="hint" role="status">{{ data.tray.feedback }}</p>
+        <p v-if="data?.tray.feedback && !(data.lastAction?.status === 'preparing' && data.nativeRuntime?.typing.phase)" class="hint" role="status">{{ data.tray.feedback }}</p>
         <p v-if="message" class="notice" role="status"><AppIcon name="check" />{{ message }}</p>
       </div>
       <section v-if="typingLabel" aria-label="直接输入进度" class="notice" role="status">
