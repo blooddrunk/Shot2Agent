@@ -323,7 +323,7 @@ export class DesktopController {
   private armFolder(settings: Settings) {
     const directory = settings.desktop.folderEnabled && !settings.desktop.paused ? settings.desktop.folderDirectory : undefined;
     if (directory) validateCaptureFolder(directory, [this.root, ...(settings.delivery.saveDirectory ? [settings.delivery.saveDirectory] : [])]);
-    const next = new FolderSource(); next.arm(directory); this.folder = next;
+    const next = new FolderSource(); next.arm(directory, settings.desktop.folderNewFilesOnly ?? true); this.folder = next;
   }
   private async addComposer(inputs: Buffer[]) {
     requireValue(inputs.length > 0 && this.composer.length + inputs.length <= 5, 'BATCH_IMAGE_COUNT');
@@ -597,7 +597,7 @@ export class DesktopController {
         if (r.capture !== undefined) {
           requireValue(r.capture && typeof r.capture === 'object' && !Array.isArray(r.capture), 'INVALID_CAPTURE_SETTINGS');
           const capture = r.capture as Record<string, unknown>;
-          requireValue(Object.keys(capture).every(k => ['enabled', 'mode', 'folderEnabled', 'folderDirectory'].includes(k)), 'INVALID_CAPTURE_SETTINGS');
+          requireValue(Object.keys(capture).every(k => ['enabled', 'mode', 'folderEnabled', 'folderDirectory', 'folderNewFilesOnly'].includes(k)), 'INVALID_CAPTURE_SETTINGS');
           Object.assign(next.desktop, capture);
         }
         requireValue(!(next.desktop.enabled || next.desktop.folderEnabled) || this.isConfigured(), 'AGENT_SETUP_REQUIRED');

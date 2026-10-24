@@ -24,9 +24,9 @@ function fixture(t) {
   const capture = async () => rpc('capture-ingest', { path, options: Object.fromEntries(Object.entries(await rpc('capture-plan')).sort(([a], [b]) => a.localeCompare(b))) });
   return { base, root, out, host, rpc, configure, capture, calls, path };
 }
-test('M11 file-only PNG never calls clipboard; owned watched output never becomes a task', async t => {
+for (const folderNewFilesOnly of [true, false]) test(`M11 file-only PNG never calls clipboard; same-folder new-only=${folderNewFilesOnly} never becomes a task`, async t => {
   const f = fixture(t); await f.host.start();
-  await f.rpc('configure', { capture: { folderEnabled: true, folderDirectory: f.out, mode: 'auto' }, autoConsent: true, delivery: { clipboard: 'manual' } });
+  await f.rpc('configure', { capture: { folderEnabled: true, folderDirectory: f.out, folderNewFilesOnly, mode: 'auto' }, autoConsent: true, delivery: { clipboard: 'manual' } });
   await f.configure(); const before = { ...f.calls };
   await f.capture(); await f.capture();
   assert.deepEqual(f.calls, before);
@@ -35,9 +35,9 @@ test('M11 file-only PNG never calls clipboard; owned watched output never become
   await f.host.tick(); await new Promise(r => setTimeout(r, 1300)); await f.host.tick();
   assert.equal(f.host.app.list().length, 0); assert.equal(f.host.app.pending, undefined); assert.equal(f.calls.read, 0); assert.equal(f.calls.write, 0);
 });
-test('M11 save plus direct submit is one task through watched-folder reconciliation', async t => {
+for (const folderNewFilesOnly of [true, false]) test(`M11 save plus direct submit is one task through same-folder new-only=${folderNewFilesOnly}`, async t => {
   const f = fixture(t); await f.host.start();
-  await f.rpc('configure', { capture: { folderEnabled: true, folderDirectory: f.out, mode: 'auto' }, autoConsent: true, delivery: { clipboard: 'manual' } });
+  await f.rpc('configure', { capture: { folderEnabled: true, folderDirectory: f.out, folderNewFilesOnly, mode: 'auto' }, autoConsent: true, delivery: { clipboard: 'manual' } });
   await f.configure({ submit: true }); await f.capture(); await f.capture();
   await f.host.tick(); await new Promise(r => setTimeout(r, 1300)); await f.host.tick();
   assert.equal(f.host.app.list().length, 1); assert.equal(f.host.app.list()[0].attempts.length, 1); assert.equal(f.calls.write, 0);

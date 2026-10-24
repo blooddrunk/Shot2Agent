@@ -835,6 +835,31 @@ test("M8 home capture status follows applied sources, mode, pause and external c
   } finally { rmSync(folder, { recursive: true, force: true }); }
 });
 
+test('folder GUI defaults to new files and explicitly warns before including existing images', async ({ page }) => {
+  await add(page, 'claude-compatible-endpoint', 'folder-policy');
+  const folder = realpathSync(mkdtempSync(join(tmpdir(), 'shot-new-files-ui-')));
+  try {
+    await nav(page, '设置');
+    await page.getByLabel('监听截图文件夹（仅此目录）', { exact: true }).check();
+    pickerSelection = folder; await page.getByRole('button', { name: '选择截图文件夹…' }).click();
+    const policy = page.getByLabel('仅监听新增文件（推荐）', { exact: true });
+    await expect(policy).toBeChecked();
+    await page.getByLabel('剪贴板返回').selectOption('off');
+    await page.getByRole('button', { name: '应用设置', exact: true }).click();
+    expect(desktop.settings.desktop.folderNewFilesOnly).toBe(true);
+    await policy.uncheck();
+    await expect(page.getByText(/自动提交模式可能生成多个历史任务/)).toBeVisible();
+    await page.getByRole('button', { name: '应用设置', exact: true }).click();
+    await expect(page.getByText('设置已保存。将处理目录中已有图片及后续新增或修改的图片。', { exact: true })).toBeVisible();
+    expect(desktop.settings.desktop.folderNewFilesOnly).toBe(false);
+    await page.reload(); await nav(page, '设置');
+    await expect(policy).not.toBeChecked();
+    await policy.check(); await page.getByRole('button', { name: '应用设置', exact: true }).click();
+    expect(desktop.settings.desktop.folderNewFilesOnly).toBe(true);
+    expect(testsSent).toBe(0);
+  } finally { rmSync(folder, { recursive: true, force: true }); }
+});
+
 
 test("M8 Copy files distinguishes native replacement from verified success without AI rerun", async ({ page }) => {
   await add(page, "codex", "copy-feedback-agent"); await seedTasks(1); await nav(page, "首页");

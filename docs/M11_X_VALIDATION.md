@@ -68,4 +68,10 @@ The prior [M10 minimal three-row checklist](REMOTE_GUIDE.md#最小真实设备�
 
 ## Release assessment
 
+### Follow-up: historical screenshots and Chinese typing report
+
+The operator subsequently reported Chinese text rendered as boxes in Windows Notepad on computer A while using Relay, with browser input working, and requested a controllable new-files-only watcher. Google search input also showed focus changes. The broad earlier B report does not qualify the newly reported Notepad target failure; that input path remains under investigation. The existing hosted Unicode EDIT readback is narrower evidence and is not a fix for this report. No compatibility change or successful target retest is claimed yet.
+
+The watcher originally consumed the initial directory snapshot, but a later stamp change made those historical paths eligible again. A regression reproduces this before the fix. The default/legacy-unset `folderNewFilesOnly=true` now retains ignored baseline and accepted paths until observed deletion; modifications/overwrites cannot enqueue them again. GUI opt-out explicitly includes existing images and modifications with an automatic-task warning. Tests cover initial-content changes, stable new files, repeated edits, delete/recreate, opt-out, settings validation/persistence, restart/resume and GUI default/warning. Independent same-directory native save/direct-submit tests retain file-only zero tasks and one-task submission. Previously submitted tasks are untouched.
+
 Development candidate only; no formal v1.1.0 publication was requested. Physical A/B/C are operator-reported PASS as recorded above; additional device/app configurations and unmentioned fault scenarios remain unverified. Region selection overlay and M12-V Linux Worker are deferred; [bounded next plan](M12_V_PLAN.md).

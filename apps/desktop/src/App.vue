@@ -101,6 +101,7 @@ type Snapshot = {
     enabled: boolean;
     folderEnabled?: boolean;
     folderDirectory?: string;
+    folderNewFilesOnly?: boolean;
     mode: string;
     paused: boolean;
     autoConsent: boolean;
@@ -271,6 +272,7 @@ const busy = ref(false);
 const enabled = ref(false);
 const folderEnabled = ref(false);
 const folderDirectory = ref("");
+const folderNewFilesOnly = ref(true);
 const clipboardPayload = ref("text");
 const notification = ref(false);
 const mode = ref("confirm");
@@ -467,6 +469,7 @@ function hydrate(snapshot: Snapshot) {
     enabled.value = snapshot.settings.enabled;
     folderEnabled.value = snapshot.settings.folderEnabled ?? false;
     folderDirectory.value = snapshot.settings.folderDirectory ?? "";
+    folderNewFilesOnly.value = snapshot.settings.folderNewFilesOnly ?? true;
     clipboardPayload.value = snapshot.delivery.clipboardPayload ?? "text";
     notification.value = snapshot.delivery.notification ?? false;
     mode.value = snapshot.settings.mode;
@@ -759,7 +762,7 @@ async function apply() {
     return;
   }
   await action("configure", {
-    capture: { enabled: enabled.value, mode: mode.value, folderEnabled: folderEnabled.value, ...(folderDirectory.value ? { folderDirectory: folderDirectory.value } : {}) },
+    capture: { enabled: enabled.value, mode: mode.value, folderEnabled: folderEnabled.value, folderNewFilesOnly: folderNewFilesOnly.value, ...(folderDirectory.value ? { folderDirectory: folderDirectory.value } : {}) },
     autoConsent: autoConsent.value,
     alwaysConsent: alwaysConsent.value,
     delivery: {
@@ -776,7 +779,7 @@ async function apply() {
   });
   if (!error.value) {
     dirty.value = false;
-    message.value = "设置已保存。仅监听此后新增的图片。";
+    message.value = folderEnabled.value && !folderNewFilesOnly.value ? "设置已保存。将处理目录中已有图片及后续新增或修改的图片。" : "设置已保存。仅监听此后新增的图片。";
     await refresh();
   }
 }
@@ -1349,7 +1352,10 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener("shot2agent
           <template v-if="folderEnabled">
             <label>截图文件夹<input v-model="folderDirectory" type="text" placeholder="请选择独立的截图目录" spellcheck="false" /></label>
             <button type="button" @click="pickCaptureFolder"><AppIcon name="folder" />选择截图文件夹…</button>
-            <p class="hint">仅 PNG/JPEG/WebP，文件完成写入后处理；启动、恢复和切换目录时跳过已有文件。不能与应用数据或结果保存目录重叠。</p>
+            <label class="check"><input type="checkbox" v-model="folderNewFilesOnly" />仅监听新增文件（推荐）</label>
+            <p v-if="folderNewFilesOnly" class="hint">每次启用、启动、恢复或切换目录时跳过已有文件；这些文件后续修改也不会触发任务。新增文件只处理一次，同名覆盖不触发。</p>
+            <p v-else class="notice">将处理目录中已有图片及后续修改；自动提交模式可能生成多个历史任务。只想处理新截图时，请保持“仅监听新增文件”勾选。</p>
+            <p class="hint">仅 PNG/JPEG/WebP，文件完成写入后处理。可与原生截图保存目录相同；应用自己保存的截图不通过监听重复提交。不能与应用数据或结果 Markdown 保存目录重叠。</p>
           </template>
           <label
             >提交方式<select v-model="mode">
@@ -1364,7 +1370,7 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener("shot2agent
             />我同意新截图自动发送给所选 Agent。云模型会收到图片。</label
           >
           <p class="hint">
-            启动和恢复时会跳过已存在的图片。确认预览只保留在内存。
+            剪贴板监听在启动和恢复时跳过当前图片；文件夹按上方选项处理。确认预览只保留在内存。
           </p>
           <h2><AppIcon name="file" />结果去向</h2>
           <p class="hint">

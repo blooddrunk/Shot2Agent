@@ -22,7 +22,7 @@ export interface Settings {
   credentialCleanup?: string[];
   adapter: 'fake' | 'codex'; delivery: DeliveryConfig; codex?: CodexPolicy;
   agents?: { version: 1; selected: { id: string; version: string }; profiles: ApprovedPolicy[]; archived?: { id: string; version: string }[] };
-  desktop: { version: 1; enabled: boolean; folderEnabled?: boolean; folderDirectory?: string; mode: 'confirm' | 'auto'; paused: boolean; autoConsent: boolean; alwaysConsent: boolean };
+  desktop: { version: 1; enabled: boolean; folderEnabled?: boolean; folderDirectory?: string; folderNewFilesOnly?: boolean; mode: 'confirm' | 'auto'; paused: boolean; autoConsent: boolean; alwaysConsent: boolean };
 }
 export const defaults = (): Settings => ({ adapter: 'fake', delivery: { clipboard: 'always' },
   desktop: { version: 1, enabled: false, mode: 'confirm', paused: false, autoConsent: false, alwaysConsent: false } });
@@ -53,6 +53,7 @@ export function validate(settings: Settings, allowPendingAlways = false): void {
   requireValue(c && c.version === 1 && ['confirm', 'auto'].includes(c.mode) &&
     [c.enabled, c.paused, c.autoConsent, c.alwaysConsent].every(v => typeof v === 'boolean'), 'INVALID_DESKTOP_SETTINGS');
   requireValue(c.folderEnabled === undefined || typeof c.folderEnabled === 'boolean', 'INVALID_CAPTURE_SETTINGS');
+  requireValue(c.folderNewFilesOnly === undefined || typeof c.folderNewFilesOnly === 'boolean', 'INVALID_CAPTURE_SETTINGS');
   requireValue(c.folderDirectory === undefined || (typeof c.folderDirectory === 'string' && isAbsolute(c.folderDirectory)), 'INVALID_CAPTURE_FOLDER');
   requireValue(!c.folderEnabled || !!c.folderDirectory, 'CAPTURE_FOLDER_REQUIRED');
   requireValue(c.mode !== 'auto' || c.autoConsent, 'AUTO_CLOUD_CONSENT_REQUIRED');
