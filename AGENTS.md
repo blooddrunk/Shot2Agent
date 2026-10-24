@@ -6,10 +6,11 @@
 2. Read README.md, docs/LOCAL_V1_FIRST_MILESTONE.md, docs/M9_LOCAL_V1_RELEASE.md, docs/M8_VALIDATION.md, docs/ROADMAP.md, docs/PRODUCT.md, docs/ARCHITECTURE.md, docs/RESULT_DELIVERY.md, docs/TESTING.md and docs/DECISIONS.md. Consult specific older M* evidence only where it is relevant.
 3. Report verified baseline, exact selected goal and affected contracts briefly. Do not implement an obsolete milestone merely because an old handoff mentions it.
 
-## Current status and next goal (2026-10-23)
+## Current status and next goal (2026-10-24)
 
 - **Local v1.0.0 is formally released** at main/tag/Release commit `789c90daaba54301ec1eb54f2ed69939bcc3702a`: [release](https://github.com/blooddrunk/Shot2Agent/releases/tag/v1.0.0). Final main [Node matrix and Vue CI](https://github.com/blooddrunk/Shot2Agent/actions/runs/39737315101) and [Windows Rust/package/extracted EXE CI](https://github.com/blooddrunk/Shot2Agent/actions/runs/39737315089) passed. The 2026-10-22 operator report confirmed Explorer copy for the published RC within its documented scope; do not invent a recorded focus video or additional trials.
-- **Current authorized goal: v1.0.1 Local UX polish**, beginning with status-aware Windows tray icons/tooltips/menus, clear pause-vs-processing semantics, pending-preview awareness, eligible-only delivery retry, onboarding copy and small evidence-backed UI improvements. **Read [the complete v1.0.1 specification](docs/V1_0_1_LOCAL_UX_POLISH.md) before implementation.** This documentation PR is not an implementation or validation of 1.0.1.
+- **v1.0.1 Local UX polish is implemented in PR #23** at runtime source `9f7a301a8a6fcb2b4bfb60e650bf12182a1922e4`. Its Node 22/24 Linux/Windows matrix, 26 Vue tests, 8 Windows Rust tests, package/extracted EXE and native tray API smoke passed. On 2026-10-24 the operator reported “验收已经全部通过”; record the necessary native tray checklist as operator-reported PASS. Do not demand another unchanged native tray/file-copy checklist or invent Agent-captured visual evidence / unreported environment combinations.
+- **Current follow-up: record acceptance and prepare Local v1.0.1 merge/release.** Check actual PR/main/tag/Release state before acting. Final merged-main CI, ZIP and BUILD/MANIFEST identity still need exact-SHA verification before a formal release. See [v1.0.1 validation](docs/V1_0_1_VALIDATION.md) and [release notes draft](docs/RELEASE_NOTES_1_0_1.md).
 - Do not restart v1.0.0 release work. Remote/Relay/VPS, React rewrite, Agent failover and infrastructure expansion remain deferred. Preserve v1.0.0 behavior and refer to [v1.0.0 validation](docs/M9_VALIDATION.md) for previously closed gates.
 
 ## Architecture and engineering boundaries

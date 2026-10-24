@@ -1,6 +1,13 @@
 # Local v1.0.1 UX polish — 验证与原生验收
 
-日期：2026-10-23。实现候选；**原生托盘可视验收未完成，不发布正式 v1.0.1 标签**。
+更新：2026-10-24。**操作员已反馈“验收已经全部通过”，本轮必要的 Windows 原生托盘验收记录为操作员报告 PASS。** 2026-10-23 的自动化结果保留；最后合并、main 构建及正式发布状态以本 PR / Release 的实际结果为准。
+
+## 操作员验收结论（2026-10-24）
+
+- 直接用户反馈：“验收已经全部通过”。按上一轮交付的最小 Fake 原生托盘清单记录为全部通过：监听/未开启、隐藏待确认与不抢焦点、暂停/关闭监听仍处理、队列与菜单资格、错误提示和恢复、退出清理。
+- 上一轮交付源码为 `9f7a301a8a6fcb2b4bfb60e650bf12182a1922e4`；验收候选包 BUILD/MANIFEST 为 PR 合并测试提交 `b899da52d2e754bbb2839e68adc4a4b9a835c2bf`，ZIP SHA-256 `cc40e7a4f6f187cf0ba812de4405f8fff115138b88d82518e53d842fbbc0e041`。
+- 此结论来自操作员实机反馈，不是 Agent 自动截图/录像或 CI 视觉证明。未另行细分报告的任意主题、DPI、Explorer 重启、通知环境与真实付费提供商能力不扩大宣称；无需为本轮已经验收且未改动的行为重复清单。
+- 本次仅归档验收和发布说明，不修改运行代码、任务 Core、文件剪贴板、凭据或 Agent；后续发布须核对最终源码的自动化门和包身份。Remote/Relay 继续延后。
 
 ## 基线与实现
 
@@ -9,7 +16,7 @@
 - 状态由 `packages/desktop/src/tray.ts` 纯函数派生，供快照、Vue 和 Rust 托盘共享；不新增持久化字段。优先级：异常、处理、排队、待确认、暂停、监听、未开启/待设置。
 - 捕获与执行各自描述，paused+running/off+running 保持处理主图标和准确捕获文字。待确认仅在真实 pending 时出现；截图不打开或聚焦窗口。单击托盘/菜单回到首页预览。
 - 原生 Rust 线程约 2 秒刷新；快捷动作后立即刷新。仅变化的 icon/tooltip/menu 调用原生 setter；失败的 setter 不缓存成功，下次重试。协调器 RPC 失败立即替换为异常/禁用动作；死亡由下一次轮询发现，挂起的 RPC 保留既有 20 秒超时（最坏约 22 秒）。退出唤醒轮询并移除托盘，保留进程树/热键清理。
-- 16/20/24/32px 等效原生 RGBA 图像，有深色边线、浅色底和不同轮廓，不只靠颜色。Windows TaskbarCreated 恢复由锁定的 tray-icon 依赖处理；当前并未实测重启 Explorer。
+- 16/20/24/32px 等效原生 RGBA 图像，有深色边线、浅色底和不同轮廓，不只靠颜色。Windows TaskbarCreated 恢复由锁定的 tray-icon 依赖处理；未另行记录 Explorer 重启的具体环境组合。
 - 每条历史携带只读 retryableChannels；重试按钮和控制器只重试启用且符合现有资格的失败通道，排除 conflict/ambiguous。失败反馈不报告成功；无 Agent 重跑。
 - 首次添加仅在发现一种兼容安装时预选对应类型，否则明确选择 Codex / Claude Code / GLM。不会默认选择 GLM，不改变已保存默认助手。
 - 四页/主题/窗口尺寸保持原样。中文恢复提示优先，技术代码放在详情。保留 Core、adapters、文件剪贴板、Token 保存/可选测试、同意和未知执行不重放规则；无 Remote/Relay/新服务/遥测。
@@ -31,13 +38,15 @@
 | `Shot2Agent.exe --staging --tray-smoke`（打包目录及解压目录） | 0：打包及解压目录均 PASS | 创建真实原生 tray/menu/image，setter 与菜单 enabled readback、更新去重、杀掉本次自有协调器后的异常状态、移除托盘；不证明实见外观/真实点击 |
 | impeccable detector / diff whitespace | detector 0、无发现；git diff --check 0 | 机械检查不能替代视觉检查 |
 
-已执行代码源 `3d9dba0a62745182391428ba5ed382b14ab81b6a` 的 [Node 22/24 Linux/Windows + 25 Vue tests](https://github.com/blooddrunk/Shot2Agent/actions/runs/39895556862) 和 [Windows Rust/package/完整解压 EXE/原生 tray smoke](https://github.com/blooddrunk/Shot2Agent/actions/runs/39895556832) 均成功；Windows Node 每档 232 tests / 230 passed / 2 skipped，Linux 每档 232 / 207 / 25。PR workflow 的 BUILD/MANIFEST 记录合并测试提交，不能把 branch SHA 与构建 SHA 混称。最后增补仅增加预览收费说明、off+running/隔离故障按钮 GUI 回归和原生菜单文字 readback；**最终分支 SHA、精确 HEAD 的 CI 和 ZIP 哈希见 [实现 PR #23](https://github.com/blooddrunk/Shot2Agent/pull/23) 的描述与 checks**，不可用本段较早提交的通过覆盖后续失败。
+最终实现源码 `9f7a301a8a6fcb2b4bfb60e650bf12182a1922e4` 的 [Node 22/24 Linux/Windows + 26 Vue tests](https://github.com/blooddrunk/Shot2Agent/actions/runs/39896243873) 和 [Windows Rust/package/完整解压 EXE/原生 tray smoke](https://github.com/blooddrunk/Shot2Agent/actions/runs/39896243753) 均成功。Windows Node 每档 232 tests / 230 passed / 2 skipped，Linux 每档 232 / 207 / 25；Rust 8/8。该包下载后独立 CRC/SHA 与 249 个清单文件哈希核对通过；本机 Windows `--staging --smoke` 与 `--staging --tray-smoke` 均退出 0。
+
+PR workflow 的 BUILD/MANIFEST 记录合并测试提交，不能把 branch SHA 与构建 SHA 混称。仅文档归档更新后的精确 HEAD / 最终 main CI 和发布包 SHA 将记录在 [实现 PR #23](https://github.com/blooddrunk/Shot2Agent/pull/23) 与正式 Release，不以较早提交的通过覆盖后续失败。
 
 早期新增测试产生的 lint 错误（structuredClone/Event 的测试全局声明），以及 3 项测试前提错误（未进入助手页/漏设手动复制），均修正后通过；没有跳过失败测试。浏览器截图检查包括深浅主题、1040/720/480 宽度及预览、设置、历史、编辑器。源码 SHA、最终 CI URL、测试数量和 ZIP 校验值将在本 PR 的最终证据中填写，不将旧版本证据挪用为本版本 PASS。
 
-## 一次最小的 Windows Fake 原生验收
+## 已完成的一次最小 Windows Fake 原生验收（保留复现步骤）
 
-**为什么仍需要这一次：** Computer Use 初始化及一次重试都在操作前失败：`sandboxCwd is not a local file URI: file:///mnt/d/code/projects/Shot2Agent`。未获取真实任务栏截图、未点击原生托盘。浏览器/原生 API readback 不能证明 Windows 任务栏外观及焦点行为。既有未改动的原生 Markdown 文件复制验收继续保留，不要求重测，也不测试真实收费模型。
+**2026-10-23 请求这次人工观察的原因（已于 2026-10-24 由操作员反馈关闭）：** Computer Use 初始化及一次重试都在操作前失败：`sandboxCwd is not a local file URI: file:///mnt/d/code/projects/Shot2Agent`。未获取真实任务栏截图、未点击原生托盘。浏览器/原生 API readback 不能证明 Windows 任务栏外观及焦点行为。既有未改动的原生 Markdown 文件复制验收继续保留，不要求重测，也不测试真实收费模型。
 
 前提：Windows 11 已解锁桌面；使用本 PR 最终成功 Windows CI 的完整 ZIP，完整解压到一个独立目录，保留 EXE 和 runtime。先自行退出日常实例，避免认错托盘。**只双击 `Start acceptance.cmd`**，窗口标题必须显示 `Fake acceptance`；每次得到全新的临时 root，不打开日常历史/Token。Fake 每个任务延迟约 8 秒。设置页有仅此模式出现的“隔离故障测试”；正式 Local 拒绝这些指令。
 
@@ -50,4 +59,4 @@
 
 可选环境重现：在无运行 Fake 任务时通过任务管理器重启“Windows 资源管理器”，预期托盘恢复且 2 秒内显示实际状态；在 Windows 显示设置切换 100%/150%/200% 缩放，预期轮廓仍可辨。未执行的组合必须写“未验证”。这些系统操作不由自动化代为执行。
 
-最小回报：以上 1–5 各 PASS/具体失败，以及观察到的 Windows 主题/缩放；失败时只报哪次点击、实际图标/文字/焦点或退出结果。**目前没有操作员的新托盘 PASS，不建议正式发布 v1.0.1。** 全部必要 Windows 自动门和以上原生观察通过后，再从最终 main 构建和发布；不要修改 v1.0.0 tag/Release。
+结论：操作员于 2026-10-24 反馈“验收已经全部通过”，以上本轮必要观察已记录 PASS。此处步骤仅留作复现；不再请求重复验收或重测既有原生文件复制。正式发布前核对最终 main 的自动化门、ZIP 和 BUILD/MANIFEST 身份；保持 v1.0.0 tag/Release 不变。
