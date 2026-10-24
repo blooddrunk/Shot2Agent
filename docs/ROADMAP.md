@@ -1,4 +1,4 @@
-> Current user-authorized scope: **M11-X native capture + manual typing**, based on merged M10-R #25/#26. [Scope](M11_X_SCOPE.md) · [validation](M11_X_VALIDATION.md). M11-R web history stays deferred; [M12-V Linux Worker](M12_V_PLAN.md) is design-only until M11-X is finished. Earlier milestone descriptions below are historical.
+> Current handoff (2026-10-24): **M11-X PR #27 merged** at `3675182e28dbba75c71824a83baa0b15b825c9f5`, with exact-head green Windows/Linux/Node and Windows native/package CI. Development candidate `1.1.0-dev.5` is **not a formal v1.1.0 release**. **Next: M12-V optional Linux VPS Agent Worker implementation**, governed by [bounded plan](M12_V_PLAN.md). Reuse Relay transport and the existing Windows Worker/task model; Relay must not execute Agents. Keep [M11-X validation](M11_X_VALIDATION.md) and [M10-R validation](M10_R_VALIDATION.md) evidence boundaries; preserve standalone Local and Windows Worker. Defer M11-R web history, push and failover; do not repeat passed physical A/B/C without a changed behavior.
 
 > Local 1.0 release: [用户使用手册](USER_GUIDE.md) · [发布验证与操作员验收](M9_VALIDATION.md)。下文保留历史规格和规划，不作为当前用户操作指南。
 
