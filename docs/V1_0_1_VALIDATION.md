@@ -7,7 +7,7 @@
 - 直接用户反馈：“验收已经全部通过”。按上一轮交付的最小 Fake 原生托盘清单记录为全部通过：监听/未开启、隐藏待确认与不抢焦点、暂停/关闭监听仍处理、队列与菜单资格、错误提示和恢复、退出清理。
 - 上一轮交付源码为 `9f7a301a8a6fcb2b4bfb60e650bf12182a1922e4`；验收候选包 BUILD/MANIFEST 为 PR 合并测试提交 `b899da52d2e754bbb2839e68adc4a4b9a835c2bf`，ZIP SHA-256 `cc40e7a4f6f187cf0ba812de4405f8fff115138b88d82518e53d842fbbc0e041`。
 - 此结论来自操作员实机反馈，不是 Agent 自动截图/录像或 CI 视觉证明。未另行细分报告的任意主题、DPI、Explorer 重启、通知环境与真实付费提供商能力不扩大宣称；无需为本轮已经验收且未改动的行为重复清单。
-- 本次仅归档验收和发布说明，不修改运行代码、任务 Core、文件剪贴板、凭据或 Agent；后续发布须核对最终源码的自动化门和包身份。Remote/Relay 继续延后。
+- 本次归档验收和发布说明，并修复一个既有重试次数测试的时间依赖；不修改运行代码、任务 Core、文件剪贴板、凭据或 Agent。后续发布须核对最终源码的自动化门和包身份；Remote/Relay 继续延后。
 
 ## 基线与实现
 
@@ -43,6 +43,12 @@
 PR workflow 的 BUILD/MANIFEST 记录合并测试提交，不能把 branch SHA 与构建 SHA 混称。仅文档归档更新后的精确 HEAD / 最终 main CI 和发布包 SHA 将记录在 [实现 PR #23](https://github.com/blooddrunk/Shot2Agent/pull/23) 与正式 Release，不以较早提交的通过覆盖后续失败。
 
 早期新增测试产生的 lint 错误（structuredClone/Event 的测试全局声明），以及 3 项测试前提错误（未进入助手页/漏设手动复制），均修正后通过；没有跳过失败测试。浏览器截图检查包括深浅主题、1040/720/480 宽度及预览、设置、历史、编辑器。源码 SHA、最终 CI URL、测试数量和 ZIP 校验值将在本 PR 的最终证据中填写，不将旧版本证据挪用为本版本 PASS。
+
+## 2026-10-24 归档提交的 CI 计时问题
+
+文档归档提交 `2e84f6e647a4eab5b1596a7c726c39728db4cb92` 的 Windows package/Rust/ZIP/EXE/托盘门 [40053403368](https://github.com/blooddrunk/Shot2Agent/actions/runs/40053403368) 通过；[矩阵 40053403457](https://github.com/blooddrunk/Shot2Agent/actions/runs/40053403457) 的 Windows Node 22 首次失败：既有 `retry exhaustion bounded: 2` 预期 3 次调用，实际 2 次。该用例复用了 500ms 预算，受 hosted Windows SQLite 写入延迟影响，约 2195ms 后触发时间预算停止，与“次数耗尽”的断言混在一起。其他矩阵档和 26 Vue 测试通过；本机完整 check 退出 0（232 项，207 pass/25 平台跳过）。
+
+修复仅为该次数用例加入 `context.mock.method(globalThis.performance, 'now', () => 0)`，复用同文件已有的重试次数隔离模式；次数、失败代码、stopReason 和调用数的严格断言全部保留。单独的真实预算拒绝及队列/活动写超时测试未改，生产投递/原生剪贴板没有变化。最终测试修复提交的精确 HEAD CI 见 PR #23 checks；首次失败保留，不以旧提交通过覆盖。
 
 ## 已完成的一次最小 Windows Fake 原生验收（保留复现步骤）
 
