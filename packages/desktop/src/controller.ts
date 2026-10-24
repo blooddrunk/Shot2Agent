@@ -159,7 +159,7 @@ export class DesktopController {
     }
   }
   async start() {
-    this.app.state.acquireWorker(); await this.app.arm(); this.armed = true;
+    this.app.state.acquireWorker(); this.remote.recover(this.root); await this.app.arm(); this.armed = true;
     try { this.armFolder(this.settings); } catch { this.folder.arm(); this.folder.error = 'CAPTURE_FOLDER_UNAVAILABLE'; }
     void this.refreshDiscovery(); void this.refreshSelectedCredential(); void this.drainCredentialCleanup();
   }

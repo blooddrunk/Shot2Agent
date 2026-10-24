@@ -31,6 +31,7 @@ async function healthy() {
 try {
   override(volume); registryWrite(); const config = JSON.parse(compose('config', '--format', 'json'));
   assert.equal(config.services.relay.ports, undefined); assert.equal(config.networks.backend.internal, true);
+  assert.deepEqual(config.services.relay.tmpfs, ['/tmp:size=64m,mode=1777']);
   compose('up', '-d', '--no-build', 'relay'); let id = await healthy();
   console.log(docker('exec', id, 'node', '/app/probe.mjs', 'submit'));
   compose('restart', 'relay'); id = await healthy(); console.log(docker('exec', id, 'node', '/app/probe.mjs', 'work'));

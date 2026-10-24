@@ -34,6 +34,10 @@ export class RemoteQueue {
   workers: Presence[] = []; status = 'unconfigured'; lastSync?: number; error?: string;
   constructor(root: string) {
     this.core = openCore(join(root, 'remote'), 'remote');
+  }
+  /** Called only after the desktop owns the shared process lock. */
+  recover(root: string): void {
+    this.delete(this.rows().filter(r => r.deleted).map(r => r.key));
     // Crashes between blob fsync and SQLite commit leave only unreferenced app-owned IDs.
     const retained = new Set(this.rows().flatMap(r => [...r.files, ...(r.cachedFiles ?? [])].map(f => f.fileId)));
     const directory = join(root, 'remote', 'blobs');
@@ -41,13 +45,17 @@ export class RemoteQueue {
       const path = join(directory, name); requireValue(lstatSync(path).isFile() && !lstatSync(path).isSymbolicLink(), 'UNSAFE_FILE'); unlinkSync(path);
     }
   }
-  private rows(): Outbox[] { return this.core.store.metadata('outbox:').map(r => JSON.parse(r.value)); }
+  private rows(): Outbox[] { return this.core.store.metadata('outbox:').map(row => {
+    const r = JSON.parse(row.value) as Outbox;
+    requireValue(r.version === 1 && Array.isArray(r.files) && r.key === r.metadata?.taskId, 'INVALID_REMOTE_DATABASE'); return r;
+  }); }
+  private usage(): number { return this.rows().reduce((n, r) => n + Buffer.byteLength(JSON.stringify(r)) + [...r.files, ...(r.cachedFiles ?? [])].reduce((m, f) => m + f.byteSize, 0), 0); }
   private put(r: Outbox): void { this.core.store.putMetadata(`outbox:${r.key}`, JSON.stringify(r)); }
   async enqueue(settings: RemoteSettings, metadata: SubmissionMetadata, images: Buffer[]): Promise<void> {
     const parsed = validateSubmissionMetadata(metadata); requireValue(parsed.ok, 'INVALID_SUBMISSION'); metadata = parsed.value;
     requireValue(settings.identity && settings.target && settings.credentialRef && settings.url, 'REMOTE_SETUP_REQUIRED');
     const rows = this.rows();
-    requireValue(rows.filter(r => !r.deleted).length < 1000 && rows.reduce((n, r) => n + [...r.files, ...(r.cachedFiles ?? [])].reduce((m, f) => m + f.byteSize, 0), 0) + images.reduce((n, b) => n + b.length, 0) <= 512 * 1024 * 1024, 'REMOTE_CACHE_FULL');
+    requireValue(rows.filter(r => !r.deleted).length < 1000 && this.usage() + Buffer.byteLength(JSON.stringify(metadata)) + images.reduce((n, b) => n + b.length, 0) <= 512 * 1024 * 1024, 'REMOTE_CACHE_FULL');
     const files: FileReference[] = [];
     try {
       for (let i = 0; i < images.length; i++) files.push(this.core.blobs.put(images[i], metadata.images[i]));
@@ -77,6 +85,7 @@ export class RemoteQueue {
     if (task.result) {
       requireValue(task.result.artifacts.length <= 5 && task.result.artifacts.every(f => f.byteSize <= 1024 * 1024 && f.contentType === 'text/plain' && !/[\\/]/.test(f.fileName) && ![...f.fileName].some(c => c.charCodeAt(0) < 32)) &&
         task.result.workerId === r.metadata.targetWorkerId && task.result.adapterName === r.metadata.provider && task.attempts.some(a => a.attemptId === task.result!.attemptId && a.workerId === r.metadata.targetWorkerId && a.profileFingerprint === r.metadata.profileFingerprint), 'INVALID_RELAY_RESPONSE');
+      requireValue(this.usage() + Buffer.byteLength(JSON.stringify(task)) + task.result.artifacts.reduce((n, f) => n + f.byteSize, 0) <= 512 * 1024 * 1024, 'REMOTE_CACHE_FULL');
       const staged: FileReference[] = [];
       try {
         for (const f of task.result.artifacts) {

@@ -10,6 +10,7 @@ import { openCore } from '../../../packages/core/src/core.ts';
 import { createRelay } from '../../../services/relay/src/server.ts';
 import { RemoteClient } from '../../../services/relay/src/client.ts';
 import { runOnce } from '../../../packages/worker/src/worker.ts';
+import { APP_VERSION } from '../../../packages/desktop/src/version.ts';
 
 let desktop, root, workspace, testsSent, gatewayFailureCode, pickerSelection;
 const previousLocalAppData = process.env.LOCALAPPDATA;
@@ -759,7 +760,7 @@ test("M8 Copy files distinguishes native replacement from verified success witho
 // Browser/controller evidence only. Actual locked clipboard cleanup runs in Windows CI.
 test("M9 settings show version, cache, backup guidance and confirmed cleanup", async ({ page }) => {
   await nav(page, "设置");
-  await expect(page.getByRole("heading", { name: "Shot2Agent 1.0.2" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: `Shot2Agent ${APP_VERSION}` })).toBeVisible();
   await expect(page.getByRole("region", { name: "文件复制缓存" })).toContainText("0 / 1000");
   await page.getByRole("button", { name: "清理旧复制缓存" }).click();
   await expect(page.getByText(/已清理 0 个旧缓存文件/)).toBeVisible();

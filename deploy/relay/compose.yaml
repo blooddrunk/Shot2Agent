@@ -6,7 +6,7 @@ services:
     restart: unless-stopped
     init: true
     read_only: true
-    tmpfs: [/tmp:size=64m,mode=1777]
+    tmpfs: ['/tmp:size=64m,mode=1777']
     volumes:
       - relay-data:/data
       - ./secrets:/run/shot2agent:ro
