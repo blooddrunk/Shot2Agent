@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
 import { DesktopController } from "../../../packages/desktop/src/controller.ts";
-import { FakeAgent } from "../../../packages/worker/src/fake.ts";
+import { FakeAgent, FAKE_PROFILE } from "../../../packages/worker/src/fake.ts";
 import { makeCli, credentialStore } from "./fixtures.mjs";
 
 let desktop, root, workspace, testsSent, gatewayFailureCode, pickerSelection;
@@ -454,6 +454,9 @@ test("sidebar reports global running and queued work even when history is filter
     await page.screenshot({
       path: "build/ui-evidence/status-paused-running.png",
     });
+    await desktop.dispatch({v:1,command:'configure',capture:{enabled:false},delivery:{clipboard:'manual'}});
+    await expect(status).toContainText('捕获已关闭');
+    await expect(status).toContainText('正在处理 1 项');
     release();
     await work;
     await expect(status).toContainText("等待处理 1 项");
@@ -675,7 +678,7 @@ test("M8 Copy files distinguishes native replacement from verified success witho
 // Browser/controller evidence only. Actual locked clipboard cleanup runs in Windows CI.
 test("M9 settings show version, cache, backup guidance and confirmed cleanup", async ({ page }) => {
   await nav(page, "设置");
-  await expect(page.getByRole("heading", { name: "Shot2Agent 1.0.0" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Shot2Agent 1.0.1" })).toBeVisible();
   await expect(page.getByRole("region", { name: "文件复制缓存" })).toContainText("0 / 1000");
   await page.getByRole("button", { name: "清理旧复制缓存" }).click();
   await expect(page.getByText(/已清理 0 个旧缓存文件/)).toBeVisible();
@@ -710,4 +713,95 @@ test("Local v1 icons preserve labels, keyboard navigation and compact layouts", 
   await expect(page.getByRole("navigation").getByRole("button", { name: "AI 助手", exact: true })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("region", { name: "AI 助手管理" })).toBeVisible();
+});
+
+test("v1.0.1 chooses detected installations without steering to GLM or changing defaults", async ({ page }) => {
+  await nav(page,"AI 助手");
+  await page.getByRole('button', { name:'添加 AI 助手', exact:true }).click();
+  const editor = page.getByRole('dialog');
+  await expect(editor.getByLabel('Agent 类型')).toHaveValue('');
+  await expect(editor.getByLabel('GLM Token', {exact:false})).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  // One compatible provider => select that installation, never an online gateway.
+  desktop.discovery = desktop.discovery.filter(c => c.provider === 'claude');
+  await page.reload(); await nav(page,'AI 助手');
+  await page.getByRole('button', { name:'添加 AI 助手', exact:true }).click();
+  await expect(editor.getByLabel('Agent 类型')).toHaveValue('claude');
+  await expect(editor.getByLabel('GLM Token', {exact:false})).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  desktop.discovery = [];
+  await page.reload(); await nav(page,'AI 助手');
+  await page.getByRole('button', { name:'添加 AI 助手', exact:true }).click();
+  await expect(editor.getByLabel('Agent 类型')).toHaveValue('');
+  expect(testsSent).toBe(0);
+  expect(desktop.settings.agents?.selected).toBeUndefined();
+});
+
+test("v1.0.1 retry appears only for safe enabled failures and never re-executes AI", async ({ page }) => {
+  await add(page,'codex','retry-agent'); await seedTasks(1);
+  await nav(page,'历史记录');
+  const retry = page.getByRole('button',{name:'重试结果投递',exact:true});
+  await expect(retry).toHaveCount(0);
+  const id = desktop.app.list()[0].submission.taskId;
+  await desktop.dispatch({v:1,command:'configure',delivery:{clipboard:'smart'}});
+  for (const classification of ['conflict','ambiguous']) {
+    desktop.app.state.put(id,'clipboard',{status:'failed',attempts:1,code:'SYNTHETIC',classification});
+    await page.reload(); await nav(page,'历史记录'); await expect(retry).toHaveCount(0);
+  }
+  desktop.app.state.put(id,'clipboard',{status:'blocked_by_clipboard_change',attempts:0});
+  await page.reload(); await nav(page,'历史记录'); await expect(retry).toHaveCount(0);
+  desktop.app.state.put(id,'clipboard',{status:'failed',attempts:1,code:'CLIPBOARD_BUSY',classification:'transient'});
+  await page.reload(); await nav(page,'历史记录'); await expect(retry).toBeVisible();
+  await expect(page.getByText(/重试只重新复制、保存或通知/)).toBeVisible();
+  await retry.click(); await expect(retry).toHaveCount(0);
+  expect(desktop.app.get(id).attempts.length).toBe(1);
+  expect(testsSent).toBe(0);
+});
+
+test("v1.0.1 pending does not move focus and tray open returns to the preview", async ({ page }) => {
+  await add(page,'codex','pending-agent');
+  await desktop.dispatch({v:1,command:'configure',capture:{enabled:true,mode:'confirm'},delivery:{clipboard:'manual'}});
+  await nav(page,'历史记录');
+  const search = page.getByLabel('搜索历史'); await search.focus();
+  await desktop.app.ingest(await sharp({create:{width:20,height:20,channels:3,background:'red'}}).png().toBuffer(),false,undefined,'synthetic');
+  await expect(page.locator('.status-pill')).toContainText('等待确认');
+  await expect(search).toBeFocused(); expect(desktop.app.list()).toHaveLength(0);
+  await page.evaluate(() => window.dispatchEvent(new window.Event('shot2agent-open-preview')));
+  await expect(page.getByRole('img',{name:'待确认的截图预览'})).toBeVisible();
+  await expect(page.getByRole('button',{name:'提交图片',exact:true})).toBeEnabled();
+});
+
+test("v1.0.1 faults show Chinese recovery and refuse staging controls in normal mode", async ({ page }) => {
+  await add(page,'codex','fault-agent');
+  await expect(page.getByRole('button',{name:'模拟捕获故障'})).toHaveCount(0);
+  await expect(desktop.dispatch({v:1,command:'staging-fault',kind:'capture'})).rejects.toThrow('STAGING_ONLY');
+  await desktop.dispatch({v:1,command:'configure',capture:{enabled:true,mode:'confirm'},delivery:{clipboard:'manual'}});
+  desktop.app.clipboard.readImage = async () => { throw Error('CLIPBOARD_HELPER_STOPPED'); };
+  desktop.app.clipboard.sequence = async () => 'changed';
+  await desktop.tick();
+  await expect(page.getByRole('alert')).toContainText('剪贴板');
+  await expect(page.getByRole('alert')).not.toContainText('CLIPBOARD_HELPER_STOPPED');
+  await expect(page.locator('.status-pill')).toContainText('需要处理');
+  desktop.app.clipboard.readImage = async () => undefined;
+  await page.getByRole('button',{name:'重新连接剪贴板'}).click();
+  await expect(page.locator('.status-pill')).toContainText('正在监听');
+  await nav(page,'设置');
+  await page.screenshot({path:'build/ui-evidence/v101-recovery-settings.png',fullPage:true});
+});
+
+test("v1.0.1 isolated Fake controls expose recoverable capture and persistent Worker faults", async ({ page }) => {
+  const cb = desktop.app.clipboard;
+  await desktop.close();
+  desktop = new DesktopController(root,cb,{adapter:new FakeAgent(),profile:FAKE_PROFILE},'staging',async()=>[]);
+  await desktop.start(); await page.reload(); await nav(page,'设置');
+  await expect(page.getByRole('group',{name:'隔离故障测试'})).toBeVisible();
+  await page.getByRole('button',{name:'模拟捕获故障',exact:true}).click();
+  await expect(page.getByRole('alert')).toContainText('剪贴板连接已断开');
+  await page.getByRole('button',{name:'重新连接剪贴板',exact:true}).click();
+  await expect(page.locator('.status-pill')).not.toContainText('需要处理');
+  await page.getByRole('button',{name:'模拟处理服务故障',exact:true}).click();
+  await expect(page.getByRole('alert')).toContainText('隔离测试的处理服务故障');
+  await expect(page.locator('.status-pill')).toContainText('需要处理');
+  await page.screenshot({path:'build/ui-evidence/v101-fake-fault-tools.png',fullPage:true});
+  expect(desktop.app.list()).toHaveLength(0); expect(testsSent).toBe(0);
 });

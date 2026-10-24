@@ -29,7 +29,9 @@ test('busy then recovery retries with original baseline; independent file result
   const next = restart(); assert.equal(next.get(id, 'clipboard').history[0].code, 'CLIPBOARD_BUSY');
   await deliver(t, config, next, clip); assert.equal(clip.written, 1);
 }));
-for (const maxRetries of [0, 2]) test(`retry exhaustion bounded: ${maxRetries}`, () => scenario(async ({ state, t, id, clip }) => {
+for (const maxRetries of [0, 2]) test(`retry exhaustion bounded: ${maxRetries}`, context => scenario(async ({ state, t, id, clip }) => {
+  // Isolate retry count from slow hosted SQLite writes; budget refusal is tested below.
+  context.mock.method(globalThis.performance, 'now', () => 0);
   clip.writeText = async () => { clip.calls++; throw Error('CLIPBOARD_BUSY'); };
   await deliver(t, { ...config, retry: { ...config.retry, maxRetries } }, state, clip);
   const r = state.get(id, 'clipboard'); assert.equal(r.status, 'failed'); assert.equal(r.attempts, maxRetries + 1);

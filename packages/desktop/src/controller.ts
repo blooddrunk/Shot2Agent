@@ -3,6 +3,7 @@ import { APP_VERSION } from './version.ts';
 import { FolderSource, validateCaptureFolder } from './folder.ts';
 import { displayInventory } from './inventory.ts';
 import { ACTIONS, completedResults, retryableDelivery, retryableChannels, validateHotkeys } from './actions.ts';
+import { trayView } from './tray.ts';
 import sharp from 'sharp';
 import { effectiveDelivery } from '../../local/src/delivery.ts';
 import { existsSync, lstatSync, mkdirSync, realpathSync } from 'node:fs';
@@ -306,7 +307,7 @@ export class DesktopController {
     requireValue(raw && typeof raw === 'object' && !Array.isArray(raw), 'INVALID_REQUEST');
     const r = raw as Record<string, unknown>;
     requireValue(r.v === 1 && typeof r.command === 'string', 'INVALID_PROTOCOL');
-    const allowed: Record<string, string[]> = { snapshot: ['offset', 'query'], 'configure-hotkeys': ['hotkeys'], action: ['action'], configure: ['capture', 'delivery', 'autoConsent', 'alwaysConsent'],
+    const allowed: Record<string, string[]> = { 'staging-fault': ['kind'], snapshot: ['offset', 'query'], 'configure-hotkeys': ['hotkeys'], action: ['action'], configure: ['capture', 'delivery', 'autoConsent', 'alwaysConsent'],
       'composer-add-files': ['paths'], 'composer-add-clipboard': [], 'composer-add-pending': [], 'composer-move': ['index', 'to'], 'composer-remove': ['index'], 'composer-discard': [], 'composer-submit': [], 'copy-files': ['id'], 'clean-file-cache': ['confirm'],
       submit: [], current: [], discard: [], pause: ['paused'], copy: ['id'], detail: ['id'], 'retry-delivery': ['id'], recover: [], 'select-agent': ['id', 'version'],
       'archive-agent': ['id', 'version', 'archived', 'confirm'], 'delete-agent': ['id', 'version', 'confirm'], 'cleanup-unused-agents': [],
@@ -503,7 +504,18 @@ export class DesktopController {
       }
       case 'discard': this.app.discard(); break;
       case 'copy': await this.app.copy(id()); break;
-      case 'retry-delivery': await this.app.retryDelivery(id()); break;
+      case 'retry-delivery': {
+        const task = this.app.get(id());
+        requireValue(task.status === 'succeeded' && retryableDelivery(this.app, task), 'NO_ELIGIBLE_FAILED_DELIVERY');
+        await this.app.retryDelivery(id(), retryableChannels(this.app, task));
+        requireValue(!retryableDelivery(this.app, this.app.get(id())), 'DELIVERY_STILL_FAILED'); break;
+      }
+      case 'staging-fault':
+        requireValue(this.launchMode === 'staging', 'STAGING_ONLY');
+        requireValue(r.kind === 'capture' || r.kind === 'worker', 'INVALID_STAGING_FAULT');
+        if (r.kind === 'capture') this.captureError = 'CLIPBOARD_HELPER_STOPPED';
+        else this.workerError = 'STAGING_WORKER_STOPPED';
+        break;
       case 'detail': {
         const task = this.app.get(id());
         const approved = this.settings.agents?.profiles.find(p => p.policy.id === task.submission.profileId && p.policy.version === task.submission.profileVersion);
@@ -547,15 +559,20 @@ export class DesktopController {
     const selectedAgent = this.app.registry.find(e => e.profile.id === this.app.profile.id && e.profile.version === this.app.profile.version);
     let fileCache;
     try { fileCache = fileCacheUsage(this.root); } catch { fileCache = { error: 'UNSAFE_FILE_CACHE' }; }
-    return { appVersion: APP_VERSION, fileCache, composer: this.composer.map(({ id, preview }) => ({ id, preview })), folderError: this.folder.error, activity: { running: tasks.filter(t => ['leased', 'running'].includes(t.status)).length, queued: tasks.filter(t => t.status === 'queued').length }, hotkeys: this.settings.hotkeys ?? {}, lastAction: this.lastAction, lastHistoryCleanup: this.lastHistoryCleanup, canReviewUnknownHistory: this.app.canReviewUnknownHistory,
+    const snapshot = { appVersion: APP_VERSION, fileCache, composer: this.composer.map(({ id, preview }) => ({ id, preview })), folderError: this.folder.error, activity: { running: tasks.filter(t => ['leased', 'running'].includes(t.status)).length, queued: tasks.filter(t => t.status === 'queued').length }, hotkeys: this.settings.hotkeys ?? {}, lastAction: this.lastAction, lastHistoryCleanup: this.lastHistoryCleanup, canReviewUnknownHistory: this.app.canReviewUnknownHistory,
       settings: this.settings.desktop, delivery: this.settings.delivery, root: this.root, launchMode: this.launchMode, setupRequired: !this.isConfigured(),
       agents, discovery: this.discovery.map(candidate => ({ provider: candidate.provider, path: candidate.path, selectionPath: candidate.selectionPath ?? candidate.path, version: candidate.version, status: candidate.status })),
       profile: { adapter: selectedAgent?.adapter.name ?? current?.provider ?? 'fake', id: this.isConfigured() ? this.app.profile.id : '', profileVersion: this.isConfigured() ? this.app.profile.version : '',
         workspace: current?.policy.workspace ?? this.settings.codex?.workspace, version: current?.policy.cliVersion ?? this.settings.codex?.cliVersion, sandbox: 'read-only' }, workspaceSuggestion: this.workspaceSuggestion(),
-      status: !this.isConfigured() ? 'setup_required' : this.workerError ? 'worker_error' : this.captureError ? 'capture_error' : this.settings.desktop.paused ? 'paused' : !(this.settings.desktop.enabled || this.settings.desktop.folderEnabled) ? 'capture_off' : 'monitoring',
+      status: this.workerError ? 'worker_error' : this.captureError ? 'capture_error' : !this.isConfigured() ? 'setup_required' : this.settings.desktop.paused ? 'paused' : !(this.settings.desktop.enabled || this.settings.desktop.folderEnabled) ? 'capture_off' : 'monitoring',
       error: this.workerError ?? this.captureError, pending: this.preview ?? null, captureStatus: this.app.lastCaptureStatus,
       total: tasks.length, historyTotal: matching.length, historyOffset, tasks: matching.slice(historyOffset, historyOffset + 50).map(t => ({ id: t.submission.taskId, createdAt: t.createdAt, status: t.status, provider: t.submission.provider ?? t.attempts[0]?.adapterName, profileId: t.submission.profileId, summary: t.result?.summary, error: t.result?.errorCode ?? (t.status === 'queued' && !this.app.registry.some(e => e.profile.id === t.submission.profileId && e.profile.version === t.submission.profileVersion) ? 'PROFILE_UNAVAILABLE' : undefined),
-        save: this.app.state.get(t.submission.taskId, 'save'), imageCount: t.submission.images.length, notification: this.app.state.get(t.submission.taskId, 'notification'), clipboard: this.app.state.get(t.submission.taskId, 'clipboard') })) };
+        retryableChannels: t.status === 'succeeded' ? retryableChannels(this.app, t) : [], save: this.app.state.get(t.submission.taskId, 'save'), imageCount: t.submission.images.length, notification: this.app.state.get(t.submission.taskId, 'notification'), clipboard: this.app.state.get(t.submission.taskId, 'clipboard') })) };
+    const results = completedResults(this.app);
+    const actions = { copy: results.length > 0, retry: results.some(t => retryableDelivery(this.app, t)),
+      cycle: !!this.settings.agents && this.app.registry.filter(e => selectable.has(profileKey(e.profile.id, e.profile.version))).length > 1,
+      current: this.isConfigured() && !this.workerError && !this.captureError };
+    return { ...snapshot, tray: trayView({ ...snapshot, actions }) };
   }
   async close() {
     if (this.closed) return; this.closed = true; this.controller.abort();
