@@ -85,6 +85,11 @@ test('M11 native settings migrate without altering old profile, delivery or hotk
   const options = { ...nativeDefaults(), directory: f.out, monitor: '\\\\.\\DISPLAY2', delayMs: 500, charsPerSecond: 200 };
   await f.configure(options); const stored = loadSettings(f.root); assert.deepEqual(stored.native, options); assert.deepEqual(stored.desktop, original.desktop); assert.deepEqual(stored.delivery, original.delivery);
   for (const bad of [{ ...options, charsPerSecond: 201 }, { ...options, delayMs: 499 }, { ...options, unknown: true }, { ...options, save: 1 }]) assert.throws(() => validateNative(bad));
+  for (const native of [null, false, 0, 'corrupt']) {
+    writeFileSync(join(f.root, 'settings.json'), JSON.stringify({ ...stored, native }));
+    assert.throws(() => loadSettings(f.root), /INVALID_NATIVE_SETTINGS/);
+  }
+  saveSettings(f.root, stored);
   validateHotkeys({ 'capture-monitor': 'Ctrl+Alt+S', 'type-latest': 'Ctrl+Alt+T', 'stop-typing': 'Ctrl+Alt+X' });
   assert.throws(() => validateHotkeys({ 'capture-monitor': 'Ctrl+Alt+S', 'type-latest': 'Ctrl+Alt+S' }), /DUPLICATE_HOTKEY/);
 });
