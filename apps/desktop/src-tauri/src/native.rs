@@ -106,6 +106,12 @@ pub fn handle(
                 captured?;
             }
             _ => {
+                #[cfg(windows)]
+                let trigger_target = if from_ui {
+                    None
+                } else {
+                    Some(crate::typing::platform::Window::selected()?)
+                };
                 let source = if action == "type-clipboard" {
                     #[cfg(windows)]
                     {
@@ -127,6 +133,14 @@ pub fn handle(
                     };
                     value(super::call(&app.state::<super::State>(), req))?
                 };
+                #[cfg(windows)]
+                if trigger_target
+                    .as_ref()
+                    .map(|w| !w.focused())
+                    .unwrap_or(false)
+                {
+                    return Err("TYPING_FOCUS_CHANGED".into());
+                }
                 state.typing.start(
                     source["text"].as_str().ok_or("TYPING_EMPTY")?.into(),
                     source["delayMs"]

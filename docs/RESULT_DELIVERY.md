@@ -1,3 +1,5 @@
+> M11-X direct typing is a manually initiated native operation, independent of automatic delivery and its receipts. Latest/history sources read successful durable text without copying it first; manual clipboard mode still permits typing. Typing never writes the clipboard, reruns an Agent, inserts history, retries automatically or falls back to paste. Cancellation/focus loss preserves already entered text; restarting the app never resumes typing. See [operation](USER_GUIDE.md#原生截图与直接输入m11-x-开发候选) and [acceptance](M11_X_VALIDATION.md).
+
 > M8-L 0.8.0 implementation: independent text/file (CF_HDROP Markdown) clipboard payload, Markdown save and opt-in native Windows notification now share durable independent receipts. Prior synthetic Gateway testing is optional. See [operation](M8_WINDOWS_RUN.md) and [validation boundaries](M8_VALIDATION.md). Earlier planned/deferred statements below describe historical milestones. Retry delivery never reruns an Agent.
 
 # Result delivery policy — confirmed V1 behavior

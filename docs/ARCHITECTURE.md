@@ -1,3 +1,5 @@
+> M11-X adds Rust WGC monitor capture and manual SendInput output over the existing inherited-pipe coordinator. Capture reuses LocalApp ingestion and watcher suppression; typing reads durable results without changing tasks or delivery receipts. Local and Remote remain independent of these optional native actions. See [scope](M11_X_SCOPE.md) and [design-only Linux platform-adapter plan](M12_V_PLAN.md).
+
 > M8-L 0.8.0 adds independent Local folder/clipboard intake, ordered 2–5 image GUI tasks, CF_HDROP Markdown output and optional native completion notifications. [Current operation](M8_WINDOWS_RUN.md) and [executed validation / native gaps](M8_VALIDATION.md) supersede historical planned feature labels below. Next release scope is M9-L final Local v1.0, with Remote deferred.
 
 # Architecture and trust boundaries

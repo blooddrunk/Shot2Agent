@@ -1,3 +1,5 @@
+> Current user-authorized scope: **M11-X native capture + manual typing**, based on merged M10-R #25/#26. [Scope](M11_X_SCOPE.md) · [validation](M11_X_VALIDATION.md). M11-R web history stays deferred; [M12-V Linux Worker](M12_V_PLAN.md) is design-only until M11-X is finished. Earlier milestone descriptions below are historical.
+
 > Local 1.0 release: [用户使用手册](USER_GUIDE.md) · [发布验证与操作员验收](M9_VALIDATION.md)。下文保留历史规格和规划，不作为当前用户操作指南。
 
 > M8-L 0.8.0 adds independent Local folder/clipboard intake, ordered 2–5 image GUI tasks, CF_HDROP Markdown output and optional native completion notifications. [Current operation](M8_WINDOWS_RUN.md) and [executed validation / native gaps](M8_VALIDATION.md) supersede historical planned feature labels below. Next release scope is M9-L final Local v1.0, with Remote deferred.

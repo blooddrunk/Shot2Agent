@@ -75,8 +75,9 @@ test.beforeEach(async ({ page }) => {
       if (['capture-monitor', 'type-latest', 'type-result', 'type-clipboard', 'stop-typing', 'native-monitors'].includes(request.command)) {
         nativeRequests.push(request);
         if (request.command === 'native-monitors') return { ok: true, value: [{ id: 'synthetic-display', width: 3840, height: 2160, primary: true }] };
+        if (request.command === 'capture-monitor') await new Promise(resolve => setTimeout(resolve, 250));
         const value = await desktop.dispatch({ v: 1, command: 'snapshot' });
-        nativeRuntime = { capturing: false, captureStatus: 'saved', typing: { phase: request.command === 'stop-typing' ? 'TYPING_CANCELED' : 'preparing', active: request.command !== 'stop-typing', sent: 0, total: 20 } };
+        nativeRuntime = { capturing: false, captureStatus: 'saved', typing: request.command === 'capture-monitor' ? {} : { phase: request.command === 'stop-typing' ? 'TYPING_CANCELED' : 'preparing', active: request.command !== 'stop-typing', sent: 0, total: 20 } };
         value.nativeRuntime = nativeRuntime;
         return { ok: true, value };
       }
@@ -991,11 +992,14 @@ for (const width of [1040, 720, 480]) test(`M11 native configuration and respons
   await page.getByRole('button', { name: '首页', exact: true }).click();
   await expect(page.getByRole('button', { name: '截取所选显示器', exact: true })).toBeEnabled();
   await expect(page.getByRole('button', { name: '输入最新结果', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: '截取所选显示器', exact: true }).click();
+  await expect(page.getByText('正在截取显示器…', { exact: true })).toBeVisible();
+  await expect(page.getByText('截图完成；请查看文件、确认预览及各去向状态。', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '输入剪贴板文本', exact: true }).click();
   await expect(page.getByLabel('直接输入进度')).toContainText('准备输入');
   await page.getByRole('button', { name: '停止输入', exact: true }).click();
   await expect(page.getByLabel('直接输入进度')).toContainText('输入已停止');
-  expect(nativeRequests.map(r => r.command)).toEqual(['native-monitors', 'type-clipboard', 'stop-typing']);
+  expect(nativeRequests.map(r => r.command)).toEqual(['native-monitors', 'capture-monitor', 'type-clipboard', 'stop-typing']);
   expect(testsSent).toBe(0);
 });
 function assertNativeSettings() {

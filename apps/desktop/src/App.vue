@@ -309,6 +309,7 @@ const dirty = ref(false);
 const hotkeys = ref<Hotkeys>({});
 const nativeOptions = ref<NativeOptions>(nativeDefaults());
 const nativeDirty = ref(false);
+const nativeCapturing = ref(false);
 const monitors = ref<{ id: string; width: number; height: number; primary: boolean }[]>([]);
 const typingLabel = computed(() => {
   const t = data.value?.nativeRuntime?.typing;
@@ -533,6 +534,7 @@ async function cleanFileCache() {
 async function action(command: string, args: Record<string, unknown> = {}) {
   if (busy.value) return;
   busy.value = true;
+  nativeCapturing.value = command === 'capture-monitor' || (command === 'action' && args.action === 'capture-monitor');
   error.value = "";
   message.value = "";
   try {
@@ -617,6 +619,7 @@ async function action(command: string, args: Record<string, unknown> = {}) {
     } else error.value = friendlyError(code);
   } finally {
     busy.value = false;
+    nativeCapturing.value = false;
   }
 }
 async function pickExecutable() {
@@ -1032,7 +1035,7 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener("shot2agent
             <button :disabled="busy || !data || data.nativeRuntime?.typing.active" @click="action('type-clipboard')">输入剪贴板文本</button>
           </div>
           <p class="hint">整屏截图可只保存文件；在设置中选择显示器和去向。输入启动后，请在准备时间内切换到其他应用；Esc 停止。</p>
-          <p v-if="data?.nativeRuntime?.capturing" role="status">正在截取显示器…</p>
+          <p v-if="nativeCapturing || data?.nativeRuntime?.capturing" role="status">正在截取显示器…</p>
           <p v-if="data?.nativeRuntime?.captureStatus && data.nativeRuntime.captureStatus !== 'saved' && data.nativeRuntime.captureStatus !== 'capturing'" class="error">{{ friendlyError(data.nativeRuntime.captureStatus) }}</p>
           <p v-if="data?.nativeCapture?.path" class="hint path">截图已保存：{{ data.nativeCapture.path }}</p>
           <p v-if="data?.nativeCapture && !['off', 'succeeded'].includes(data.nativeCapture.clipboard)" class="error">图片剪贴板：{{ friendlyError(data.nativeCapture.clipboard) }}</p>

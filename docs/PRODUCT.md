@@ -1,3 +1,5 @@
+> M11-X development candidate adds optional native monitor screenshots and manually triggered direct typing alongside existing capture/delivery. See [current scope](M11_X_SCOPE.md). Historical exclusions below do not override this explicitly authorized slice; a region editor/overlay, M11-R web history and M12-V implementation remain deferred.
+
 > Local 1.0 release: [用户使用手册](USER_GUIDE.md) · [发布验证与操作员验收](M9_VALIDATION.md)。下文保留历史规格和规划，不作为当前用户操作指南。
 
 > M8-L 0.8.0 adds independent Local folder/clipboard intake, ordered 2–5 image GUI tasks, CF_HDROP Markdown output and optional native completion notifications. [Current operation](M8_WINDOWS_RUN.md) and [executed validation / native gaps](M8_VALIDATION.md) supersede historical planned feature labels below. Next release scope is M9-L final Local v1.0, with Remote deferred.

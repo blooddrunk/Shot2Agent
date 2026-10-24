@@ -32,6 +32,7 @@ unsafe fn text(hwnd: HWND) -> String {
 #[test]
 #[ignore = "explicit hosted desktop only; scripts/windows/native-api-smoke.mjs seeds synthetic clipboard"]
 fn hosted_window_capture_and_unicode() {
+    eprintln!("NATIVE_TEST_CLIPBOARD");
     assert_eq!(std::env::var("GITHUB_ACTIONS").as_deref(), Ok("true"));
     assert_eq!(
         crate::typing::platform::clipboard_text().unwrap(),
@@ -39,6 +40,7 @@ fn hosted_window_capture_and_unicode() {
     );
     let before = unsafe { GetClipboardSequenceNumber() };
     let monitors = crate::capture::monitors().unwrap();
+    eprintln!("NATIVE_TEST_MONITORS");
     let monitor = monitors
         .as_array()
         .unwrap()
@@ -75,18 +77,27 @@ fn hosted_window_capture_and_unicode() {
             std::thread::sleep(Duration::from_millis(5));
         }
         assert_eq!(GetForegroundWindow(), window.0);
+        eprintln!("NATIVE_TEST_WINDOW_READY");
         // The production target selector refuses this own-process test window.
         assert!(crate::typing::platform::Window::selected().is_err());
         assert!(crate::capture::capture("synthetic-removed-monitor").is_err());
+        eprintln!("NATIVE_TEST_CAPTURE");
         let png = crate::capture::capture(monitor["id"].as_str().unwrap())
             .expect("hosted WGC must produce a real frame");
-        let reader = png::Decoder::new(std::io::Cursor::new(png))
+        let mut reader = png::Decoder::new(std::io::Cursor::new(png))
             .read_info()
             .unwrap();
         assert_eq!(reader.info().width, width as u32);
         assert_eq!(reader.info().height, height as u32);
+        eprintln!("NATIVE_TEST_DECODE");
+        let mut decoded = vec![0; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut decoded).unwrap();
+        assert!(decoded[..info.buffer_size()]
+            .chunks_exact(4)
+            .any(|pixel| pixel != &decoded[..4]));
         assert_eq!(GetClipboardSequenceNumber(), before);
         SetWindowTextW(window.0, wide("").as_ptr());
+        eprintln!("NATIVE_TEST_TYPING");
         let expected = "中文 ASCII !© 🧪 𠀀\n```ts\nconst synthetic = true;\n```";
         for c in expected.chars() {
             crate::typing::platform::inject(&crate::typing::keys(c)).unwrap();

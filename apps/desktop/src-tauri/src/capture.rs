@@ -120,6 +120,8 @@ mod platform {
     pub fn capture(id: &str) -> Result<Vec<u8>, String> {
         unsafe {
             RoInitialize(RO_INIT_MULTITHREADED).map_err(|_| "CAPTURE_INITIALIZATION_FAILED")?;
+            #[cfg(test)]
+            eprintln!("WGC_INITIALIZED");
             let _apartment = Apartment;
             if !GraphicsCaptureSession::IsSupported().map_err(|_| "CAPTURE_UNSUPPORTED")? {
                 return Err("CAPTURE_UNSUPPORTED".into());
@@ -135,6 +137,8 @@ mod platform {
             let item: GraphicsCaptureItem = interop
                 .CreateForMonitor(monitor.handle)
                 .map_err(|_| "CAPTURE_ACCESS_DENIED")?;
+            #[cfg(test)]
+            eprintln!("WGC_ITEM");
             // WGC item/frame sizes are physical pixels; never multiply logical DPI coordinates.
             let size = item.Size().map_err(|_| "CAPTURE_DEVICE_FAILED")?;
             if size.Width <= 0
@@ -158,6 +162,8 @@ mod platform {
             )
             .map_err(|_| "CAPTURE_DEVICE_FAILED")?;
             let device = device.ok_or("CAPTURE_DEVICE_FAILED")?;
+            #[cfg(test)]
+            eprintln!("WGC_DEVICE");
             let context = context.ok_or("CAPTURE_DEVICE_FAILED")?;
             let dxgi: IDXGIDevice = device.cast().map_err(|_| "CAPTURE_DEVICE_FAILED")?;
             let rt: IDirect3DDevice = CreateDirect3D11DeviceFromDXGIDevice(&dxgi)
@@ -173,10 +179,14 @@ mod platform {
             let session = pool
                 .CreateCaptureSession(&item)
                 .map_err(|_| "CAPTURE_ACCESS_DENIED")?;
+            #[cfg(test)]
+            eprintln!("WGC_POOL");
             let result = (|| {
                 session
                     .StartCapture()
                     .map_err(|_| "CAPTURE_ACCESS_DENIED")?;
+                #[cfg(test)]
+                eprintln!("WGC_STARTED");
                 let deadline = std::time::Instant::now() + std::time::Duration::from_secs(4);
                 let frame = loop {
                     if let Ok(frame) = pool.TryGetNextFrame() {
@@ -188,6 +198,8 @@ mod platform {
                     std::thread::sleep(std::time::Duration::from_millis(10));
                 };
                 let content = frame.ContentSize().map_err(|_| "CAPTURE_DEVICE_FAILED")?;
+                #[cfg(test)]
+                eprintln!("WGC_FRAME");
                 if content != size {
                     return Err("CAPTURE_MONITOR_CHANGED".into());
                 }
@@ -212,11 +224,15 @@ mod platform {
                     .map_err(|_| "CAPTURE_DEVICE_FAILED")?;
                 let staging = staging.ok_or("CAPTURE_DEVICE_FAILED")?;
                 context.CopyResource(&staging, &texture);
+                #[cfg(test)]
+                eprintln!("WGC_COPIED");
                 let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
                 context
                     .Map(&staging, 0, D3D11_MAP_READ, 0, Some(&mut mapped))
                     .map_err(|_| "CAPTURE_DEVICE_FAILED")?;
                 let (w, h) = (size.Width as usize, size.Height as usize);
+                #[cfg(test)]
+                eprintln!("WGC_MAPPED");
                 let mut rgba = vec![0u8; w * h * 4];
                 for y in 0..h {
                     let row = std::slice::from_raw_parts(
