@@ -83,6 +83,7 @@ native('Linux approved Claude subscription and GLM adapters preserve ordered lar
     assert.equal(result.status, 'succeeded', JSON.stringify(result)); assert.match(result.contentMarkdown, /5 image/);
     const record = JSON.parse(readFileSync(join(h.pkg, 'executions.jsonl'), 'utf8').trim());
     assert.deepEqual(record.images, images.map(b => b.length)); assert.equal(record.inheritedSecret, false); assert.equal(record.cwd, h.c.workspace); assert.equal(existsSync(record.home), false);
+    if (provider === 'claude-compatible-endpoint') assert.equal(record.retryBudget, '0');
     assert.equal(JSON.stringify(result).includes('synthetic-gateway-token'), false);
     const p = loadLinuxProfiles(h.c)[0]; p.policy.linux.uid++;
     const refused = executionRegistry([p])[0]; const refusal = await refused.adapter.execute(bind(metadata, refused), refused.profile, images, new AbortController().signal);

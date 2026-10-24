@@ -44,6 +44,7 @@ export async function boundedProcess(program: Program, args: string[], options: 
       Object.assign(env, { HOME: home, USERPROFILE: home, APPDATA: home, LOCALAPPDATA: home, CLAUDE_CONFIG_DIR: join(home, '.claude'),
         ANTHROPIC_BASE_URL: config.baseUrl, ANTHROPIC_AUTH_TOKEN: token, ANTHROPIC_MODEL: config.model,
         ANTHROPIC_DEFAULT_SONNET_MODEL: config.models.sonnet, ANTHROPIC_DEFAULT_OPUS_MODEL: config.models.opus, ANTHROPIC_DEFAULT_HAIKU_MODEL: config.models.haiku,
+        ...(options.runtime ? { CLAUDE_CODE_MAX_RETRIES: '0', CLAUDE_CODE_NONSTREAMING_TIMEOUT_RETRIES: '0' } : {}),
         DISABLE_AUTOUPDATER: '1', CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1', CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: '1' });
     }
     const child = spawn(program.executable, [...program.args, ...args], {

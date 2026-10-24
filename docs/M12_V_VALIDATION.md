@@ -4,7 +4,7 @@
 
 ## 自动化与来源身份
 
-最终提交 SHA、CI job/Artifact 和 VPS 镜像身份在本节最终门禁完成后记录。工作树阶段已经执行：
+首个全部适用 PR CI 通过的源码为 `4bd6d879114b1f50e4fa599288a03cf365b9c978`：[Node/GUI/两个 Compose 工作流](https://github.com/blooddrunk/Shot2Agent/actions/runs/40104642193)、[Windows Rust/native/ZIP/EXE](https://github.com/blooddrunk/Shot2Agent/actions/runs/40104642088)，均 SUCCESS。此后新增了 Linux 原生 CLI 对 loopback Mock 的独立 gate，以及 Linux GLM SDK 显式零重试；最终 HEAD 的新 gate 结果与 Artifact 身份在 [PR #28](https://github.com/blooddrunk/Shot2Agent/pull/28) 的最终交付记录核对，不能把旧 Artifact 冒称为新 HEAD。工作树与精确提交阶段分别执行：
 
 | 命令 / 环境 | 实际结果 |
 | --- | --- |
@@ -12,6 +12,10 @@
 | `npm run check`，Windows | exit 0，283 tests / 274 PASS / 9 SKIPPED / 0 FAIL；lint、TS/Vue、编译、无 Relay Local smoke、合成 Gateway resource smoke PASS。后续最终代码重新执行。 |
 | `npm run desktop:test-ui`，Windows | exit 0，40/40；后续新增 Linux VPS/GLM selector 断言需最终复验。 |
 | `docker run ... node --experimental-strip-types --test packages/worker/test/linux.test.mjs`，VPS 非 root Debian Node 24 容器 | exit 0，7/7；版本/批准、4 MiB+ 多图、最小环境、进程取消/超时/异常/父进程退出后子进程清理、SQLite lock、fencing/重复补交/不重跑、残留进程恢复、损坏状态拒绝、桌面 controller→HTTP Relay→真实 Linux daemon→来源历史，以及 Windows Worker 兼容。 |
+| 最终工作树 `npm run check` + `npm run desktop:test-ui` | Windows exit 0，284 tests / 274 PASS / 10 SKIPPED / 0 FAIL；Vue 40/40，包含 Linux VPS/GLM 的普通设备选择。当前后续 source-only 验证以 PR 最新 CI 为准。 |
+| `4bd6d87` VPS `node --experimental-strip-types --test packages/local/test/codex-discovery.test.mjs packages/local/test/m5.test.mjs packages/worker/test/linux.test.mjs`（镜像内） | exit 0，47 tests / 30 PASS / 17 平台 SKIPPED；其中 Linux 专项 8/8。 |
+| `4bd6d87` VPS `node scripts/linux-worker-container.mjs shot2agent-worker:4bd6d87 shot2agent-relay:437e62f` | exit 0，Fake restart、mock GLM 五图、SIGKILL 后 unknown、一次执行/attempt、独立 Token/卷/无端口/资源边界全部 PASS。两个镜像来源单独记录，不冒称 Relay 从新源码重新构建。 |
+| 实际 Linux Claude Code 2.1.306 → loopback Mock，`docker run --rm --network none ... node /app/probe.mjs /usr/local/bin/claude success` 与 `refusal` | 各 exit 0；原生 CLI 收发真实 base64 图像与 Markdown marker；success exitCode=0、refusal exitCode=1，均 exactly 1 message request；`refusal` Mock 返回 500 且零重试。外层 probe exit 0 表示断言通过。全部使用合成 Token、无外部网络或付费模型。 |
 
 测试只使用临时设备 Token、合成图片及 Fake/mock。已授权的真实 GLM 测试独立记录；Fake 不作为真实 provider 通过。M11-X 操作员报告的 A/B/C PASS 保留且不重复完整清单。
 
@@ -20,6 +24,9 @@
 - 初次 lint 对标签控制字符正则报错，改用逐字符判断后 PASS。
 - Linux 进程测试首轮 6/7：mock 的 orphan 场景没有 unref 子进程，父进程实际没有退出。修正 fixture 后 7/7，真实成功父进程退出后的存活子进程由生产 process-group barrier 清理。
 - Compose 首轮 Worker 发现超时；镜像 `/data` 的初始 0755 不满足私有根 0700 合约，已改镜像权限；未降低生产校验。测试失败时新增有限服务日志采集，后续复验另记。
+- Compose Worker-side probe 初次误读只有 Relay 才挂载的 devices.json 而 FAIL；按 action 拆开测试初始化，Worker 始终没有注册表挂载。之后 CI 功能断言全 PASS，但 host runner uid=1001 无法删除已改属容器 uid=1000 的私有目录。finally 现在只在自身 mkdtemp bind 内恢复 host uid/gid，再清理；`4bd6d87` Compose CI SUCCESS。
+- `437e62f` Linux CI 发现 Local 原有 symlink/网络路径拒绝与脚本 fixture 受到新发现逻辑影响。增加显式 `resolveLinuxProgram`/`discover(...,{linux:true})` 入口；旧 `resolveProgram` 合约完全恢复，Local 全套与 Linux 专项在 `4bd6d87` PASS。未修改旧测试来掩盖语义改变。
+- 首个真实 GLM 任务没有在 84s CLI 预算内完成，返回 `execution_unknown / CLAUDE_INTERRUPTED`。未自动重跑。随后非生成请求确认国内端点拒绝临时 key（401）；详情及 provider 边界见下节。后续 Linux GLM 显式设 `CLAUDE_CODE_MAX_RETRIES=0` 与 `CLAUDE_CODE_NONSTREAMING_TIMEOUT_RETRIES=0`，用实际 CLI loopback Mock 500 测试验证不重发，不更改 Windows 行为。
 
 ## 覆盖映射
 
@@ -54,4 +61,10 @@ Linux CLI 本机发现/启动：`dc stop worker` → `dc run --rm --no-deps work
 
 ## 真实 provider / 发布边界
 
-用户已额外授权以临时 key 对 Linux Claude Code + `glm-5.3-flash` 做必要合成测试；仅针对该模型，无自动 Provider/模型替换。实际请求次数、端点、CLI/镜像身份、结果与清理将在执行后补入。真实 Codex / Claude 订阅模型未获额外付费调用授权，保留 NOT VERIFIED。没有 formal v1.1.0 发布。
+用户额外授权临时 key、Claude Code + `glm-5.3-flash` 的必要合成测试。已执行一个新任务/一个 attempt：Windows 本机 Node/DesktopController → `https://relay.haoqi90.top/`（正常证书校验）→ Nosla Linux 非 root Worker → 原生 Claude 2.1.306 → 原 Windows durable history；Task `20816c17-355b-4092-ab98-f2a3a14e6241` 返回 `execution_unknown / CLAUDE_INTERRUPTED`，markerRecognized=false。没有重跑原任务；CLI 内部 HTTP 请求次数不能由一个 attempt 推断。
+
+VPS Debian 13 / Docker 29.5.1 / Compose v5.1.3，Worker image `shot2agent-worker:4bd6d87`，OCI revision 完整 `4bd6d879114b1f50e4fa599288a03cf365b9c978`。实际发现 Codex 0.164.0 与 Claude 2.1.306（均 unverified_auth），GLM Profile 显式批准和 doctor PASS_STARTUP_ONLY_NO_MODEL_REQUEST，单独设备 `nosla-linux`、名称 `Nosla Linux VPS`、无 published port，旧 Relay/反代保持原版本与配置。
+
+失败后完成无需生成的连通性检查：宿主 HEAD 155ms / 401，容器无认证 HEAD 160ms / 401，带临时 key 的 HEAD 与空 messages POST 也为 401。说明网络/TLS可达、该端点未接受提供的认证；不猜测 key 实际归属，不发送到其他服务。已询问操作员端点，Worker 停止接收，结果仍明确不确定。国内端点来自既有批准默认和 [官方 GLM Claude 配置](https://docs.bigmodel.cn/cn/coding-plan/tool/claude)，不同产品/地区 key 不通用。真实识图 **FAIL/未资格通过**，不能用 Mock 替代。若更正 key/端点，只能明确创建新的合成测试任务，原 unknown 保留；不会自动重试。
+
+Codex 无模型 sandbox 本机检查在本 VPS 默认受限容器明确失败：`bwrap: No permissions to create new namespace`；没有加 privileged、开放宿主权限或降级 sandbox。该容器 **不具备 Codex 执行资格**，代码会拒绝。Codex 的版本/图片 flags 发现 PASS 不能替代 sandbox/provider PASS。真实 Codex 与 Claude 订阅模型未执行付费调用，NOT VERIFIED。没有 formal v1.1.0 发布。

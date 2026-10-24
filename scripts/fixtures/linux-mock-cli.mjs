@@ -15,7 +15,7 @@ let input = ''; for await (const b of process.stdin) input += b;
 const images = codex ? args.flatMap((a, i) => a === '--image' ? [readFileSync(args[i + 1]).length] : []) : JSON.parse(input).message.content.filter(c => c.type === 'image').map(c => Buffer.from(c.source.data, 'base64').length);
 const child = ['tree', 'orphan'].includes(mode) ? spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { stdio: 'ignore' }) : undefined;
 if (mode === 'orphan') child.unref();
-const record = { args, images, pid: process.pid, child: child?.pid, cwd: process.cwd(), home: process.env.HOME, inheritedSecret: !!process.env.SHOT2AGENT_TOKEN || !!process.env.OPENAI_API_KEY || !!process.env.NODE_OPTIONS };
+const record = { args, images, pid: process.pid, child: child?.pid, cwd: process.cwd(), home: process.env.HOME, retryBudget: process.env.CLAUDE_CODE_MAX_RETRIES, inheritedSecret: !!process.env.SHOT2AGENT_TOKEN || !!process.env.OPENAI_API_KEY || !!process.env.NODE_OPTIONS };
 appendFileSync(join(root, 'executions.jsonl'), JSON.stringify(record) + '\n');
 if (['hang', 'tree'].includes(mode)) setInterval(() => {}, 1000);
 else if (mode === 'exit') { process.stderr.write('PRIVATE_MOCK_ERROR'); process.exitCode = 7; }

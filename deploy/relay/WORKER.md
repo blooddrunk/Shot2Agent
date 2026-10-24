@@ -45,6 +45,8 @@ Linux 的 UID、程序 digest、路径、工作区和 credentialFile 参与指�
 
 每次执行建立独立临时 HOME/认证副本、最小环境；工作区只读挂载。CLI 不继承 Relay Token、宿主 API key、Node 注入变量或个人配置。Claude 工具为空、MCP/会话持久化禁用、固定隔离 settings。CLI 的不支持版本/能力、托管配置、凭据权限不符均拒绝。GLM 不依赖 Claude 个人账号登录。
 
+Linux GLM 显式关闭 Claude SDK 的错误重试和非流式超时重发；网络/额度错误不暗中重复发送同一模型请求。[Claude 官方重试说明](https://code.claude.com/docs/en/errors#tune-retry-behavior)描述了默认重试行为；Shot2Agent 仍以自己的有限进程预算和不确定状态为准。实际 Native CLI → loopback Mock 的成功/500 拒绝测试与真实 provider 验证分开。
+
 ## 运行、恢复、升级与回退
 
 服务以 UID/GID 1000 运行，无 root/privileged/Docker socket/宿主根挂载，无 Worker published port。backend 为 internal 网络，另一个 egress 网络仅供访问模型。内部 HTTP 只允许明确匹配的 `http://relay:3100/`（或显式私网 IPv4）；Windows URL 校验仍强制 HTTPS（开发 loopback 例外保留），请求不跟随重定向。不要把这个选项用于公网地址。
