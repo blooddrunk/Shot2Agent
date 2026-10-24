@@ -1,10 +1,11 @@
 export interface NativeOptions {
   monitor: string; save: boolean; directory: string; submit: boolean; clipboard: boolean;
-  delayMs: number; charsPerSecond: number;
+  delayMs: number; charsPerSecond: number; newlineAsSpace?: boolean;
 }
-export const nativeDefaults = (): NativeOptions => ({ monitor: '', save: true, directory: '', submit: false, clipboard: false, delayMs: 3000, charsPerSecond: 60 });
+export const nativeDefaults = (): NativeOptions => ({ monitor: '', save: true, directory: '', submit: false, clipboard: false, delayMs: 3000, charsPerSecond: 60, newlineAsSpace: false });
 
 export const nativeErrorText: Record<string, string> = {
+  TYPING_NOTEPAD_ENGLISH_LAYOUT: "记事本当前使用英文输入法，中文可能显示为方块。请切换到中文输入法后重试；本次尚未输入文字。",
   CAPTURE_PAUSED: "截图已暂停，请先恢复捕获。",
   CAPTURE_BUSY: "正在截图，请稍候。",
   CAPTURE_DIRECTORY_REQUIRED: "请选择截图保存目录。",

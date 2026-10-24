@@ -8,7 +8,8 @@ export type { NativeOptions } from './native-options.ts';
 export function validateNative(value: unknown): asserts value is NativeOptions {
   requireValue(value && typeof value === 'object' && !Array.isArray(value), 'INVALID_NATIVE_SETTINGS');
   const v = value as NativeOptions;
-  requireValue(Object.keys(v).sort().join(',') === 'charsPerSecond,clipboard,delayMs,directory,monitor,save,submit' &&
+  requireValue(Object.keys(v).filter(k => k !== 'newlineAsSpace').sort().join(',') === 'charsPerSecond,clipboard,delayMs,directory,monitor,save,submit' &&
+    (v.newlineAsSpace === undefined || typeof v.newlineAsSpace === 'boolean') &&
     typeof v.monitor === 'string' && v.monitor.length <= 128 && typeof v.directory === 'string' && v.directory.length <= 2048 &&
     (!v.directory || (isAbsolute(v.directory) && !v.directory.startsWith('\\\\') && !v.directory.startsWith('//'))) &&
     [v.save, v.submit, v.clipboard].every(b => typeof b === 'boolean') &&

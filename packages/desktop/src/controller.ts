@@ -428,7 +428,7 @@ export class DesktopController {
         requireValue(text.trim().length > 0, 'TYPING_EMPTY');
         requireValue(Buffer.byteLength(text) <= 400_000, 'TYPING_TEXT_LIMIT');
         const n = this.settings.native ?? nativeDefaults();
-        return { text, delayMs: n.delayMs, charsPerSecond: n.charsPerSecond };
+        return { text, delayMs: n.delayMs, charsPerSecond: n.charsPerSecond, newlineAsSpace: n.newlineAsSpace ?? false };
       }
       case 'native-feedback':
         requireValue(['capture-monitor', 'type-latest', 'stop-typing', 'type-history', 'type-clipboard'].includes(String(r.action)) && typeof r.status === 'string' && /^[A-Za-z0-9_]{1,128}$/.test(r.status), 'INVALID_NATIVE_FEEDBACK');

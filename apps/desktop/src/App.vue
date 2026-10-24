@@ -1332,6 +1332,8 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener("shot2agent
           <p class="hint">默认只保存文件，不读取或改写剪贴板。若勾选提交，处理结果仍使用独立的“结果去向”设置。4K 按实际像素保存；HDR 当前按 SDR 输出。区域框选尚未提供。</p>
           <label>输入准备时间（毫秒）<input aria-label="输入准备时间（毫秒）" type="number" min="500" max="10000" step="100" v-model.number="nativeOptions.delayMs" /></label>
           <label>输入速度（字符/秒）<input aria-label="输入速度（字符/秒）" type="number" min="1" max="200" v-model.number="nativeOptions.charsPerSecond" /></label>
+          <label class="check"><input type="checkbox" v-model="nativeOptions.newlineAsSpace" />换行转为空格（适合搜索框）</label>
+          <p class="hint">默认换行会发送 Enter，可能触发搜索或提交；单行输入框请勾选上项。向记事本输入中文前，请切换到中文输入法；英文输入法下会先提示停止。</p>
           <p class="hint">直接输入仅手动启动，无需先复制结果，手动剪贴板模式同样可用。界面按钮允许在准备时间内选目标；全局快捷键保持触发时的目标，不抢焦点。目标改变、Esc、停止或退出均会终止；单次最多 5 分钟。部分应用或管理员窗口可能拒绝模拟输入，请检查已输入内容，不会自动改用粘贴。</p>
           <button :disabled="busy || !nativeDirty" @click="applyNative">保存截图与输入设置</button>
         </fieldset>

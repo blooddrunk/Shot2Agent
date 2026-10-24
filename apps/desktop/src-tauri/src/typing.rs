@@ -60,6 +60,19 @@ pub fn keys(c: char) -> Vec<Key> {
     }
     result
 }
+pub fn input_text(text: &str, newline_as_space: bool) -> String {
+    let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
+    if newline_as_space {
+        normalized.replace('\n', " ")
+    } else {
+        normalized
+    }
+}
+fn notepad_layout_refused(text: &str, class_name: &str, layout: usize) -> bool {
+    class_name.eq_ignore_ascii_case("Notepad") && layout & 0x03ff == 0x0009 && text.chars().any(|c| {
+        matches!(c as u32, 0x3400..=0x4dbf | 0x4e00..=0x9fff | 0xf900..=0xfaff | 0x20000..=0x2ffff | 0x30000..=0x323af)
+    })
+}
 trait Target {
     fn valid(&self) -> bool;
     fn send(&mut self, keys: &[Key]) -> Result<(), String>;
@@ -176,6 +189,7 @@ impl Typing {
                     if platform::modifiers() {
                         return Err("TYPING_RELEASE_MODIFIERS".into());
                     }
+                    target.check_text(&text)?;
                     let observed = target.clone();
                     run(
                         &text,
@@ -265,6 +279,20 @@ pub mod platform {
             Self::selected()
                 .map(|w| w.top == self.top && w.focus == self.focus)
                 .unwrap_or(false)
+        }
+        pub fn check_text(&self, text: &str) -> Result<(), String> {
+            unsafe {
+                let mut class = [0u16; 256];
+                let count = GetClassNameW(self.top as _, class.as_mut_ptr(), class.len() as i32);
+                let class_name = String::from_utf16_lossy(&class[..count.max(0) as usize]);
+                let thread = GetWindowThreadProcessId(self.focus as _, std::ptr::null_mut());
+                // Query the target thread; never change the user's input language.
+                let layout = GetKeyboardLayout(thread) as usize;
+                if notepad_layout_refused(text, &class_name, layout) {
+                    return Err("TYPING_NOTEPAD_ENGLISH_LAYOUT".into());
+                }
+                Ok(())
+            }
         }
     }
     impl Target for Window {
@@ -356,6 +384,26 @@ pub mod platform {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn notepad_english_layout_is_checked_before_chinese_input_only() {
+        assert!(notepad_layout_refused("中文", "Notepad", 0x04090409));
+        assert!(notepad_layout_refused("𠀀", "notepad", 0x0809));
+        assert!(!notepad_layout_refused("中文", "Notepad", 0x0804));
+        assert!(!notepad_layout_refused(
+            "中文",
+            "Chrome_WidgetWin_1",
+            0x0409
+        ));
+        assert!(!notepad_layout_refused("ASCII 123", "Notepad", 0x0409));
+    }
+    #[test]
+    fn single_line_mode_never_generates_an_enter_key() {
+        let text = "中文\r\nline2\rline3\n🧪";
+        assert_eq!(input_text(text, false), "中文\nline2\nline3\n🧪");
+        let flat = input_text(text, true);
+        assert_eq!(flat, "中文 line2 line3 🧪");
+        assert!(flat.chars().flat_map(keys).all(|k| k.vk != 13));
+    }
     #[test]
     fn fresh_runtime_serializes_an_idle_object_before_any_action() {
         assert_eq!(

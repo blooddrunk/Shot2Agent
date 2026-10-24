@@ -1019,6 +1019,8 @@ for (const width of [1040, 720, 480]) test(`M11 native configuration and respons
   await settings.getByRole('button', { name: '选择截图保存目录…' }).click();
   await settings.getByLabel('输入准备时间（毫秒）').fill('1500');
   await settings.getByLabel('输入速度（字符/秒）').fill('30');
+  await expect(settings.getByLabel('换行转为空格（适合搜索框）')).not.toBeChecked();
+  await settings.getByLabel('换行转为空格（适合搜索框）').check();
   await settings.getByRole('button', { name: '保存截图与输入设置' }).click();
   await expect(page.getByText('截图与输入设置已保存。', { exact: true })).toBeVisible();
   assertNativeSettings();
@@ -1043,7 +1045,7 @@ for (const width of [1040, 720, 480]) test(`M11 native configuration and respons
   expect(testsSent).toBe(0);
 });
 function assertNativeSettings() {
-  expect(desktop.settings.native).toEqual({ monitor: 'synthetic-display', save: true, directory: join(root, 'capture-output'), submit: false, clipboard: false, delayMs: 1500, charsPerSecond: 30 });
+  expect(desktop.settings.native).toEqual({ monitor: 'synthetic-display', save: true, directory: join(root, 'capture-output'), submit: false, clipboard: false, delayMs: 1500, charsPerSecond: 30, newlineAsSpace: true });
 }
 
 test('M11 native first snapshot with null typing state keeps the first window rendered', async ({ page }) => {

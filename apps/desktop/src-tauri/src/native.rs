@@ -145,7 +145,7 @@ pub fn handle(
                             &app.state::<super::State>(),
                             json!({"v":1,"command":"snapshot"}),
                         ))?;
-                        json!({"text":crate::typing::platform::clipboard_text()?,"delayMs":s["nativeOptions"]["delayMs"],"charsPerSecond":s["nativeOptions"]["charsPerSecond"]})
+                        json!({"text":crate::typing::platform::clipboard_text()?,"delayMs":s["nativeOptions"]["delayMs"],"charsPerSecond":s["nativeOptions"]["charsPerSecond"],"newlineAsSpace":s["nativeOptions"]["newlineAsSpace"]})
                     }
                     #[cfg(not(windows))]
                     {
@@ -168,7 +168,10 @@ pub fn handle(
                     return Err("TYPING_FOCUS_CHANGED".into());
                 }
                 state.typing.start(
-                    source["text"].as_str().ok_or("TYPING_EMPTY")?.into(),
+                    crate::typing::input_text(
+                        source["text"].as_str().ok_or("TYPING_EMPTY")?,
+                        source["newlineAsSpace"].as_bool().unwrap_or(false),
+                    ),
                     source["delayMs"]
                         .as_u64()
                         .ok_or("INVALID_NATIVE_SETTINGS")?,

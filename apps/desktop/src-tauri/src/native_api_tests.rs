@@ -127,6 +127,22 @@ fn hosted_window_capture_and_unicode() {
             std::thread::sleep(Duration::from_millis(5));
         }
         assert_eq!(text(window.0).replace('\r', ""), expected);
+        // Search-box mode retains Unicode but emits no Enter key or newline.
+        SetWindowTextW(window.0, wide("").as_ptr());
+        let flat = crate::typing::input_text(expected, true);
+        for c in flat.chars() {
+            crate::typing::platform::inject(&crate::typing::keys(c)).unwrap();
+            pump();
+        }
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while Instant::now() < deadline {
+            pump();
+            if text(window.0) == flat {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(text(window.0), flat);
         assert_eq!(GetClipboardSequenceNumber(), before);
         assert_eq!(
             crate::typing::platform::clipboard_text().unwrap(),

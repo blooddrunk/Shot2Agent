@@ -91,11 +91,12 @@ test('M11 resume expires paused-capture feedback without clearing other native f
 
 test('M11 historical/latest typing sources bypass clipboard and delivery settings; no execution/history changes', async t => {
   const f = fixture(t); await f.host.start();
-  await f.rpc('configure', { delivery: { clipboard: 'manual' } }); await f.configure();
+  await f.rpc('configure', { delivery: { clipboard: 'manual' } }); await f.configure({ newlineAsSpace: true });
   await assert.rejects(f.rpc('typing-source', { source: 'latest' }), /NO_COMPLETED_RESULT/);
   const id = await f.host.app.submit(png); await f.host.app.work();
   const tasks = globalThis.structuredClone(f.host.app.list()); const before = { ...f.calls };
   const latest = await f.rpc('typing-source', { source: 'latest' }); const history = await f.rpc('typing-source', { source: 'history', id });
+  assert.equal(latest.newlineAsSpace, true);
   assert.match(latest.text, /Fake result/); assert.deepEqual(history, latest); assert.deepEqual(f.calls, before); assert.deepEqual(f.host.app.list(), tasks);
   await assert.rejects(f.rpc('typing-source', { source: 'clipboard' }), /INVALID_TYPING_SOURCE/);
 });
@@ -103,7 +104,10 @@ test('M11 native settings migrate without altering old profile, delivery or hotk
   const f = fixture(t); const original = defaults(); saveSettings(f.root, original); assert.equal(loadSettings(f.root).native, undefined);
   const options = { ...nativeDefaults(), directory: f.out, monitor: '\\\\.\\DISPLAY2', delayMs: 500, charsPerSecond: 200 };
   await f.configure(options); const stored = loadSettings(f.root); assert.deepEqual(stored.native, options); assert.deepEqual(stored.desktop, original.desktop); assert.deepEqual(stored.delivery, original.delivery);
-  for (const bad of [{ ...options, charsPerSecond: 201 }, { ...options, delayMs: 499 }, { ...options, unknown: true }, { ...options, save: 1 }]) assert.throws(() => validateNative(bad));
+  for (const bad of [{ ...options, charsPerSecond: 201 }, { ...options, delayMs: 499 }, { ...options, unknown: true }, { ...options, save: 1 }, { ...options, newlineAsSpace: 'true' }]) assert.throws(() => validateNative(bad));
+  const { newlineAsSpace: legacyNewlineDefault, ...legacy } = options;
+  assert.equal(legacyNewlineDefault, false);
+  validateNative(legacy);
   for (const native of [null, false, 0, 'corrupt']) {
     writeFileSync(join(f.root, 'settings.json'), JSON.stringify({ ...stored, native }));
     assert.throws(() => loadSettings(f.root), /INVALID_NATIVE_SETTINGS/);
