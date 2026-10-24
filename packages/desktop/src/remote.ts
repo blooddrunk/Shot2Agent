@@ -32,11 +32,13 @@ interface Outbox {
 export class RemoteQueue {
   private core: ReturnType<typeof openCore>;
   workers: Presence[] = []; status = 'unconfigured'; lastSync?: number; error?: string;
+  private recovered = false;
   constructor(root: string) {
     this.core = openCore(join(root, 'remote'), 'remote');
   }
   /** Called only after the desktop owns the shared process lock. */
   recover(root: string): void {
+    if (this.recovered) return;
     this.delete(this.rows().filter(r => r.deleted).map(r => r.key));
     // Crashes between blob fsync and SQLite commit leave only unreferenced app-owned IDs.
     const retained = new Set(this.rows().flatMap(r => [...r.files, ...(r.cachedFiles ?? [])].map(f => f.fileId)));
@@ -44,6 +46,7 @@ export class RemoteQueue {
     for (const name of readdirSync(directory)) if (/^[0-9a-f-]{36}$/.test(name) && !retained.has(name)) {
       const path = join(directory, name); requireValue(lstatSync(path).isFile() && !lstatSync(path).isSymbolicLink(), 'UNSAFE_FILE'); unlinkSync(path);
     }
+    this.recovered = true;
   }
   private rows(): Outbox[] { return this.core.store.metadata('outbox:').map(row => {
     const r = JSON.parse(row.value) as Outbox;
@@ -107,7 +110,9 @@ export class RemoteQueue {
       requireValue(settings.identity?.ownerId === session.ownerId && settings.identity.deviceId === session.deviceId, 'REMOTE_IDENTITY_MISMATCH');
       this.workers = await client.workers(); this.status = 'connected'; this.error = undefined; this.lastSync = Date.now();
       for (const r of this.rows()) {
-        if (r.deleted || r.url !== settings.url || r.ownerId !== session.ownerId || r.deviceId !== session.deviceId || r.nextAt > Date.now() || r.upload === 'upload_failed' || (r.task && isTerminalTaskState(r.task.status))) continue;
+        if (r.deleted || (r.task && isTerminalTaskState(r.task.status))) continue;
+        if (r.url !== settings.url || r.ownerId !== session.ownerId || r.deviceId !== session.deviceId) { r.error = 'REMOTE_CONNECTION_CHANGED'; this.put(r); continue; }
+        if (r.nextAt > Date.now() || r.upload === 'upload_failed') continue;
         try {
           const task = r.upload === 'pending_upload' ? await client.submit(r.key, r.metadata, r.files.map(f => this.core.blobs.read(f))) : await client.get(r.key);
           await this.accept(r, task, client);

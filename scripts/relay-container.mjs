@@ -29,6 +29,8 @@ async function healthy() {
   throw Error('CONTAINER_HEALTH_TIMEOUT');
 }
 try {
+  const caddy = docker('run', '--rm', '-e', 'RELAY_DOMAIN=relay.invalid', '-v', `${resolve('deploy/relay/Caddyfile')}:/etc/caddy/Caddyfile:ro`, 'caddy:2', 'caddy', 'validate', '--config', '/etc/caddy/Caddyfile');
+  assert.match(caddy, /Valid configuration/);
   override(volume); registryWrite(); const config = JSON.parse(compose('config', '--format', 'json'));
   assert.equal(config.services.relay.ports, undefined); assert.equal(config.networks.backend.internal, true);
   assert.deepEqual(config.services.relay.tmpfs, ['/tmp:size=64m,mode=1777']);

@@ -12,12 +12,12 @@
 | --- | --- | --- |
 | `corepack pnpm install --frozen-lockfile`（`CI=true`） | PASS | 0；冻结锁文件未更改。首次无 TTY 安装退出 1，设置 CI 后成功。 |
 | `npm run check`（本机最终功能复验） | PASS | 0；250 Node 测试，247 PASS / 3 SKIPPED；lint、TS/Vue、构建和 compiled smoke PASS。提交后由 CI 校验精确 SHA。 |
-| `node --experimental-strip-types --test packages/desktop/test/remote.test.mjs` | PASS | 0；10/10。包括独立桌面进程的真实 HTTP 自动收发。 |
+| `node --experimental-strip-types --test packages/desktop/test/remote.test.mjs` | PASS | 0；现有 Remote 13/13，另有注册表部署回归 1/1（合跑 14/14）；包括独立桌面进程的真实 HTTP 自动收发、缓存预算、身份切换不迁移及安全重启清理。 |
 | `npm run desktop:test-ui`（新增前） | PASS | 0；28/28。首次缺少 Chromium 退出 1；安装 Playwright Chromium 后通过。 |
-| 最终源码、CI、Windows ZIP 身份 | NOT VERIFIED | 将在功能提交的 CI 完成后补入精确 SHA、命令与链接。 |
-| 本机 Docker / Rust 构建 | SKIPPED | 本机未安装 Docker / cargo；Linux 容器与 Windows 构建 CI 已配置，尚不能称 PASS。 |
+| 第一轮修复后 PR CI（0bbd10b） | PASS | [Node 矩阵、31 Vue、Compose](https://github.com/blooddrunk/Shot2Agent/actions/runs/40066709064)；[8 Rust、ZIP/EXE/原生 API](https://github.com/blooddrunk/Shot2Agent/actions/runs/40066709042)。后续收尾提交必须再验证精确身份。 |
+| 本机 Docker / Rust 构建 | SKIPPED | 本机未安装 Docker / cargo；这些本机命令不可执行；相应 Linux 容器与 Windows 构建已在上述 CI 实际 PASS。 |
 
-新增 Remote GUI 专项 `npm run desktop:test-ui -- -g "M10 Remote"` 已 PASS（0，3/3，1040/720/480px），截图已检查无横向溢出。完整 31 项 UI 正在复验。
+新增 Remote GUI 专项 `npm run desktop:test-ui -- -g "M10 Remote"` 已 PASS（0，3/3，1040/720/480px），截图已检查无横向溢出。完整 31 项曾有 1 项 FAIL：旧版本标题断言硬编码 1.0.2；改为 APP_VERSION 后定向重跑 PASS。随后完整 31/31 在 CI 通过。
 
 开发阶段 Remote GUI 测试曾发现测试驱动未等待异步图片提交，以及删除 Token 后残留上次同步时间导致精确文字断言失败；已修正等待和状态清理，最终重跑结果另记。首次旧测试在临时 start 指纹校验变更下失败；校验限制为带目标绑定的 Remote，Local 原有绑定变化的终态失败语义保留。不得用后续 PASS 隐藏这些实际发生的 FAIL。
 
@@ -39,3 +39,10 @@
 ## 人工边界与交付
 
 [Remote 使用与最小验收](REMOTE_GUIDE.md) 给出前置设备、具体窗口/点击、PASS/FAIL、恢复和未验证范围。ZIP 将包含隔离且可重启的 Fake 启动器、五张合成图和可独立构建的 Relay 源码部署上下文。未观察的真实双 Windows、跨网络 HTTPS/VPS、Explorer 粘贴、通知/焦点均 **NOT VERIFIED**。没有请求重复验证 v1.0.2 未改变的原生 Local 功能；新观察只针对 Remote 结果路径。
+
+## CI 实际失败和修复
+
+- 初始源 008a9b14af1ca0f156ca8b34ea8fbe5a585a8c5f，[40066564989](https://github.com/blooddrunk/Shot2Agent/actions/runs/40066564989) 的 Compose job 实际 FAIL：未引用的 YAML flow 字符串在逗号处分成两个 tmpfs 项，Docker 报 `invalid mount path: mode=1777`。已给字符串加引号，并在容器测试断言解析后的完整 tmpfs；40066709064 的容器 job 实际 PASS。
+- 本机完整 UI 曾 30 PASS / 1 FAIL（硬编码旧版本）；改为检查当前 APP_VERSION，定向 1/1 PASS，40066709064 完整 31/31 PASS。
+- 本机损坏 blob 回归曾 FAIL（新增长度预检查返回 UNSAFE_FILE，而原契约是 BLOB_INTEGRITY）；保留原错误契约同时在读文件前拒绝不符长度，随后完整 check PASS。
+- 缓存预算、一次性排他启动清理及 Git 跟踪文件限定的部署源码包属于收尾修正；后续精确 SHA CI 仍须全部通过，不能沿用旧构建替代。

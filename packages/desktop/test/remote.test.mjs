@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, realpathSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, realpathSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
+import { randomUUID } from 'node:crypto';
 import { DesktopController } from '../src/controller.ts';
 import { RemoteClient } from '../../../services/relay/src/client.ts';
 import { createRelay } from '../../../services/relay/src/server.ts';
@@ -193,4 +194,28 @@ test('R01/R08 mode changes affect new tasks only, standalone Local makes zero Re
   while (!release) await delay(2);
   assert.equal(await h.b.app.work(undefined, new RemoteClient(h.url, devices[1].token)), false); release(); await working;
   await h.work(); await h.sync(h.a); assert.equal(max, 1); assert.equal(h.b.app.get(localB).status, 'succeeded'); assert.equal(h.a.app.get(remote).status, 'succeeded');
+});
+
+test('R08 private orphan cleanup runs only once after exclusive ownership, never during capture rearm', async t => {
+  const h = await harness(t);
+  const staged = h.a.remote.core.blobs.put(Buffer.from('synthetic partial download'), { fileName: 'result.txt', contentType: 'text/plain' });
+  const path = join(h.root, 'a', 'remote', 'blobs', staged.fileId);
+  await h.a.start(); assert.equal(existsSync(path), true, 'rearm must not remove an in-flight download');
+  await h.restartA(); assert.equal(existsSync(path), false, 'a new exclusively owned process can remove the abandoned blob');
+});
+
+test('R06 bounded receiver refuses cache exhaustion before downloading or publishing a result', async t => {
+  const h = await harness(t); const { images } = await syntheticSubmission(); const id = await h.a.app.submitImages(images); await h.sync(h.a); await h.work();
+  // Synthetic accounting fixture reaches the budget without allocating 512 MiB on the test machine.
+  const sentinel = randomUUID(); const task = h.a.app.get(id);
+  h.a.remote.core.store.putMetadata(`outbox:${sentinel}`, JSON.stringify({ version: 1, key: sentinel, deleted: true, metadata: { ...task.submission, taskId: sentinel }, files: [{ fileId: randomUUID(), byteSize: 512 * 1024 * 1024 }] }));
+  await h.sync(h.a); assert.equal(h.a.remote.info(id).error, 'REMOTE_CACHE_FULL'); assert.equal(h.a.app.get(id).status, 'queued'); assert.equal(h.cb.files.length, 0);
+});
+
+test('R08 changing device Token never migrates an existing outbox to the new identity', async t => {
+  const h = await harness(t); const { images } = await syntheticSubmission(); const id = await h.a.app.submitImages(images);
+  await rpc(h.a, 'remote-configure', { token: devices[2].token }); await h.sync(h.a);
+  assert.equal(h.core.store.tasks().length, 0); assert.equal(h.a.remote.info(id).error, 'REMOTE_CONNECTION_CHANGED');
+  await rpc(h.a, 'remote-configure', { token: devices[0].token }); await h.sync(h.a);
+  assert.equal(h.core.store.tasks()[0].originDeviceId, 'a'); assert.equal(h.a.app.list()[0].submission.taskId, id);
 });

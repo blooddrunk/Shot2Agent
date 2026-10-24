@@ -223,7 +223,7 @@ const errorText: Record<string, string> = {
 const data = ref<Snapshot>();
 const remoteUrl = ref(''); const remoteLabel = ref('Windows PC'); const remoteToken = ref(''); const remoteDirty = ref(false);
 const remoteOptions = computed(() => (data.value?.remote?.workers ?? []).flatMap(w => w.profiles.map(p => ({
-  key: JSON.stringify([w.deviceId, p.id, p.version]), label: `${w.label} · ${p.id} (${providerText[p.provider] ?? p.provider}) · ${w.accepting && Date.now() - w.lastSeen < 60000 ? '在线' : '离线 / 已暂停'}`, deviceId: w.deviceId, ...p,
+  key: JSON.stringify([w.deviceId, p.id, p.version]), label: `${w.label} · ${p.id} / ${p.version} (${providerText[p.provider] ?? p.provider}) · ${w.accepting && Date.now() - w.lastSeen < 60000 ? '在线' : '离线 / 已暂停'}`, deviceId: w.deviceId, ...p,
 }))));
 const remoteSelection = computed(() => { const t = data.value?.remote?.target; return t ? JSON.stringify([t.deviceId, t.id, t.version]) : ''; });
 async function saveRemote() {
@@ -1550,6 +1550,7 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener("shot2agent
               已保留你后来复制的内容，可手动复制此结果。
             </p>
             <p class="hint" v-if="task.retryableChannels?.length">结果已保留。重试只重新复制、保存或通知，不会重新请求 AI。</p>
+            <p v-if="task.remote?.error" class="error">{{ friendlyError(task.remote.error) }} · {{ task.remote.error }}</p>
             <details v-if="task.error || task.clipboard?.code || task.save?.code || task.notification?.code" class="hint">
               <summary>技术详情</summary>
               <p>{{ task.error }} {{ task.clipboard?.code }} {{ task.clipboard?.classification }} {{ task.save?.code }} {{ task.save?.classification }} {{ task.notification?.code }}</p>

@@ -45,8 +45,9 @@ const relaySource = join(out, 'Relay source');
 for (const file of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'tsconfig.json', 'tsconfig.build.json', '.dockerignore']) {
   mkdirSync(relaySource, { recursive: true }); copyFileSync(file, join(relaySource, file));
 }
-for (const directory of ['packages', 'services', 'apps/cli', 'scripts', 'deploy/relay']) cpSync(directory, join(relaySource, directory), { recursive: true,
-  filter: path => !/[/\\](?:node_modules|target|secrets|\.env)(?:[/\\]|$)/.test(path) });
+// A source bundle must never sweep ignored runtime state or private developer files.
+const sourceFiles = execFileSync('git', ['ls-files', '-z', '--', 'packages', 'services', 'apps/cli', 'scripts', 'deploy/relay'], { encoding: 'utf8' }).split('\0').filter(Boolean);
+for (const file of sourceFiles) { mkdirSync(dirname(join(relaySource, file)), { recursive: true }); copyFileSync(file, join(relaySource, file)); }
 mkdirSync(join(relaySource, 'docs'), { recursive: true });
 for (const file of ['REMOTE_GUIDE.md', 'M10_R_VALIDATION.md']) copyFileSync(`docs/${file}`, join(relaySource, 'docs', file));
 writeFileSync(join(relaySource, 'SOURCE.txt'), execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }));

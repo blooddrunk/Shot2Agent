@@ -13,6 +13,7 @@ assert.match(readFileSync(join(bundle, 'BUILD.txt'), 'utf8'), new RegExp(APP_VER
 for (const file of ['Shot2Agent.exe', 'runtime/node.exe', 'runtime/dist/packages/local/src/clipboard.ps1', 'runtime/dist/packages/worker/src/claude-policy.ps1', 'runtime/dist/packages/worker/src/gateway-credential.ps1', 'runtime/dist/scripts/fixtures/glm-vision.png', 'Windows instructions.md', 'LOCAL_V1_GUIDE.md', 'USER_GUIDE.md', 'THIRD_PARTY_NOTICES.md']) assert.ok(existsSync(join(bundle, file)), file);
 const manifest = JSON.parse(readFileSync(join(bundle, 'MANIFEST.json')));
 for (const file of ['REMOTE_GUIDE.md', 'M10_R_VALIDATION.md', 'Start Remote acceptance.cmd', 'Remote synthetic 1.png', 'Remote synthetic 5.png', 'Relay source/deploy/relay/compose.yaml', 'Relay source/SOURCE.txt', 'runtime/dist/packages/desktop/src/remote.js', 'runtime/dist/services/relay/src/client.js', 'runtime/dist/services/relay/src/capabilities.js']) assert.ok(existsSync(join(bundle, file)), file);
+assert.equal(readFileSync(join(bundle, 'Relay source/SOURCE.txt'), 'utf8').trim(), manifest.sourceSha);
 for (const [file, hash] of Object.entries(manifest.files)) assert.equal(createHash('sha256').update(readFileSync(join(bundle, file))).digest('hex'), hash, file);
 const { DesktopController } = await moduleAt('packages/desktop/src/controller.js');
 const { WindowsClipboard } = await moduleAt('packages/local/src/clipboard.js');
