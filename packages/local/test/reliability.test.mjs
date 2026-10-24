@@ -20,7 +20,10 @@ async function scenario(run) {
   try { await run({ dir, state, t, id, clip, restart() { state.close(); state = new LocalState(dir); return state; } }); }
   finally { state.close(); rmSync(dir, { recursive: true, force: true }); }
 }
-test('busy then recovery retries with original baseline; independent file result and restart receipts', () => scenario(async ({ dir, state, t, id, clip, restart }) => {
+test('busy then recovery retries with original baseline; independent file result and restart receipts', context => scenario(async ({ dir, state, t, id, clip, restart }) => {
+  // This case verifies retry/restart semantics, not hosted SQLite latency. The
+  // independent budget cases below continue to exercise deadline refusal.
+  context.mock.method(globalThis.performance, 'now', () => 0);
   const write = clip.writeText.bind(clip); let busy = true;
   clip.writeText = async (...args) => { if (busy) { busy = false; throw Error('CLIPBOARD_BUSY'); } return write(...args); };
   await deliver(t, { ...config, saveDirectory: join(dir, 'out') }, state, clip);

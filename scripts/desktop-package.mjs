@@ -41,6 +41,7 @@ writeFileSync(join(out, 'Start Remote acceptance.cmd'), '@echo off\r\nset "LOCAL
 for (let i = 1; i <= 5; i++) await sharp({ create: { width: 160, height: 100, channels: 3, background: { r: i * 40, g: 80, b: 120 } } }).png().toFile(join(out, `Remote synthetic ${i}.png`));
 cpSync('docs/REMOTE_GUIDE.md', join(out, 'REMOTE_GUIDE.md'));
 cpSync('docs/M10_R_VALIDATION.md', join(out, 'M10_R_VALIDATION.md'));
+for (const file of ['M11_X_SCOPE.md', 'M11_X_VALIDATION.md', 'M12_V_PLAN.md']) cpSync(`docs/${file}`, join(out, file));
 const relaySource = join(out, 'Relay source');
 for (const file of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'tsconfig.json', 'tsconfig.build.json', '.dockerignore']) {
   mkdirSync(relaySource, { recursive: true }); copyFileSync(file, join(relaySource, file));
@@ -51,7 +52,7 @@ for (const file of sourceFiles) { mkdirSync(dirname(join(relaySource, file)), { 
 mkdirSync(join(relaySource, 'docs'), { recursive: true });
 for (const file of ['REMOTE_GUIDE.md', 'M10_R_VALIDATION.md']) copyFileSync(`docs/${file}`, join(relaySource, 'docs', file));
 writeFileSync(join(relaySource, 'SOURCE.txt'), execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }));
-writeFileSync(join(out, 'BUILD.txt'), `Shot2Agent M10-R development candidate ${APP_VERSION}\nCommit: ${execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()}\nNode: ${process.version}\nWindows x64 portable build. WebView2 required.\nLaunch Shot2Agent.exe for GUI setup, capture, result delivery and history. Local is default; Remote is an explicit optional destination configured in Settings.\nStart Codex.cmd is an optional compatibility launcher. Start legacy Local.cmd opens the original Shot2Agent history root.\nStart acceptance.cmd is a fresh isolated Fake root, delayed 8s. Start Remote acceptance.cmd is a restartable isolated Fake root beside this ZIP; see REMOTE_GUIDE.md.\nClose hides to tray. 托盘 > 退出 Shot2Agent stops coordinator and Agent.\n`);
+writeFileSync(join(out, 'BUILD.txt'), `Shot2Agent M11-X development candidate ${APP_VERSION}\nCommit: ${execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()}\nNode: ${process.version}\nWindows x64 portable build. WebView2 required.\nLaunch Shot2Agent.exe for GUI setup, capture, result delivery and history. Local is default; Remote is an explicit optional destination configured in Settings.\nStart Codex.cmd is an optional compatibility launcher. Start legacy Local.cmd opens the original Shot2Agent history root.\nStart acceptance.cmd is a fresh isolated Fake root, delayed 8s. Start Remote acceptance.cmd is a restartable isolated Fake root beside this ZIP; see REMOTE_GUIDE.md.\nClose hides to tray. 托盘 > 退出 Shot2Agent stops coordinator and Agent.\n`);
 cpSync('docs/LOCAL_V1_GUIDE.md', join(out, 'Windows instructions.md'));
 cpSync('docs/LOCAL_V1_GUIDE.md', join(out, 'LOCAL_V1_GUIDE.md'));
 cpSync('docs/USER_GUIDE.md', join(out, 'USER_GUIDE.md'));
@@ -65,7 +66,7 @@ function record(directory, prefix = '') {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const relative = prefix + entry.name;
     if (entry.isDirectory()) record(join(directory, entry.name), relative + '/');
-    else if (!['MANIFEST.json', 'SMOKE.txt', 'PORTABLE-VERIFY.txt', 'TRAY-SMOKE.txt'].includes(relative)) files[relative] = createHash('sha256').update(readFileSync(join(directory, entry.name))).digest('hex');
+    else if (!['MANIFEST.json', 'SMOKE.txt', 'PORTABLE-VERIFY.txt', 'TRAY-SMOKE.txt', 'UI-SMOKE.txt'].includes(relative)) files[relative] = createHash('sha256').update(readFileSync(join(directory, entry.name))).digest('hex');
   }
 }
 record(out);

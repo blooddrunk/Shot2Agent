@@ -1,4 +1,5 @@
 import { fileCacheUsage } from '../../local/src/file-cache.ts';
+import { nativeDefaults, publishCapture, validateNative } from './native.ts';
 import { APP_VERSION } from './version.ts';
 import { RemoteQueue, remoteDefaults, validateRemote } from './remote.ts';
 import { RemoteClient } from '../../../services/relay/src/client.ts';
@@ -64,6 +65,7 @@ export class DesktopController {
   private folder = new FolderSource();
   private composer: { id: string; bytes: Buffer; preview: string }[] = [];
   private preview?: string; private previewImage?: object;
+  private nativeCapture?: { path?: string; submission: string; clipboard: string };
   private credentials: DesktopCredentialStore;
   private testGateway: GatewayVisionTest;
   readonly remote: RemoteQueue;
@@ -321,7 +323,7 @@ export class DesktopController {
   private armFolder(settings: Settings) {
     const directory = settings.desktop.folderEnabled && !settings.desktop.paused ? settings.desktop.folderDirectory : undefined;
     if (directory) validateCaptureFolder(directory, [this.root, ...(settings.delivery.saveDirectory ? [settings.delivery.saveDirectory] : [])]);
-    const next = new FolderSource(); next.arm(directory); this.folder = next;
+    const next = new FolderSource(); next.arm(directory, settings.desktop.folderNewFilesOnly ?? true); this.folder = next;
   }
   private async addComposer(inputs: Buffer[]) {
     requireValue(inputs.length > 0 && this.composer.length + inputs.length <= 5, 'BATCH_IMAGE_COUNT');
@@ -373,7 +375,8 @@ export class DesktopController {
       submit: [], current: [], discard: [], pause: ['paused'], copy: ['id'], detail: ['id'], 'retry-delivery': ['id'], recover: [], 'select-agent': ['id', 'version'],
       'archive-agent': ['id', 'version', 'archived', 'confirm'], 'delete-agent': ['id', 'version', 'confirm'], 'cleanup-unused-agents': [],
       'create-profile': ['provider', 'id', 'path', 'workspace', 'prompt', 'endpoint', 'model', 'token', 'editId', 'editVersion', 'reuseExisting', 'enableAfterTest'], 'credential-status': ['id', 'version'], 'test-agent': ['id', 'version', 'confirm'],
-      'delete-history': ['ids', 'reviewedUnknown'], 'clear-history': ['mode'], 'discover-agents': [], quit: [] };
+      'delete-history': ['ids', 'reviewedUnknown'], 'clear-history': ['mode'], 'discover-agents': [], quit: [],
+      'configure-native': ['options'], 'capture-plan': [], 'capture-ingest': ['path', 'options'], 'typing-source': ['source', 'id'], 'native-feedback': ['action', 'status'] };
     requireValue(Object.hasOwn(allowed, r.command) && Object.keys(r).every(k => ['v', 'command', ...allowed[r.command as string]].includes(k)), 'COMMAND_REFUSED');
     const id = () => { requireValue(typeof r.id === 'string' && /^[0-9a-f-]{36}$/.test(r.id), 'INVALID_TASK_ID'); return r.id; };
     if (r.command === 'snapshot') {
@@ -382,6 +385,54 @@ export class DesktopController {
       return this.snapshot(Number(r.offset ?? 0), String(r.query ?? ''));
     }
     switch (r.command) {
+      case 'configure-native': {
+        validateNative(r.options);
+        const next = structuredClone(this.settings); next.native = r.options;
+        saveSettings(this.root, next); this.settings = next; break;
+      }
+      case 'capture-plan': {
+        requireValue(!this.settings.desktop.paused, 'CAPTURE_PAUSED');
+        const options = this.settings.native ?? nativeDefaults();
+        requireValue(options.save || options.submit || options.clipboard, 'CAPTURE_OUTPUT_REQUIRED');
+        requireValue(!options.save || !!options.directory, 'CAPTURE_DIRECTORY_REQUIRED');
+        requireValue(!options.submit || this.isConfigured(), 'AGENT_SETUP_REQUIRED');
+        return { ...options, mode: this.settings.desktop.mode, autoConsent: this.settings.desktop.autoConsent };
+      }
+      case 'capture-ingest': {
+        const options = await this.dispatch({ v: 1, command: 'capture-plan' });
+        requireValue(r.options && typeof r.options === 'object' && Object.keys(r.options).length === Object.keys(options as object).length && Object.entries(options as Record<string, unknown>).every(([key, val]) => (r.options as Record<string, unknown>)[key] === val), 'CAPTURE_SETTINGS_CHANGED');
+        requireValue(typeof r.path === 'string' && r.path.length <= 2048, 'INVALID_CAPTURE_FILE');
+        const bytes = readImageFile(r.path); await validateLocalImage(bytes);
+        const n = this.settings.native ?? nativeDefaults();
+        const receipt: NonNullable<typeof this.nativeCapture> = { submission: n.submit ? 'pending' : 'off', clipboard: n.clipboard ? 'pending' : 'off' };
+        this.nativeCapture = receipt;
+        if (n.save) receipt.path = publishCapture(n.directory, bytes, path => this.folder.suppress(path));
+        if (n.submit) {
+          const sequence = await this.app.clipboard!.sequence();
+          await this.app.ingest(bytes, this.settings.desktop.mode === 'auto', { session: this.app.clipboard!.session, sequence }, 'native');
+          receipt.submission = this.settings.desktop.mode === 'auto' ? this.app.lastCaptureStatus : 'confirmation';
+        }
+        if (n.clipboard) {
+          try {
+            requireValue(this.app.clipboard?.writeImage, 'NATIVE_IMAGE_CLIPBOARD_UNAVAILABLE');
+            const sequence = await this.app.clipboard.writeImage(bytes); this.app.skipClipboardSequence(sequence); receipt.clipboard = 'succeeded';
+          } catch (error) { receipt.clipboard = safeError(error); }
+        }
+        break;
+      }
+      case 'typing-source': {
+        requireValue(r.source === 'latest' || r.source === 'history', 'INVALID_TYPING_SOURCE');
+        const task = r.source === 'latest' ? completedResults(this.app)[0] : this.app.get(id());
+        requireValue(task?.status === 'succeeded' && task.result?.status === 'succeeded', 'NO_COMPLETED_RESULT');
+        const text = task.result.contentMarkdown;
+        requireValue(text.trim().length > 0, 'TYPING_EMPTY');
+        requireValue(Buffer.byteLength(text) <= 400_000, 'TYPING_TEXT_LIMIT');
+        const n = this.settings.native ?? nativeDefaults();
+        return { text, delayMs: n.delayMs, charsPerSecond: n.charsPerSecond, newlineAsSpace: n.newlineAsSpace ?? false };
+      }
+      case 'native-feedback':
+        requireValue(['capture-monitor', 'type-latest', 'stop-typing', 'type-history', 'type-clipboard'].includes(String(r.action)) && typeof r.status === 'string' && /^[A-Za-z0-9_]{1,128}$/.test(r.status), 'INVALID_NATIVE_FEEDBACK');
+        this.lastAction = { action: String(r.action), status: r.status, at: Date.now() }; break;
       case 'remote-configure': {
         await this.remoteSync;
         requireValue(!this.worker || (r.url === undefined && r.token === undefined), 'REMOTE_WAIT_FOR_IDLE');
@@ -450,6 +501,7 @@ export class DesktopController {
         requireValue(!this.actionBusy, 'ACTION_IN_PROGRESS'); this.actionBusy = true;
         try {
           switch (r.action) {
+            case 'capture-monitor': case 'type-latest': case 'stop-typing': throw new Error('NATIVE_SHELL_REQUIRED');
             case 'toggle-pause': await this.dispatch({ v: 1, command: 'pause', paused: !this.settings.desktop.paused }); break;
             case 'copy-latest': {
               const task = completedResults(this.app)[0]; requireValue(task, 'NO_COMPLETED_RESULT');
@@ -545,7 +597,7 @@ export class DesktopController {
         if (r.capture !== undefined) {
           requireValue(r.capture && typeof r.capture === 'object' && !Array.isArray(r.capture), 'INVALID_CAPTURE_SETTINGS');
           const capture = r.capture as Record<string, unknown>;
-          requireValue(Object.keys(capture).every(k => ['enabled', 'mode', 'folderEnabled', 'folderDirectory'].includes(k)), 'INVALID_CAPTURE_SETTINGS');
+          requireValue(Object.keys(capture).every(k => ['enabled', 'mode', 'folderEnabled', 'folderDirectory', 'folderNewFilesOnly'].includes(k)), 'INVALID_CAPTURE_SETTINGS');
           Object.assign(next.desktop, capture);
         }
         requireValue(!(next.desktop.enabled || next.desktop.folderEnabled) || this.isConfigured(), 'AGENT_SETUP_REQUIRED');
@@ -566,7 +618,8 @@ export class DesktopController {
       case 'pause':
         requireValue(typeof r.paused === 'boolean', 'INVALID_PAUSE');
         { const next = structuredClone(this.settings); next.desktop.paused = r.paused;
-          this.armFolder(next); await this.app.arm(); saveSettings(this.root, next); this.settings = next; this.armed = true; this.captureError = undefined; } break;
+          this.armFolder(next); await this.app.arm(); saveSettings(this.root, next); this.settings = next; this.armed = true; this.captureError = undefined;
+          if (!r.paused && this.lastAction?.status === 'CAPTURE_PAUSED') this.lastAction = undefined; } break;
       case 'submit':
         requireValue(this.isConfigured(), 'AGENT_SETUP_REQUIRED');
         requireValue(this.app.pending, 'NO_PENDING_IMAGE'); await this.app.capture(true); break;
@@ -678,7 +731,7 @@ export class DesktopController {
     const selectedAgent = this.app.registry.find(e => e.profile.id === this.app.profile.id && e.profile.version === this.app.profile.version);
     let fileCache;
     try { fileCache = fileCacheUsage(this.root); } catch { fileCache = { error: 'UNSAFE_FILE_CACHE' }; }
-    const snapshot = { appVersion: APP_VERSION, fileCache, composer: this.composer.map(({ id, preview }) => ({ id, preview })), folderError: this.folder.error, activity: { running: tasks.filter(t => ['leased', 'running'].includes(t.status)).length, queued: tasks.filter(t => t.status === 'queued').length }, hotkeys: this.settings.hotkeys ?? {}, lastAction: this.lastAction, lastHistoryCleanup: this.lastHistoryCleanup, canReviewUnknownHistory: this.app.canReviewUnknownHistory,
+    const snapshot = { nativeOptions: this.settings.native ?? nativeDefaults(), nativeCapture: this.nativeCapture, appVersion: APP_VERSION, fileCache, composer: this.composer.map(({ id, preview }) => ({ id, preview })), folderError: this.folder.error, activity: { running: tasks.filter(t => ['leased', 'running'].includes(t.status)).length, queued: tasks.filter(t => t.status === 'queued').length }, hotkeys: this.settings.hotkeys ?? {}, lastAction: this.lastAction, lastHistoryCleanup: this.lastHistoryCleanup, canReviewUnknownHistory: this.app.canReviewUnknownHistory,
       settings: this.settings.desktop, delivery: this.settings.delivery, root: this.root, launchMode: this.launchMode, setupRequired: !this.isConfigured(),
       remote: { ...Object.fromEntries(Object.entries(this.settings.remote ?? remoteDefaults()).filter(([key]) => key !== 'credentialRef')), hasToken: !!this.settings.remote?.credentialRef, status: this.remote.status, error: this.remote.error, lastSync: this.remote.lastSync, workers: this.remote.workers },
       agents, discovery: this.discovery.map(candidate => ({ provider: candidate.provider, path: candidate.path, selectionPath: candidate.selectionPath ?? candidate.path, version: candidate.version, status: candidate.status })),
@@ -692,7 +745,7 @@ export class DesktopController {
     const actions = { copy: results.length > 0, retry: results.some(t => retryableDelivery(this.app, t)),
       cycle: !!this.settings.agents && this.app.registry.filter(e => selectable.has(profileKey(e.profile.id, e.profile.version))).length > 1,
       current: this.isConfigured() && !this.workerError && !this.captureError };
-    return { ...snapshot, tray: trayView({ ...snapshot, actions }) };
+    return { ...snapshot, typingAvailable: results.length > 0, tray: trayView({ ...snapshot, actions }) };
   }
   async close() {
     if (this.closed) return; this.closed = true; this.controller.abort();

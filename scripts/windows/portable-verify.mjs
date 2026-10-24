@@ -19,6 +19,8 @@ const { DesktopController } = await moduleAt('packages/desktop/src/controller.js
 const { WindowsClipboard } = await moduleAt('packages/local/src/clipboard.js');
 const { FakeAgent, FAKE_PROFILE } = await moduleAt('packages/worker/src/fake.js');
 const { defaults, saveSettings } = await moduleAt('packages/desktop/src/settings.js');
+const { nativeDefaults } = await moduleAt('packages/desktop/src/native.js');
+for (const file of ['M11_X_SCOPE.md', 'M11_X_VALIDATION.md', 'M12_V_PLAN.md', 'runtime/dist/packages/desktop/src/native.js', 'runtime/dist/packages/desktop/src/native-options.js']) assert.ok(existsSync(join(bundle, file)), file);
 const { readGatewayToken, deleteGatewayToken } = await moduleAt('packages/worker/src/gateway.js');
 let remoteReference;
 const clipboard = new WindowsClipboard(); let desktop;
@@ -40,7 +42,22 @@ try {
   const settings = defaults(); settings.delivery = { clipboard: 'manual' }; saveSettings(root, settings);
   desktop = new DesktopController(root, new WindowsClipboard(), { adapter: new FakeAgent(), profile: FAKE_PROFILE }, 'staging', async () => []);
   const png = readFileSync(join(bundle, 'runtime/dist/scripts/fixtures/glm-vision.png'));
+  const nativeClipboard = desktop.app.clipboard;
+  await nativeClipboard.writeImage(png);
+  const beforeImage = await nativeClipboard.readImage();
+  assert.ok(beforeImage?.bytes.length > 0);
+  const beforeSequence = await nativeClipboard.sequence();
+  await desktop.dispatch({ v: 1, command: 'configure-native', options: { ...nativeDefaults(), directory: join(root, 'synthetic-captures') } });
+  await desktop.dispatch({ v: 1, command: 'capture-ingest', path: join(bundle, 'runtime/dist/scripts/fixtures/glm-vision.png'), options: await desktop.dispatch({ v: 1, command: 'capture-plan' }) });
+  assert.equal(await nativeClipboard.sequence(), beforeSequence);
+  assert.deepEqual((await nativeClipboard.readImage()).bytes, beforeImage.bytes);
+  assert.equal(desktop.app.list().length, 0);
   const id = await desktop.app.submitImages([png]); await desktop.app.work();
+  const source = await desktop.dispatch({ v: 1, command: 'typing-source', source: 'history', id });
+  assert.match(source.text, /Fake result/);
+  assert.deepEqual(source, await desktop.dispatch({ v: 1, command: 'typing-source', source: 'latest' }));
+  assert.equal(await nativeClipboard.sequence(), beforeSequence);
+  assert.equal(desktop.app.get(id).attempts.length, 1);
   await desktop.dispatch({ v: 1, command: 'copy-files', id });
   const cache = (await desktop.dispatch({ v: 1, command: 'snapshot' })).fileCache;
   assert.equal(cache.files, 1);
@@ -51,6 +68,6 @@ try {
   await desktop.close();
   desktop = new DesktopController(root, new WindowsClipboard(), { adapter: new FakeAgent(), profile: FAKE_PROFILE }, 'staging', async () => []);
   assert.equal(desktop.app.get(id2).status, 'succeeded'); assert.equal(desktop.app.get(id2).attempts.length, 1);
-  const report = `PASS extracted ZIP ${APP_VERSION}: manifest hashes/resources, fresh GUI onboarding contract (no profile), native Remote credential save/readback/delete with pasted whitespace and no network, isolated Fake one/five images, native files/cache, retained files after deletion, restart history. Interactive Explorer/focus is outside this automated check; see the operator acceptance record.`;
+  const report = `PASS extracted ZIP ${APP_VERSION}: manifest hashes/resources, fresh GUI onboarding contract (no profile), native Remote credential save/readback/delete with pasted whitespace and no network, isolated Fake one/five images, native image clipboard roundtrip, file-only PNG with unchanged clipboard bytes/sequence, latest/history typing source without clipboard mutation or rerun, native files/cache, retained files after deletion, restart history. Interactive Explorer/focus is outside this automated check; see the operator acceptance record.`;
   writeFileSync(join(bundle, 'PORTABLE-VERIFY.txt'), report); process.stdout.write(report + '\n');
 } finally { if (remoteReference) await deleteGatewayToken(remoteReference); await desktop?.close(); clipboard.close(); rmSync(root, { recursive: true, force: true }); }

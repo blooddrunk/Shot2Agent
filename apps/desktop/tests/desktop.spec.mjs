@@ -11,8 +11,9 @@ import { createRelay } from '../../../services/relay/src/server.ts';
 import { RemoteClient } from '../../../services/relay/src/client.ts';
 import { runOnce } from '../../../packages/worker/src/worker.ts';
 import { APP_VERSION } from '../../../packages/desktop/src/version.ts';
+import { nativeDefaults } from '../../../packages/desktop/src/native-options.ts';
 
-let desktop, root, workspace, testsSent, gatewayFailureCode, pickerSelection;
+let desktop, root, workspace, testsSent, gatewayFailureCode, pickerSelection, nativeRequests, nativeRuntime, nativeCaptureGate;
 const previousLocalAppData = process.env.LOCALAPPDATA;
 test.beforeEach(async ({ page }) => {
   root = realpathSync(mkdtempSync(join(tmpdir(), "shot2agent-ui-")));
@@ -22,6 +23,8 @@ test.beforeEach(async ({ page }) => {
   makeCli(root, "codex");
   makeCli(root, "claude");
   testsSent = 0;
+  nativeRequests = []; nativeRuntime = { capturing: false, captureStatus: '', typing: { phase: 'idle', active: false, sent: 0, total: 0 } };
+  nativeCaptureGate = undefined;
   pickerSelection = null;
   gatewayFailureCode = "";
   const clipboard = {
@@ -71,7 +74,27 @@ test.beforeEach(async ({ page }) => {
     if (command !== "rpc") return undefined;
     const { request } = args;
     try {
-      return { ok: true, value: await desktop.dispatch(request) };
+      if (['capture-monitor', 'type-latest', 'type-result', 'type-clipboard', 'stop-typing', 'native-monitors'].includes(request.command)) {
+        nativeRequests.push(request);
+        if (request.command === 'native-monitors') return { ok: true, value: [{ id: 'synthetic-display', width: 3840, height: 2160, primary: true }] };
+        if (request.command === 'capture-monitor') {
+          await nativeCaptureGate;
+          await new Promise(resolve => setTimeout(resolve, 250));
+          try { await desktop.dispatch({ v: 1, command: 'capture-plan' }); }
+          catch (e) {
+            await desktop.dispatch({ v: 1, command: 'native-feedback', action: 'capture-monitor', status: e.message });
+            throw e;
+          }
+        }
+        if (request.command === 'type-clipboard') await desktop.dispatch({ v: 1, command: 'native-feedback', action: 'type-clipboard', status: 'preparing' });
+        const value = await desktop.dispatch({ v: 1, command: 'snapshot' });
+        nativeRuntime = { capturing: false, captureStatus: 'saved', typing: request.command === 'capture-monitor' ? {} : { phase: request.command === 'stop-typing' ? 'TYPING_CANCELED' : 'preparing', active: request.command !== 'stop-typing', sent: 0, total: 20 } };
+        value.nativeRuntime = nativeRuntime;
+        return { ok: true, value };
+      }
+      const value = await desktop.dispatch(request);
+      if (nativeRuntime && request.command === 'snapshot') value.nativeRuntime = nativeRuntime;
+      return { ok: true, value };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -650,7 +673,7 @@ test("polish spacing and both themes across window sizes, with populated cleanup
       await hotkeys.locator("summary").click();
       const actions = page.getByRole("group", { name: "立即操作" });
       await actions.scrollIntoViewIfNeeded();
-      await expect(actions.getByRole("button")).toHaveCount(5);
+      await expect(actions.getByRole("button")).toHaveCount(8);
       const boxes = await actions.getByRole("button").evaluateAll((nodes) =>
         nodes.map((node) => {
           const r = node.getBoundingClientRect();
@@ -812,6 +835,31 @@ test("M8 home capture status follows applied sources, mode, pause and external c
   } finally { rmSync(folder, { recursive: true, force: true }); }
 });
 
+test('folder GUI defaults to new files and explicitly warns before including existing images', async ({ page }) => {
+  await add(page, 'claude-compatible-endpoint', 'folder-policy');
+  const folder = realpathSync(mkdtempSync(join(tmpdir(), 'shot-new-files-ui-')));
+  try {
+    await nav(page, '设置');
+    await page.getByLabel('监听截图文件夹（仅此目录）', { exact: true }).check();
+    pickerSelection = folder; await page.getByRole('button', { name: '选择截图文件夹…' }).click();
+    const policy = page.getByLabel('仅监听新增文件（推荐）', { exact: true });
+    await expect(policy).toBeChecked();
+    await page.getByLabel('剪贴板返回').selectOption('off');
+    await page.getByRole('button', { name: '应用设置', exact: true }).click();
+    expect(desktop.settings.desktop.folderNewFilesOnly).toBe(true);
+    await policy.uncheck();
+    await expect(page.getByText(/自动提交模式可能生成多个历史任务/)).toBeVisible();
+    await page.getByRole('button', { name: '应用设置', exact: true }).click();
+    await expect(page.getByText('设置已保存。将处理目录中已有图片及后续新增或修改的图片。', { exact: true })).toBeVisible();
+    expect(desktop.settings.desktop.folderNewFilesOnly).toBe(false);
+    await page.reload(); await nav(page, '设置');
+    await expect(policy).not.toBeChecked();
+    await policy.check(); await page.getByRole('button', { name: '应用设置', exact: true }).click();
+    expect(desktop.settings.desktop.folderNewFilesOnly).toBe(true);
+    expect(testsSent).toBe(0);
+  } finally { rmSync(folder, { recursive: true, force: true }); }
+});
+
 
 test("M8 Copy files distinguishes native replacement from verified success without AI rerun", async ({ page }) => {
   await add(page, "codex", "copy-feedback-agent"); await seedTasks(1); await nav(page, "首页");
@@ -957,4 +1005,85 @@ test("v1.0.1 isolated Fake controls expose recoverable capture and persistent Wo
   await expect(page.locator('.status-pill')).toContainText('需要处理');
   await page.screenshot({path:'build/ui-evidence/v101-fake-fault-tools.png',fullPage:true});
   expect(desktop.app.list()).toHaveLength(0); expect(testsSent).toBe(0);
+});
+
+for (const width of [1040, 720, 480]) test(`M11 native configuration and responsive controls ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 850 });
+  await page.getByRole('button', { name: '设置', exact: true }).click();
+  const settings = page.getByRole('group', { name: '原生截图与直接输入设置' });
+  await expect(settings.getByLabel('保存截图 PNG 文件')).toBeChecked();
+  await expect(settings.getByLabel('同时交给所选 Agent', { exact: false })).not.toBeChecked();
+  await settings.getByRole('button', { name: '刷新显示器' }).click();
+  await settings.getByLabel('截图显示器').selectOption('synthetic-display');
+  pickerSelection = join(root, 'capture-output');
+  await settings.getByRole('button', { name: '选择截图保存目录…' }).click();
+  await settings.getByLabel('输入准备时间（毫秒）').fill('1500');
+  await settings.getByLabel('输入速度（字符/秒）').fill('30');
+  await expect(settings.getByLabel('换行转为空格（适合搜索框）')).not.toBeChecked();
+  await settings.getByLabel('换行转为空格（适合搜索框）').check();
+  await settings.getByRole('button', { name: '保存截图与输入设置' }).click();
+  await expect(page.getByText('截图与输入设置已保存。', { exact: true })).toBeVisible();
+  assertNativeSettings();
+  await expect(settings).toBeVisible();
+  expect(await page.evaluate(() => window.document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: `build/ui-evidence/m11-native-settings-${width}.png`, fullPage: true });
+  await page.getByRole('button', { name: '首页', exact: true }).click();
+  await expect(page.getByRole('button', { name: '截取所选显示器', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: '输入最新结果', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: '截取所选显示器', exact: true }).click();
+  await expect(page.getByText('正在截取显示器…', { exact: true })).toBeVisible();
+  await expect(page.getByText('截图完成；请查看文件、确认预览及各去向状态。', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '暂停捕获', exact: true }).click();
+  await expect(page.getByRole('button', { name: '截取所选显示器', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: '恢复捕获', exact: true }).click();
+  await page.getByRole('button', { name: '输入剪贴板文本', exact: true }).click();
+  await expect(page.getByLabel('直接输入进度')).toContainText('准备输入');
+  await expect(page.getByText('输入剪贴板文本：准备输入，请选择目标并松开快捷键', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: '停止输入', exact: true }).click();
+  await expect(page.getByLabel('直接输入进度')).toContainText('输入已停止');
+  expect(nativeRequests.map(r => r.command)).toEqual(['native-monitors', 'capture-monitor', 'type-clipboard', 'stop-typing']);
+  expect(testsSent).toBe(0);
+});
+function assertNativeSettings() {
+  expect(desktop.settings.native).toEqual({ monitor: 'synthetic-display', save: true, directory: join(root, 'capture-output'), submit: false, clipboard: false, delayMs: 1500, charsPerSecond: 30, newlineAsSpace: true });
+}
+
+test('M11 native first snapshot with null typing state keeps the first window rendered', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  nativeRuntime = { capturing: false, captureStatus: '', typing: null };
+  await page.reload();
+  // Cross the initial successful native snapshot and at least one later poll.
+  await page.waitForTimeout(1300);
+  await expect(page.getByRole('button', { name: '截取所选显示器', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '输入剪贴板文本', exact: true })).toBeEnabled();
+  expect(errors).toEqual([]);
+  expect(testsSent).toBe(0);
+});
+
+for (const resume of ['GUI', 'external shortcut/tray']) test(`M11 ${resume} resume clears only the recovered paused-capture error`, async ({ page }) => {
+  let release;
+  nativeCaptureGate = new Promise(resolve => { release = resolve; });
+  await desktop.dispatch({ v: 1, command: 'configure-native', options: { ...nativeDefaults(), directory: root } });
+  await page.getByRole('button', { name: '截取所选显示器', exact: true }).click();
+  // The native preflight observes pause before the next UI snapshot arrives.
+  await desktop.dispatch({ v: 1, command: 'pause', paused: true });
+  release();
+  await expect(page.getByRole('alert')).toContainText('截图已暂停，请先恢复捕获。');
+  await expect(page.getByRole('button', { name: '恢复捕获', exact: true })).toBeVisible();
+  await expect(page.getByRole('alert')).toContainText('截图已暂停，请先恢复捕获。');
+  if (resume === 'GUI') await page.getByRole('button', { name: '恢复捕获', exact: true }).click();
+  else await desktop.dispatch({ v: 1, command: 'action', action: 'toggle-pause' });
+  await expect(page.getByRole('button', { name: '截取所选显示器', exact: true })).toBeEnabled();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(page.getByText(/截取所选显示器：截图已暂停/)).toHaveCount(0);
+
+  await desktop.dispatch({ v: 1, command: 'configure-native', options: { ...desktop.settings.native, directory: '' } });
+  await page.getByRole('button', { name: '截取所选显示器', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('请选择截图保存目录。');
+  await desktop.dispatch({ v: 1, command: 'pause', paused: true });
+  await desktop.dispatch({ v: 1, command: 'pause', paused: false });
+  await page.waitForTimeout(1300);
+  await expect(page.getByRole('alert')).toContainText('请选择截图保存目录。');
+  expect(testsSent).toBe(0);
 });

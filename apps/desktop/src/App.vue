@@ -6,6 +6,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import AppNavigation from "./components/AppNavigation.vue";
 import AppIcon from "./components/AppIcon.vue";
 import { loadTheme, saveTheme, type Theme } from "./theme";
+import { nativeDefaults, nativeErrorText, type NativeOptions } from "../../../packages/desktop/src/native-options";
 
 type Receipt = {
   status: string;
@@ -60,6 +61,10 @@ type Discovery = {
   status: string;
 };
 type Snapshot = {
+  typingAvailable?: boolean;
+  nativeOptions?: NativeOptions;
+  nativeCapture?: { path?: string; submission: string; clipboard: string };
+  nativeRuntime?: { capturing: boolean; captureStatus: string; typing: { phase?: string; active?: boolean; sent?: number; total?: number } | null };
   remote?: {
     mode: string; url: string; label: string; receive: boolean; hasToken: boolean; status: string; error?: string; lastSync?: number;
     identity?: { ownerId: string; deviceId: string };
@@ -96,6 +101,7 @@ type Snapshot = {
     enabled: boolean;
     folderEnabled?: boolean;
     folderDirectory?: string;
+    folderNewFilesOnly?: boolean;
     mode: string;
     paused: boolean;
     autoConsent: boolean;
@@ -127,6 +133,9 @@ const globalActions = [
   { id: "retry-latest-delivery", label: "重试最新失败投递" },
   { id: "cycle-agent", label: "循环切换 Agent" },
   { id: "current", label: "提交当前剪贴板图片" },
+  { id: "capture-monitor", label: "截取所选显示器" },
+  { id: "type-latest", label: "输入最新结果" },
+  { id: "stop-typing", label: "停止输入（也可按 Esc）" },
 ];
 const providerText: Record<string, string> = {
   fake: "Fake · 合成测试",
@@ -143,6 +152,7 @@ const cliStatusText: Record<string, string> = {
   scan_incomplete: "检测未完成",
 };
 const errorText: Record<string, string> = {
+  ...nativeErrorText,
   REMOTE_OTHER_DEVICE_REQUIRED: "请选择另一台电脑的助手。本机处理请使用 Local；接收远程任务无需选择远程目标。",
   INVALID_REMOTE_TOKEN: "设备 Token 格式无效。请只粘贴 Token 内容（32–256 个可打印字符），不要包含文件名、说明或中间空格。",
   INVALID_REMOTE_SETTINGS: "跨设备设置无效。请填写 Relay HTTPS 地址和这台电脑的名称（最多 80 个字符）。",
@@ -262,6 +272,7 @@ const busy = ref(false);
 const enabled = ref(false);
 const folderEnabled = ref(false);
 const folderDirectory = ref("");
+const folderNewFilesOnly = ref(true);
 const clipboardPayload = ref("text");
 const notification = ref(false);
 const mode = ref("confirm");
@@ -275,6 +286,18 @@ const autoConsent = ref(false);
 const alwaysConsent = ref(false);
 const dirty = ref(false);
 const hotkeys = ref<Hotkeys>({});
+const nativeOptions = ref<NativeOptions>(nativeDefaults());
+const nativeDirty = ref(false);
+const nativeCapturing = ref(false);
+const monitors = ref<{ id: string; width: number; height: number; primary: boolean }[]>([]);
+const typingLabel = computed(() => {
+  const t = data.value?.nativeRuntime?.typing;
+  if (!t?.phase || t.phase === 'idle') return "";
+  if (t.phase === 'preparing') return "准备输入：请在倒计时结束前切换到目标应用的文字输入位置，并松开快捷键。";
+  if (t.phase === 'typing') return `正在输入 ${t.sent ?? 0} / ${t.total ?? 0} 字符；按 Esc 可停止。`;
+  if (t.phase === 'sent') return `已发送 ${t.sent ?? 0} 字符，请在目标应用核对；部分应用不接受模拟 Unicode 输入。`;
+  return friendlyError(t.phase);
+});
 const hotkeyDirty = ref(false);
 const hotkeyErrorCode = ref("");
 const hotkeyMessage = ref("");
@@ -434,6 +457,10 @@ function chooseDetectedPath() {
 }
 function hydrate(snapshot: Snapshot) {
   data.value = snapshot;
+  // Resume may arrive through the tray/hotkey while an action error is visible.
+  // Expire only this recovered refusal; preserve unrelated errors on polling.
+  if (!snapshot.settings.paused && error.value === nativeErrorText.CAPTURE_PAUSED) error.value = "";
+  if (!nativeDirty.value) nativeOptions.value = { ...(snapshot.nativeOptions ?? nativeDefaults()) };
   if (!remoteDirty.value) { remoteUrl.value = snapshot.remote?.url ?? ''; remoteLabel.value = snapshot.remote?.label ?? 'Windows PC'; }
   if (page.value === "history")
     historyOffset.value = snapshot.historyOffset ?? 0;
@@ -442,6 +469,7 @@ function hydrate(snapshot: Snapshot) {
     enabled.value = snapshot.settings.enabled;
     folderEnabled.value = snapshot.settings.folderEnabled ?? false;
     folderDirectory.value = snapshot.settings.folderDirectory ?? "";
+    folderNewFilesOnly.value = snapshot.settings.folderNewFilesOnly ?? true;
     clipboardPayload.value = snapshot.delivery.clipboardPayload ?? "text";
     notification.value = snapshot.delivery.notification ?? false;
     mode.value = snapshot.settings.mode;
@@ -489,6 +517,7 @@ async function cleanFileCache() {
 async function action(command: string, args: Record<string, unknown> = {}) {
   if (busy.value) return;
   busy.value = true;
+  nativeCapturing.value = command === 'capture-monitor' || (command === 'action' && args.action === 'capture-monitor');
   error.value = "";
   message.value = "";
   try {
@@ -555,6 +584,8 @@ async function action(command: string, args: Record<string, unknown> = {}) {
     if (command === "retry-delivery")
       message.value =
         "已检查结果投递，请查看剪贴板和保存状态；Agent 未重新执行。";
+    if (command === "capture-monitor") message.value = "截图完成；请查看文件、确认预览及各去向状态。";
+    if (command.startsWith("type-")) message.value = "输入已准备，请切换到目标应用；按 Esc 停止。";
     if (command === "copy") message.value = "已复制结果，可以粘贴。";
     if (command === "discard") message.value = "已丢弃预览，没有创建任务。";
     if (command === "submit" || command === "current")
@@ -571,6 +602,7 @@ async function action(command: string, args: Record<string, unknown> = {}) {
     } else error.value = friendlyError(code);
   } finally {
     busy.value = false;
+    nativeCapturing.value = false;
   }
 }
 async function pickExecutable() {
@@ -712,13 +744,25 @@ async function applyHotkeys() {
     await refresh();
   }
 }
+async function refreshMonitors() {
+  try { monitors.value = await rpc('native-monitors') as typeof monitors.value; }
+  catch (e) { error.value = friendlyError(e instanceof Error ? e.message : String(e)); }
+}
+async function pickNativeDirectory() {
+  const path = await open({ directory: true, multiple: false, title: '选择截图保存目录' });
+  if (typeof path === 'string') { nativeOptions.value.directory = path; nativeDirty.value = true; }
+}
+async function applyNative() {
+  await action('configure-native', { options: { ...nativeOptions.value } });
+  if (!error.value) { nativeDirty.value = false; message.value = '截图与输入设置已保存。'; }
+}
 async function apply() {
   if (save.value && !directory.value.trim()) {
     error.value = "请填写本地保存目录。";
     return;
   }
   await action("configure", {
-    capture: { enabled: enabled.value, mode: mode.value, folderEnabled: folderEnabled.value, ...(folderDirectory.value ? { folderDirectory: folderDirectory.value } : {}) },
+    capture: { enabled: enabled.value, mode: mode.value, folderEnabled: folderEnabled.value, folderNewFilesOnly: folderNewFilesOnly.value, ...(folderDirectory.value ? { folderDirectory: folderDirectory.value } : {}) },
     autoConsent: autoConsent.value,
     alwaysConsent: alwaysConsent.value,
     delivery: {
@@ -735,7 +779,7 @@ async function apply() {
   });
   if (!error.value) {
     dirty.value = false;
-    message.value = "设置已保存。仅监听此后新增的图片。";
+    message.value = folderEnabled.value && !folderNewFilesOnly.value ? "设置已保存。将处理目录中已有图片及后续新增或修改的图片。" : "设置已保存。仅监听此后新增的图片。";
     await refresh();
   }
 }
@@ -890,7 +934,7 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener("shot2agent
 </script>
 
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :data-backend-ready="!!data">
     <aside class="sidebar">
       <div class="brand">Shot2Agent<span>Local 桌面助手</span></div>
       <AppNavigation
@@ -958,10 +1002,27 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener("shot2agent
             重新连接剪贴板
           </button>
         </p>
-        <p v-if="data?.tray.feedback" class="hint" role="status">{{ data.tray.feedback }}</p>
+        <p v-if="data?.tray.feedback && !(data.lastAction?.status === 'preparing' && data.nativeRuntime?.typing?.phase)" class="hint" role="status">{{ data.tray.feedback }}</p>
         <p v-if="message" class="notice" role="status"><AppIcon name="check" />{{ message }}</p>
       </div>
+      <section v-if="typingLabel" aria-label="直接输入进度" class="notice" role="status">
+        <p>{{ typingLabel }}</p>
+        <button v-if="data?.nativeRuntime?.typing?.active" @click="action('stop-typing')">停止输入</button>
+      </section>
       <section v-if="page === 'home'" aria-label="截图处理">
+        <section aria-label="原生截图与输入">
+          <h2>原生截图与输入</h2>
+          <div class="button-row">
+            <button :disabled="busy || !data || data.settings.paused || data.nativeRuntime?.capturing" @click="action('capture-monitor')">截取所选显示器</button>
+            <button :disabled="busy || !data?.typingAvailable || data?.nativeRuntime?.typing?.active" @click="action('type-latest')">输入最新结果</button>
+            <button :disabled="busy || !data || data.nativeRuntime?.typing?.active" @click="action('type-clipboard')">输入剪贴板文本</button>
+          </div>
+          <p class="hint">整屏截图可只保存文件；在设置中选择显示器和去向。输入启动后，请在准备时间内切换到其他应用；Esc 停止。</p>
+          <p v-if="nativeCapturing || data?.nativeRuntime?.capturing" role="status">正在截取显示器…</p>
+          <p v-if="data?.nativeRuntime?.captureStatus && data.nativeRuntime.captureStatus !== 'saved' && data.nativeRuntime.captureStatus !== 'capturing'" class="error">{{ friendlyError(data.nativeRuntime.captureStatus) }}</p>
+          <p v-if="data?.nativeCapture?.path" class="hint path">截图已保存：{{ data.nativeCapture.path }}</p>
+          <p v-if="data?.nativeCapture && !['off', 'succeeded'].includes(data.nativeCapture.clipboard)" class="error">图片剪贴板：{{ friendlyError(data.nativeCapture.clipboard) }}</p>
+        </section>
         <div class="agent-current">
           <div>
             <span class="hint">当前 AI 助手</span>
@@ -1039,7 +1100,7 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener("shot2agent
           <span class="hint" role="status" aria-label="当前捕获状态">{{ captureSummary }}</span
           ><button @click="page = 'settings'"><AppIcon name="settings" />捕获与输出设置</button
           ><button
-            v-if="data && !data.setupRequired"
+            v-if="data && (!data.setupRequired || !!data.nativeOptions?.directory || data.nativeOptions?.clipboard)"
             @click="action('pause', { paused: !data.settings.paused })"
             :disabled="busy"
           >
@@ -1255,6 +1316,27 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener("shot2agent
             </button>
           </div>
         </fieldset>
+        <fieldset aria-label="原生截图与直接输入设置" @input="nativeDirty = true" @change="nativeDirty = true">
+          <legend>原生截图与直接输入</legend>
+          <label>截图显示器<select aria-label="截图显示器" v-model="nativeOptions.monitor">
+            <option value="">当前主显示器</option>
+            <option v-if="nativeOptions.monitor && !monitors.some(m => m.id === nativeOptions.monitor)" :value="nativeOptions.monitor">{{ nativeOptions.monitor }}（点击刷新确认连接）</option>
+            <option v-for="m in monitors" :key="m.id" :value="m.id">{{ m.id }} · {{ m.width }} × {{ m.height }}{{ m.primary ? ' · 主显示器' : '' }}</option>
+          </select></label>
+          <button :disabled="busy" @click="refreshMonitors">刷新显示器</button>
+          <label class="check"><input type="checkbox" v-model="nativeOptions.save" />保存截图 PNG 文件</label>
+          <label v-if="nativeOptions.save">截图保存目录<input aria-label="截图保存目录" v-model="nativeOptions.directory" spellcheck="false" /></label>
+          <button v-if="nativeOptions.save" :disabled="busy" @click="pickNativeDirectory">选择截图保存目录…</button>
+          <label class="check"><input type="checkbox" v-model="nativeOptions.submit" />同时交给所选 Agent（遵循确认/自动与暂停设置）</label>
+          <label class="check"><input type="checkbox" v-model="nativeOptions.clipboard" />同时将截图图片写入剪贴板（覆盖当前内容）</label>
+          <p class="hint">默认只保存文件，不读取或改写剪贴板。若勾选提交，处理结果仍使用独立的“结果去向”设置。4K 按实际像素保存；HDR 当前按 SDR 输出。区域框选尚未提供。</p>
+          <label>输入准备时间（毫秒）<input aria-label="输入准备时间（毫秒）" type="number" min="500" max="10000" step="100" v-model.number="nativeOptions.delayMs" /></label>
+          <label>输入速度（字符/秒）<input aria-label="输入速度（字符/秒）" type="number" min="1" max="200" v-model.number="nativeOptions.charsPerSecond" /></label>
+          <label class="check"><input type="checkbox" v-model="nativeOptions.newlineAsSpace" />换行转为空格（适合搜索框）</label>
+          <p class="hint">默认换行会发送 Enter，可能触发搜索或提交；单行输入框请勾选上项。向记事本输入中文前，请切换到中文输入法；英文输入法下会先提示停止。</p>
+          <p class="hint">直接输入仅手动启动，无需先复制结果，手动剪贴板模式同样可用。界面按钮允许在准备时间内选目标；全局快捷键保持触发时的目标，不抢焦点。目标改变、Esc、停止或退出均会终止；单次最多 5 分钟。部分应用或管理员窗口可能拒绝模拟输入，请检查已输入内容，不会自动改用粘贴。</p>
+          <button :disabled="busy || !nativeDirty" @click="applyNative">保存截图与输入设置</button>
+        </fieldset>
         <h2><AppIcon name="camera" />捕获</h2>
         <form
           @submit.prevent="apply"
@@ -1272,7 +1354,10 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener("shot2agent
           <template v-if="folderEnabled">
             <label>截图文件夹<input v-model="folderDirectory" type="text" placeholder="请选择独立的截图目录" spellcheck="false" /></label>
             <button type="button" @click="pickCaptureFolder"><AppIcon name="folder" />选择截图文件夹…</button>
-            <p class="hint">仅 PNG/JPEG/WebP，文件完成写入后处理；启动、恢复和切换目录时跳过已有文件。不能与应用数据或结果保存目录重叠。</p>
+            <label class="check"><input type="checkbox" v-model="folderNewFilesOnly" />仅监听新增文件（推荐）</label>
+            <p v-if="folderNewFilesOnly" class="hint">每次启用、启动、恢复或切换目录时跳过已有文件；这些文件后续修改也不会触发任务。新增文件只处理一次，同名覆盖不触发。</p>
+            <p v-else class="notice">将处理目录中已有图片及后续修改；自动提交模式可能生成多个历史任务。只想处理新截图时，请保持“仅监听新增文件”勾选。</p>
+            <p class="hint">仅 PNG/JPEG/WebP，文件完成写入后处理。可与原生截图保存目录相同；应用自己保存的截图不通过监听重复提交。不能与应用数据或结果 Markdown 保存目录重叠。</p>
           </template>
           <label
             >提交方式<select v-model="mode">
@@ -1287,7 +1372,7 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener("shot2agent
             />我同意新截图自动发送给所选 Agent。云模型会收到图片。</label
           >
           <p class="hint">
-            启动和恢复时会跳过已存在的图片。确认预览只保留在内存。
+            剪贴板监听在启动和恢复时跳过当前图片；文件夹按上方选项处理。确认预览只保留在内存。
           </p>
           <h2><AppIcon name="file" />结果去向</h2>
           <p class="hint">
@@ -1587,6 +1672,7 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener("shot2agent
             <div class="task-actions" v-if="task.status === 'succeeded'">
               <button @click="action('copy', { id: task.id })" :disabled="busy">
                 <AppIcon name="copy" />复制文本</button
+              ><button @click="action('type-result', { id: task.id })" :disabled="busy || data?.nativeRuntime?.typing?.active">输入此结果</button
               ><button @click="action('copy-files', { id: task.id })" :disabled="busy"><AppIcon name="copy-file" />复制文件</button><button
                 v-if="task.retryableChannels?.length"
                 @click="action('retry-delivery', { id: task.id })"

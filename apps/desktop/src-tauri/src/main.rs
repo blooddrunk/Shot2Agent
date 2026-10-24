@@ -1,6 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+mod capture;
 mod hotkeys;
+mod native;
+#[cfg(all(test, windows))]
+mod native_api_tests;
 mod tray;
+mod typing;
 use serde_json::{json, Value};
 use std::{
     io::{BufRead, BufReader, Read, Write},
@@ -111,14 +116,18 @@ fn launch_mode(args: &[String]) -> Result<&'static str, &'static str> {
             "--codex" => "codex",
             "--staging" => "staging",
             "--legacy" => "legacy",
-            "--smoke" | "--tray-smoke" => continue,
+            "--smoke" | "--tray-smoke" | "--ui-smoke" => continue,
             _ => return Err("INVALID_LAUNCH_MODE"),
         };
         if mode.replace(next).is_some() {
             return Err("CONFLICTING_LAUNCH_MODE");
         }
     }
-    if args.iter().any(|a| a == "--smoke" || a == "--tray-smoke") && mode != Some("staging") {
+    if args
+        .iter()
+        .any(|a| matches!(a.as_str(), "--smoke" | "--tray-smoke" | "--ui-smoke"))
+        && mode != Some("staging")
+    {
         return Err("SMOKE_REQUIRES_STAGING");
     }
     Ok(mode.unwrap_or("codex"))
@@ -302,6 +311,18 @@ fn call(state: &State, request: Value) -> Result<Value, String> {
 }
 #[tauri::command]
 async fn rpc(app: tauri::AppHandle, request: Value) -> Result<Value, String> {
+    if request["v"] == 1
+        && request["command"] == "quit"
+        && request.as_object().map(|r| r.len() == 2).unwrap_or(false)
+    {
+        app.state::<native::Runtime>().typing.shutdown();
+    }
+    if request["v"] == 1
+        && (request["command"] == "stop-typing"
+            || (request["command"] == "action" && request["action"] == "stop-typing"))
+    {
+        app.state::<native::Runtime>().typing.stop();
+    }
     tauri::async_runtime::spawn_blocking(move || {
         let transaction_state = app.state::<State>();
         let _transaction = transaction_state
@@ -309,6 +330,9 @@ async fn rpc(app: tauri::AppHandle, request: Value) -> Result<Value, String> {
             .lock()
             .map_err(|_| "HOTKEY_TRANSACTION_LOCK")?;
         let is_quit = request.get("command").and_then(Value::as_str) == Some("quit");
+        if is_quit {
+            app.state::<native::Runtime>().capture.shutdown();
+        }
         if request["command"] == "staging-fault" && request["kind"] == "coordinator" {
             if launch_mode(&std::env::args().skip(1).collect::<Vec<_>>())? != "staging" {
                 return Err("STAGING_ONLY".into());
@@ -347,15 +371,19 @@ async fn rpc(app: tauri::AppHandle, request: Value) -> Result<Value, String> {
                     }
                 }
                 result
+            } else if let Some(result) = native::handle(&app, &request, true) {
+                result
             } else {
                 call(&app.state::<State>(), request)
             };
         if is_quit {
+            app.state::<native::Runtime>().typing.shutdown();
             app.state::<tray::Runtime>().shutdown();
             app.exit(0);
         }
         if let Ok(value) = response.as_mut() {
             if let Some(object) = value.get_mut("value").and_then(Value::as_object_mut) {
+                object.insert("nativeRuntime".into(), native::snapshot(&app));
                 object.insert(
                     "hotkeyStatus".into(),
                     json!(app
@@ -394,7 +422,20 @@ fn refresh_tray(app: &tauri::AppHandle) {
         return;
     }
     let response = call(&app.state::<State>(), json!({"v":1,"command":"snapshot"}));
-    let view = tray::view(&response);
+    let mut view = tray::view(&response);
+    let native = native::snapshot(app);
+    view["menu"]["stopTyping"] = json!(native["typing"]["active"] == true);
+    if native["typing"]["active"] == true {
+        view["feedback"] = json!(format!(
+            "直接输入：{} / {} 字符 · Esc 停止",
+            native["typing"]["sent"], native["typing"]["total"]
+        ));
+    } else if let Some(phase) = native["typing"]["phase"].as_str().filter(|p| *p != "idle") {
+        view["feedback"] = json!(format!("直接输入：{phase} · 打开应用查看详情"));
+    }
+    if native["capturing"] == true {
+        view["feedback"] = json!("正在截取显示器…");
+    }
     // Only cache a completed native update; a failed setter is retried next poll.
     if tray::apply(app, &view, previous.as_ref()).is_ok() {
         *previous = Some(view);
@@ -402,19 +443,62 @@ fn refresh_tray(app: &tauri::AppHandle) {
 }
 fn tray_action(app: tauri::AppHandle, action: String) {
     tauri::async_runtime::spawn_blocking(move || {
-        let _ = call(
-            &app.state::<State>(),
-            json!({"v":1,"command":"action","action":action}),
-        );
+        let request = json!({"v":1,"command":"action","action":action});
+        if native::handle(&app, &request, false).is_none() {
+            let _ = call(&app.state::<State>(), request);
+        }
         refresh_tray(&app);
     });
 }
 fn quit(app: tauri::AppHandle) {
+    app.state::<native::Runtime>().typing.shutdown();
     app.state::<tray::Runtime>().shutdown();
 
     tauri::async_runtime::spawn_blocking(move || {
+        app.state::<native::Runtime>().capture.shutdown();
         let _ = call(&app.state::<State>(), json!({"v":1,"command":"quit"}));
         app.exit(0);
+    });
+}
+// Exercise the actual packaged WebView after native snapshot hydration. IPC-only
+// smoke cannot detect a Vue render exception. Only disposable Fake launches qualify.
+fn ui_smoke(app: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
+        let mut consecutive = 0;
+        while std::time::Instant::now() < deadline && consecutive < 8 {
+            let (tx, rx) = mpsc::channel();
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.eval_with_callback(include_str!("ui-smoke.js"), move |result| {
+                    let _ = tx.send(result == "true");
+                });
+            }
+            if rx.recv_timeout(Duration::from_secs(1)) == Ok(true) {
+                consecutive += 1;
+            } else {
+                consecutive = 0;
+            }
+            std::thread::sleep(Duration::from_millis(500));
+        }
+        let passed = consecutive == 8;
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(dir) = exe.parent() {
+                let _ = std::fs::write(
+                    dir.join("UI-SMOKE.txt"),
+                    if passed {
+                        "PASS actual WebView first native snapshot and visible enabled capture/typing controls across eight polls; physical visual acceptance NOT VERIFIED"
+                    } else {
+                        "FAIL FIRST_WINDOW_NOT_RENDERED"
+                    },
+                );
+            }
+        }
+        app.state::<native::Runtime>().capture.shutdown();
+        app.state::<native::Runtime>().typing.shutdown();
+        app.state::<tray::Runtime>().shutdown();
+        let _ = call(&app.state::<State>(), json!({"v":1,"command":"quit"}));
+        let _ = std::fs::remove_dir_all(smoke_root());
+        app.exit(if passed { 0 } else { 1 });
     });
 }
 fn main() {
@@ -499,6 +583,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(tray::Runtime::default())
+        .manage(native::Runtime::default())
         .manage(State {
             hotkey_transaction: Mutex::new(()),
             bridge: Mutex::new(Bridge::start()),
@@ -508,16 +593,15 @@ fn main() {
             let handle = app.handle().clone();
             let busy = Arc::new(std::sync::atomic::AtomicBool::new(false));
             let native = hotkeys::Hotkeys::start(move |action| {
+                if action == "stop-typing" { handle.state::<native::Runtime>().typing.stop(); return; }
                 if busy.swap(true, std::sync::atomic::Ordering::SeqCst) {
                     return;
                 }
                 let handle = handle.clone();
                 let busy = busy.clone();
                 tauri::async_runtime::spawn_blocking(move || {
-                    let _ = call(
-                        &handle.state::<State>(),
-                        json!({"v":1,"command":"action","action":action}),
-                    );
+                    let request=json!({"v":1,"command":"action","action":action});
+                    if native::handle(&handle,&request,false).is_none() { let _=call(&handle.state::<State>(),request); }
                     refresh_tray(&handle);
                     busy.store(false, std::sync::atomic::Ordering::SeqCst);
                 });
@@ -588,6 +672,9 @@ fn main() {
                 });
                 return Ok(());
             }
+            if std::env::args().any(|a| a == "--ui-smoke") && mode == "staging" {
+                ui_smoke(app.handle().clone());
+            }
             // Native polling continues while the WebView is hidden/throttled.
             // Setters marshal to Tauri's main thread; never block that thread on RPC.
             let handle = app.handle().clone();
@@ -618,6 +705,8 @@ fn main() {
         .expect("Shot2Agent startup failed")
         .run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<native::Runtime>().capture.shutdown();
+                app.state::<native::Runtime>().typing.shutdown();
                 app.state::<tray::Runtime>().shutdown();
                 let _ = app.remove_tray_by_id("local");
                 let _ = app.state::<hotkeys::Hotkeys>().configure(json!({}));
@@ -648,9 +737,15 @@ mod launch_tests {
             Ok("staging")
         );
         assert_eq!(launch_mode(&args(&["--smoke", "--staging"])), Ok("staging"));
+        assert_eq!(
+            launch_mode(&args(&["--staging", "--ui-smoke"])),
+            Ok("staging")
+        );
         for a in [
             &["--smoke"][..],
             &["--tray-smoke"],
+            &["--ui-smoke"],
+            &["--codex", "--ui-smoke"],
             &["--codex", "--tray-smoke"],
             &["--staging", "--codex"],
             &["--root=private"],

@@ -28,13 +28,36 @@ test('folder settles bytes, skips startup, tolerates partial/replaced/renamed fi
   writeFileSync(path, images[1]); await source.poll(accept, 12300); await source.poll(accept, 13500); assert.equal(seen.length, 0);
   await source.poll(accept, 14700); assert.deepEqual(seen, [sha256(images[1])]);
   await source.poll(accept, 16000); assert.equal(seen.length, 1);
-  writeFileSync(path, images[2]); await source.poll(accept, 17000); await source.poll(accept, 18200); await source.poll(accept, 19400); assert.equal(seen.length, 2);
+  writeFileSync(path, images[2]); await source.poll(accept, 17000); await source.poll(accept, 18200); await source.poll(accept, 19400); assert.equal(seen.length, 1);
   writeFileSync(join(root, 'temp.tmp'), images[3]); renameSync(join(root, 'temp.tmp'), join(root, 'renamed.webp'));
-  await source.poll(accept, 21000); await source.poll(accept, 22200); await source.poll(accept, 23400); assert.equal(seen.length, 3);
-  writeFileSync(join(root, 'pause.png'), images[4]); source.arm(root); await source.poll(accept, 25000); assert.equal(seen.length, 3);
+  await source.poll(accept, 21000); await source.poll(accept, 22200); await source.poll(accept, 23400); assert.equal(seen.length, 2);
+  writeFileSync(join(root, 'pause.png'), images[4]); source.arm(root); await source.poll(accept, 25000); assert.equal(seen.length, 2);
   if (process.platform !== 'win32') { symlinkSync(path, join(root, 'link.png')); await source.poll(accept, 26000); assert.equal(source.error, 'FOLDER_IMAGE_UNSAFE_OR_TOO_LARGE'); }
   assert.throws(() => validateCaptureFolder(root, [join(root, 'out')]), /CAPTURE_OUTPUT_OVERLAP/);
   assert.throws(() => validateCaptureFolder(join(root, '..'), [root]));
+});
+
+test('folder new-files default ignores initial files even after modification; explicit history mode is opt-in', async t => {
+  const root = temp(); t.after(() => rmSync(root, { recursive: true, force: true }));
+  const old = join(root, 'historical.png'); writeFileSync(old, images[0]);
+  const source = new FolderSource(); source.arm(root); const seen = [];
+  const accept = async bytes => { seen.push(sha256(bytes)); };
+  writeFileSync(old, images[1]);
+  for (const now of [10000, 11200, 12400]) await source.poll(accept, now);
+  assert.equal(seen.length, 0);
+  const fresh = join(root, 'fresh.png'); writeFileSync(fresh, images[2]);
+  for (const now of [14000, 15200, 16400]) await source.poll(accept, now);
+  assert.deepEqual(seen, [sha256(images[2])]);
+  source.arm(root, false);
+  for (const now of [18000, 19200, 20400]) await source.poll(accept, now);
+  assert.equal(seen.length, 3);
+  writeFileSync(old, images[3]);
+  for (const now of [22000, 23200, 24400]) await source.poll(accept, now);
+  assert.equal(seen.at(-1), sha256(images[3]));
+  // A deleted path, observed absent, can later arrive as a genuinely new file.
+  source.arm(root); rmSync(fresh); await source.poll(accept, 26000); writeFileSync(fresh, images[4]);
+  for (const now of [28000, 29200, 30400]) await source.poll(accept, now);
+  assert.equal(seen.at(-1), sha256(images[4]));
 });
 
 for (const [enabled, folderEnabled] of [[true, false], [false, true], [true, true], [false, false]]) test(`independent capture sources clipboard=${enabled} folder=${folderEnabled}; migration, consent and pause`, async t => {
@@ -97,6 +120,28 @@ test('M7 settings migration retains clipboard consent/theme/hotkeys; never enabl
   const { root } = setup(t); const settings = defaults(); settings.desktop.enabled = true; settings.desktop.alwaysConsent = true;
   settings.hotkeys = { current: 'Ctrl+Alt+S' }; saveSettings(root, settings);
   const next = new DesktopController(root, clipboard()); try { assert.equal(next.settings.desktop.folderEnabled, undefined); assert.equal(next.settings.desktop.enabled, true); assert.equal(next.settings.desktop.alwaysConsent, true); assert.deepEqual(next.settings.hotkeys, settings.hotkeys); } finally { await next.close(); }
+});
+
+test('new-files setting validates, persists and skips existing files after restart/resume', async t => {
+  const { desktop, rpc, root } = setup(t); const folder = temp(); t.after(() => rmSync(folder, { recursive: true, force: true }));
+  await desktop.start();
+  for (const bad of [null, 'false', 0]) await assert.rejects(rpc('configure', { capture: { folderNewFilesOnly: bad } }), /INVALID_CAPTURE_SETTINGS/);
+  await rpc('configure', { capture: { folderEnabled: true, folderDirectory: folder, folderNewFilesOnly: false }, delivery: { clipboard: 'off' } });
+  assert.equal(JSON.parse(readFileSync(join(root, 'settings.json'))).desktop.folderNewFilesOnly, false);
+  await rpc('configure', { capture: { folderNewFilesOnly: true } });
+  await rpc('pause', { paused: true }); writeFileSync(join(folder, 'paused.png'), images[0]);
+  await rpc('pause', { paused: false }); writeFileSync(join(folder, 'paused.png'), images[1]);
+  const seen = []; const accept = async bytes => { seen.push(bytes); };
+  for (const now of [10000, 11200, 12400]) await desktop.folder.poll(accept, now);
+  assert.equal(seen.length, 0);
+  await desktop.close();
+  const restarted = new DesktopController(root, clipboard());
+  try {
+    await restarted.start(); assert.equal(restarted.settings.desktop.folderNewFilesOnly, true);
+    writeFileSync(join(folder, 'paused.png'), images[2]);
+    for (const now of [14000, 15200, 16400]) await restarted.folder.poll(accept, now);
+    assert.equal(seen.length, 0); assert.equal(restarted.app.list().length, 0);
+  } finally { await restarted.close(); }
 });
 
 test('independent file clipboard/save/native notification receipts, stable files and retry never executes Agent', async t => {

@@ -7,11 +7,12 @@ const { boundedProcess, claudePolicyCommand } = await import(pathToFileURL(proce
 const { program, args } = claudePolicyCommand();
 // The workflow marks this fixed helper ZoneId=3, as in an extracted download.
 // Reproduce the old script-startup failure without touching machine policy.
-const blocked = spawnSync(program.executable, args.map(arg => arg === 'Bypass' ? 'RemoteSigned' : arg), { encoding: 'utf8', windowsHide: true, timeout: 10000 });
+const blocked = spawnSync(program.executable, args.map(arg => arg === 'Bypass' ? 'RemoteSigned' : arg), { encoding: 'utf8', windowsHide: true, timeout: 30000 });
+assert.equal(blocked.error, undefined, 'read-only negative control must finish within its cold-start budget');
 assert.equal(blocked.status, 1);
 assert.equal(blocked.stdout.trim(), '');
 assert.match(blocked.stderr, /PSSecurityException|UnauthorizedAccess/);
-const result = await boundedProcess(program, args, { cwd: process.env.SystemRoot, timeoutMs: 10000, maxBytes: 16384, nativePolicy: true });
+const result = await boundedProcess(program, args, { cwd: process.env.SystemRoot, timeoutMs: 30000, maxBytes: 16384, nativePolicy: true });
 await result.settled;
 assert.equal(result.stopped, false);
 assert.equal(result.code, 0);

@@ -12,11 +12,18 @@ export function validateCaptureFolder(directory: string, excluded: string[]): vo
     requireValue(!inside(directory, path) && !inside(path, directory), 'CAPTURE_OUTPUT_OVERLAP');
   }
 }
-type Observation = { stamp: string; hash?: string; since: number; consumed: boolean };
+type Observation = { stamp: string; hash?: string; since: number; consumed: boolean; ignored?: boolean };
 export class FolderSource {
   private entries = new Map<string, Observation>();
   private directory?: string;
+  private newFilesOnly = true;
   error?: string;
+  /** Suppress our published PNG before a watcher tick can observe it. */
+  suppress(path: string): void {
+    if (!this.directory) return;
+    const stamp = this.scan().get(path);
+    if (stamp) this.entries.set(path, { stamp, since: 0, consumed: true, ignored: true });
+  }
   private scan(): Map<string, string> {
     requireValue(realpathSync(this.directory!) === this.directory && !lstatSync(this.directory!).isSymbolicLink(), 'UNSAFE_CAPTURE_FOLDER');
     const names = readdirSync(this.directory!);
@@ -33,9 +40,9 @@ export class FolderSource {
     }
     return found;
   }
-  arm(directory?: string): void {
-    this.directory = directory; this.entries.clear(); this.error = undefined;
-    if (directory) for (const [path, stamp] of this.scan()) this.entries.set(path, { stamp, since: 0, consumed: true });
+  arm(directory?: string, newFilesOnly = true): void {
+    this.directory = directory; this.newFilesOnly = newFilesOnly; this.entries.clear(); this.error = undefined;
+    if (directory) for (const [path, stamp] of this.scan()) this.entries.set(path, { stamp, since: 0, consumed: newFilesOnly, ignored: newFilesOnly });
   }
   async poll(accept: (bytes: Buffer) => Promise<void>, now = Date.now()): Promise<void> {
     if (!this.directory) return;
@@ -47,13 +54,16 @@ export class FolderSource {
       let reads = 0;
       for (const [path, stamp] of found) {
         let old = this.entries.get(path);
+        // Baseline/accepted files stay ignored even if metadata or bytes change.
+        // Seeing deletion removes this entry, allowing a later new file at that path.
+        if (old?.ignored) continue;
         if (!old || old.stamp !== stamp) { old = { stamp, since: now, consumed: false }; this.entries.set(path, old); continue; }
         if (old.consumed || now - old.since < 1200 || reads >= 4) continue;
         reads++;
         try {
           const bytes = readImageFile(path); const hash = sha256(bytes);
           if (old.hash !== hash) { old.hash = hash; old.since = now; continue; }
-          await accept(bytes); old.consumed = true;
+          await accept(bytes); old.consumed = true; old.ignored = this.newFilesOnly;
         } catch { old.consumed = true; this.error = 'FOLDER_IMAGE_INVALID_OR_UNREADABLE'; }
       }
     } catch { this.error = 'CAPTURE_FOLDER_UNAVAILABLE'; }

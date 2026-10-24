@@ -183,6 +183,18 @@ public static class ShotClipboard {
   public static bool WriteText(string text, string expected) {
     return WritePayload(Encoding.Unicode.GetBytes(text + "\0"), 13, expected, null, 0);
   }
+  public static bool WriteImage(string data) {
+    byte[] png = Convert.FromBase64String(data);
+    if (png.Length > 60 * 1024 * 1024) throw new Exception("CLIPBOARD_UNAVAILABLE_OR_OVERSIZED");
+    using (var input = new System.IO.MemoryStream(png))
+    using (var image = new System.Drawing.Bitmap(input))
+    using (var output = new System.IO.MemoryStream()) {
+      image.Save(output, System.Drawing.Imaging.ImageFormat.Bmp);
+      byte[] bmp = output.ToArray(), dib = new byte[bmp.Length - 14];
+      Buffer.BlockCopy(bmp, 14, dib, 0, dib.Length);
+      return WritePayload(dib, 8, null, null, 0);
+    }
+  }
   static IntPtr Allocate(byte[] bytes) {
     IntPtr handle = GlobalAlloc(0x42, (UIntPtr)bytes.Length);
     if (handle == IntPtr.Zero) throw new Exception("CLIPBOARD_ALLOC");
@@ -244,11 +256,12 @@ while ($null -ne ($line = [ShotClipboard]::NextRequest())) {
           'clean-cache' { $counts = [ShotClipboard]::CleanCache([string]$request.directory); $response = @{deleted=$counts[0]; retained=$counts[1]}; break }
           'files' { $response = @{written=[ShotClipboard]::WriteFiles([string[]]$request.paths, $request.expected, [int]$request.verifyMilliseconds)}; break }
           'write' { $response = @{written=[ShotClipboard]::WriteText($request.text, $request.expected); sequence=[ShotClipboard]::GetClipboardSequenceNumber().ToString()}; break }
+          'image' { $response = @{written=[ShotClipboard]::WriteImage($request.data); sequence=[ShotClipboard]::GetClipboardSequenceNumber().ToString()}; break }
           default { throw 'INVALID_OPERATION' }
         }
         break
       } catch {
-        if ($request.op -in @('write','files','notify','clean-cache') -or $attempt -eq 5 -or $_.Exception.ToString() -notmatch 'CLIPBOARD_BUSY') { throw }
+        if ($request.op -in @('write','image','files','notify','clean-cache') -or $attempt -eq 5 -or $_.Exception.ToString() -notmatch 'CLIPBOARD_BUSY') { throw }
         Start-Sleep -Milliseconds (30 * ($attempt + 1))
       }
     }

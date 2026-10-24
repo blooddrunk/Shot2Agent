@@ -3,17 +3,20 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::sync::{mpsc, Mutex};
 use std::time::Duration;
-pub const ACTIONS: [&str; 5] = [
+pub const ACTIONS: [&str; 8] = [
     "toggle-pause",
     "copy-latest",
     "retry-latest-delivery",
     "cycle-agent",
     "current",
+    "capture-monitor",
+    "type-latest",
+    "stop-typing",
 ];
 type Bindings = BTreeMap<String, String>;
 fn parse(value: &Value) -> Result<Bindings, String> {
     let object = value.as_object().ok_or("INVALID_HOTKEYS")?;
-    if object.len() > 5 {
+    if object.len() > ACTIONS.len() {
         return Err("INVALID_HOTKEYS".into());
     }
     let mut result = Bindings::new();
