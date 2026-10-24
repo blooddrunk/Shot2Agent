@@ -32,7 +32,19 @@ Candidate Windows [artifact 12558858578](https://github.com/blooddrunk/Shot2Agen
 
 Tests use disposable roots, synthetic pixels/text, Fake/mock and temporary credentials. No production Token, operator history, personal screenshot or paid model request was used. Existing unchanged Local native observations remain valid only within their original scope. Unexecuted physical cases below remain NOT VERIFIED.
 
-## Small physical Windows procedure — currently NOT VERIFIED
+## Operator acceptance report — 2026-10-24
+
+After delivery of `1.1.0-dev.3` (branch `f91860e00ed2022ee76166fc1bf6cef2933fe45b`, packaged merge-test source `25a550d133b4da36228a4956020cba6508035314`, ZIP SHA-256 `81db880d1443e8a37f148910403ee0c1681af8722956d5afd6775981692cb00a`), the operator reported: “A B C都已测试通过，其中C我使用了真实配置的agent完成。”
+
+| Physical procedure | Reported result |
+| --- | --- |
+| A — native monitor capture and destinations | PASS, operator reported. |
+| B — manual direct typing and stop behavior | PASS, operator reported. |
+| C — Remote regression loop | PASS, operator reported, using an actually configured Agent rather than the procedure's Fake fixture. |
+
+This is operator evidence, separate from hosted CI and the agent's isolated first-window visual check. No specific monitor layout/DPI/4K, target app/IME, provider, timing or unmentioned fault scenario is inferred. The operator reported one remaining UX defect: the paused-capture alert persisted after resuming. The follow-up clears only that recovered refusal in GUI polling and native action feedback, preserving unrelated failures; tests cover GUI and external shortcut/tray resume. This feedback fix does not require repeating unchanged A/B/C. No additional real Agent request is authorized or made by this follow-up.
+
+## Small physical Windows procedure
 
 Use only the complete candidate ZIP from successful Windows CI, verify its BUILD/MANIFEST SHA. Full extraction, then `Start acceptance.cmd` opens a fresh disposable Fake root; never add a real Agent. Use a new empty temporary PNG output directory. Fake does not call models. The staging app initially contains one unrelated synthetic preview; discard it before A. Clipboard result delivery = manual; save/notifications off. All data below is synthetic.
 
@@ -56,4 +68,4 @@ The prior [M10 minimal three-row checklist](REMOTE_GUIDE.md#最小真实设备�
 
 ## Release assessment
 
-Development candidate only. No formal v1.1.0 publication from these automated results. Physical A/B and remaining M10 C observations are NOT VERIFIED until an operator actually records them. Region selection overlay and M12-V Linux Worker are deferred; [bounded next plan](M12_V_PLAN.md).
+Development candidate only; no formal v1.1.0 publication was requested. Physical A/B/C are operator-reported PASS as recorded above; additional device/app configurations and unmentioned fault scenarios remain unverified. Region selection overlay and M12-V Linux Worker are deferred; [bounded next plan](M12_V_PLAN.md).

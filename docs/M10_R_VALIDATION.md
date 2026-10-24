@@ -1,5 +1,7 @@
 # M10-R 验证记录
 
+> 后续人工验收更新（2026-10-24）：操作员已报告 M11-X 的 A/B/C 全部通过，其中 C 使用真实配置的 Agent 完成。详见 [操作员验收记录](M11_X_VALIDATION.md#operator-acceptance-report--2026-10-24)。下文保留原始 M10 自动化交付时的证据与当时尚未完成的人工边界；已报告的 C 路径以该后续记录为准，不推定未提及的设备、故障或部署场景，也未创建正式 Release。
+
 状态：M10 功能候选已实现，1.1.0-dev.1；自动化门禁通过。真实双机公网验收仍 NOT VERIFIED，不构成正式 Remote 发布。
 
 基线：2026-10-24 fetch 后 `origin/main=5f0f7ab8e8d4f3cd30aa2b7351fa19aa499e11cb`，工作区原先干净。最新正式 Release 为 v1.0.2；PR #24 已合并，规划 PR #25（2815eaec8af9aef68b2c8e6727a4b82d45cf6a3f）仍开放。已读取其 M10-R R01–R10 规划；此实现不修改发布请求、旧 Tag/Release 或展开 M11。

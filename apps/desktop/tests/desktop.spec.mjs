@@ -11,8 +11,9 @@ import { createRelay } from '../../../services/relay/src/server.ts';
 import { RemoteClient } from '../../../services/relay/src/client.ts';
 import { runOnce } from '../../../packages/worker/src/worker.ts';
 import { APP_VERSION } from '../../../packages/desktop/src/version.ts';
+import { nativeDefaults } from '../../../packages/desktop/src/native-options.ts';
 
-let desktop, root, workspace, testsSent, gatewayFailureCode, pickerSelection, nativeRequests, nativeRuntime;
+let desktop, root, workspace, testsSent, gatewayFailureCode, pickerSelection, nativeRequests, nativeRuntime, nativeCaptureGate;
 const previousLocalAppData = process.env.LOCALAPPDATA;
 test.beforeEach(async ({ page }) => {
   root = realpathSync(mkdtempSync(join(tmpdir(), "shot2agent-ui-")));
@@ -23,6 +24,7 @@ test.beforeEach(async ({ page }) => {
   makeCli(root, "claude");
   testsSent = 0;
   nativeRequests = []; nativeRuntime = { capturing: false, captureStatus: '', typing: { phase: 'idle', active: false, sent: 0, total: 0 } };
+  nativeCaptureGate = undefined;
   pickerSelection = null;
   gatewayFailureCode = "";
   const clipboard = {
@@ -75,7 +77,15 @@ test.beforeEach(async ({ page }) => {
       if (['capture-monitor', 'type-latest', 'type-result', 'type-clipboard', 'stop-typing', 'native-monitors'].includes(request.command)) {
         nativeRequests.push(request);
         if (request.command === 'native-monitors') return { ok: true, value: [{ id: 'synthetic-display', width: 3840, height: 2160, primary: true }] };
-        if (request.command === 'capture-monitor') await new Promise(resolve => setTimeout(resolve, 250));
+        if (request.command === 'capture-monitor') {
+          await nativeCaptureGate;
+          await new Promise(resolve => setTimeout(resolve, 250));
+          try { await desktop.dispatch({ v: 1, command: 'capture-plan' }); }
+          catch (e) {
+            await desktop.dispatch({ v: 1, command: 'native-feedback', action: 'capture-monitor', status: e.message });
+            throw e;
+          }
+        }
         if (request.command === 'type-clipboard') await desktop.dispatch({ v: 1, command: 'native-feedback', action: 'type-clipboard', status: 'preparing' });
         const value = await desktop.dispatch({ v: 1, command: 'snapshot' });
         nativeRuntime = { capturing: false, captureStatus: 'saved', typing: request.command === 'capture-monitor' ? {} : { phase: request.command === 'stop-typing' ? 'TYPING_CANCELED' : 'preparing', active: request.command !== 'stop-typing', sent: 0, total: 20 } };
@@ -1021,5 +1031,32 @@ test('M11 native first snapshot with null typing state keeps the first window re
   await expect(page.getByRole('button', { name: '截取所选显示器', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '输入剪贴板文本', exact: true })).toBeEnabled();
   expect(errors).toEqual([]);
+  expect(testsSent).toBe(0);
+});
+
+for (const resume of ['GUI', 'external shortcut/tray']) test(`M11 ${resume} resume clears only the recovered paused-capture error`, async ({ page }) => {
+  let release;
+  nativeCaptureGate = new Promise(resolve => { release = resolve; });
+  await desktop.dispatch({ v: 1, command: 'configure-native', options: { ...nativeDefaults(), directory: root } });
+  await page.getByRole('button', { name: '截取所选显示器', exact: true }).click();
+  // The native preflight observes pause before the next UI snapshot arrives.
+  await desktop.dispatch({ v: 1, command: 'pause', paused: true });
+  release();
+  await expect(page.getByRole('alert')).toContainText('截图已暂停，请先恢复捕获。');
+  await expect(page.getByRole('button', { name: '恢复捕获', exact: true })).toBeVisible();
+  await expect(page.getByRole('alert')).toContainText('截图已暂停，请先恢复捕获。');
+  if (resume === 'GUI') await page.getByRole('button', { name: '恢复捕获', exact: true }).click();
+  else await desktop.dispatch({ v: 1, command: 'action', action: 'toggle-pause' });
+  await expect(page.getByRole('button', { name: '截取所选显示器', exact: true })).toBeEnabled();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(page.getByText(/截取所选显示器：截图已暂停/)).toHaveCount(0);
+
+  await desktop.dispatch({ v: 1, command: 'configure-native', options: { ...desktop.settings.native, directory: '' } });
+  await page.getByRole('button', { name: '截取所选显示器', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('请选择截图保存目录。');
+  await desktop.dispatch({ v: 1, command: 'pause', paused: true });
+  await desktop.dispatch({ v: 1, command: 'pause', paused: false });
+  await page.waitForTimeout(1300);
+  await expect(page.getByRole('alert')).toContainText('请选择截图保存目录。');
   expect(testsSent).toBe(0);
 });

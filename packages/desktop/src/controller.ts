@@ -618,7 +618,8 @@ export class DesktopController {
       case 'pause':
         requireValue(typeof r.paused === 'boolean', 'INVALID_PAUSE');
         { const next = structuredClone(this.settings); next.desktop.paused = r.paused;
-          this.armFolder(next); await this.app.arm(); saveSettings(this.root, next); this.settings = next; this.armed = true; this.captureError = undefined; } break;
+          this.armFolder(next); await this.app.arm(); saveSettings(this.root, next); this.settings = next; this.armed = true; this.captureError = undefined;
+          if (!r.paused && this.lastAction?.status === 'CAPTURE_PAUSED') this.lastAction = undefined; } break;
       case 'submit':
         requireValue(this.isConfigured(), 'AGENT_SETUP_REQUIRED');
         requireValue(this.app.pending, 'NO_PENDING_IMAGE'); await this.app.capture(true); break;

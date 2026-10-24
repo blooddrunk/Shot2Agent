@@ -71,6 +71,24 @@ test('M11 atomic output failure, corrupt image, partial-write and no-output refu
   await f.configure({ directory: f.out }); writeFileSync(f.path, png.subarray(0, 14)); await assert.rejects(f.capture); assert.deepEqual(readdirSync(f.out), []);
   await f.configure({ save: false }); await assert.rejects(f.rpc('capture-plan'), /CAPTURE_OUTPUT_REQUIRED/);
 });
+test('M11 resume expires paused-capture feedback without clearing other native failures', async t => {
+  const f = fixture(t); await f.host.start();
+  await f.rpc('pause', { paused: true });
+  await f.rpc('native-feedback', { action: 'capture-monitor', status: 'CAPTURE_PAUSED' });
+  assert.match((await f.rpc('snapshot')).tray.feedback, /截图已暂停/);
+  const resumed = await f.rpc('pause', { paused: false });
+  assert.equal(resumed.lastAction, undefined);
+  assert.equal(resumed.tray.feedback, '');
+  for (const status of ['CAPTURE_DIRECTORY_REQUIRED', 'CAPTURE_STORAGE_FAILED']) {
+    await f.rpc('pause', { paused: true });
+    await f.rpc('native-feedback', { action: 'capture-monitor', status });
+    const after = await f.rpc('pause', { paused: false });
+    assert.equal(after.lastAction.status, status);
+    assert.notEqual(after.tray.feedback, '');
+  }
+  assert.equal((await f.rpc('snapshot')).total, 0);
+});
+
 test('M11 historical/latest typing sources bypass clipboard and delivery settings; no execution/history changes', async t => {
   const f = fixture(t); await f.host.start();
   await f.rpc('configure', { delivery: { clipboard: 'manual' } }); await f.configure();

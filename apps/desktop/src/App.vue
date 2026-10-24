@@ -455,6 +455,9 @@ function chooseDetectedPath() {
 }
 function hydrate(snapshot: Snapshot) {
   data.value = snapshot;
+  // Resume may arrive through the tray/hotkey while an action error is visible.
+  // Expire only this recovered refusal; preserve unrelated errors on polling.
+  if (!snapshot.settings.paused && error.value === nativeErrorText.CAPTURE_PAUSED) error.value = "";
   if (!nativeDirty.value) nativeOptions.value = { ...(snapshot.nativeOptions ?? nativeDefaults()) };
   if (!remoteDirty.value) { remoteUrl.value = snapshot.remote?.url ?? ''; remoteLabel.value = snapshot.remote?.label ?? 'Windows PC'; }
   if (page.value === "history")
