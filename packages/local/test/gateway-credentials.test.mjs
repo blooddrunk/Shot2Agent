@@ -3,6 +3,14 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { credentialCommand, readGatewayToken } from '../../worker/src/gateway.ts';
 const gateway = () => ({ credentialRef: `Shot2Agent-Gateway-${randomUUID()}` });
+
+test('Windows Relay Token uses a separate disposable OS secure-store namespace', { skip: process.platform !== 'win32' }, async () => {
+  const { saveGatewayToken, deleteGatewayToken } = await import('../../worker/src/gateway.ts');
+  const reference = `Shot2Agent-Relay-${randomUUID()}`; const token = 'synthetic-relay-device-token-only-123456';
+  try { await saveGatewayToken(reference, token); assert.equal(await readGatewayToken(reference), token); }
+  finally { await deleteGatewayToken(reference); }
+  await assert.rejects(() => readGatewayToken(reference), /GATEWAY_CREDENTIAL_UNAVAILABLE/);
+});
 test('credential helper uses only a process-scoped policy for the downloaded packaged script', { skip: process.platform !== 'win32' }, () => {
   const command = credentialCommand('add', gateway().credentialRef);
   assert.deepEqual(command.args.slice(0, 4), ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File']);

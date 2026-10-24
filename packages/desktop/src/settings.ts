@@ -9,8 +9,11 @@ import type { ApprovedPolicy } from '../../worker/src/registry.ts';
 import { executionRegistry } from '../../worker/src/registry.ts';
 import type { CodexPolicy } from '../../worker/src/codex.ts';
 import { validateRetry } from '../../local/src/delivery.ts';
+import { validateRemote } from './remote.ts';
+import type { RemoteSettings } from './remote.ts';
 import type { DeliveryConfig } from '../../local/src/delivery.ts';
 export interface Settings {
+  remote?: RemoteSettings;
   hotkeys?: Hotkeys;
   /** Credential Manager references awaiting idempotent cleanup after profile deletion. */
   credentialCleanup?: string[];
@@ -21,6 +24,7 @@ export interface Settings {
 export const defaults = (): Settings => ({ adapter: 'fake', delivery: { clipboard: 'always' },
   desktop: { version: 1, enabled: false, mode: 'confirm', paused: false, autoConsent: false, alwaysConsent: false } });
 export function validate(settings: Settings, allowPendingAlways = false): void {
+  if (settings.remote) validateRemote(settings.remote);
   requireValue(settings && ['fake', 'codex'].includes(settings.adapter) && settings.delivery &&
     ['off', 'manual', 'smart', 'always'].includes(settings.delivery.clipboard) &&
     (settings.delivery.saveDirectory === undefined || (typeof settings.delivery.saveDirectory === 'string' && isAbsolute(settings.delivery.saveDirectory))), 'INVALID_SETTINGS');

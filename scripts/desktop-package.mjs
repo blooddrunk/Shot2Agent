@@ -5,6 +5,7 @@ import { cpSync, copyFileSync, mkdirSync, readFileSync, writeFileSync, existsSyn
 import { createRequire } from 'node:module';
 import { dirname, resolve, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
+import sharp from 'sharp';
 if (process.platform !== 'win32') throw new Error('WINDOWS_BUILD_REQUIRED');
 for (const path of ['apps/desktop/src-tauri/tauri.conf.json', 'apps/desktop/src-tauri/Cargo.toml']) {
   if (!readFileSync(path, 'utf8').includes(APP_VERSION)) throw new Error('APP_VERSION_MISMATCH');
@@ -36,6 +37,19 @@ copyDependency('sharp', resolve('package.json'));
 writeFileSync(join(out, 'Start Codex.cmd'), '@echo off\r\nstart "" "%~dp0Shot2Agent.exe" --codex\r\n');
 writeFileSync(join(out, 'Start legacy Local.cmd'), '@echo off\r\nstart "" "%~dp0Shot2Agent.exe" --legacy\r\n');
 writeFileSync(join(out, 'Start acceptance.cmd'), '@echo off\r\nstart "" "%~dp0Shot2Agent.exe" --staging\r\n');
+writeFileSync(join(out, 'Start Remote acceptance.cmd'), '@echo off\r\nset "LOCALAPPDATA=%~dp0Remote acceptance data"\r\nif not exist "%LOCALAPPDATA%" mkdir "%LOCALAPPDATA%"\r\nstart "" "%~dp0Shot2Agent.exe" --legacy\r\n');
+for (let i = 1; i <= 5; i++) await sharp({ create: { width: 160, height: 100, channels: 3, background: { r: i * 40, g: 80, b: 120 } } }).png().toFile(join(out, `Remote synthetic ${i}.png`));
+cpSync('docs/REMOTE_GUIDE.md', join(out, 'REMOTE_GUIDE.md'));
+cpSync('docs/M10_R_VALIDATION.md', join(out, 'M10_R_VALIDATION.md'));
+const relaySource = join(out, 'Relay source');
+for (const file of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'tsconfig.json', 'tsconfig.build.json', '.dockerignore']) {
+  mkdirSync(relaySource, { recursive: true }); copyFileSync(file, join(relaySource, file));
+}
+for (const directory of ['packages', 'services', 'apps/cli', 'scripts', 'deploy/relay']) cpSync(directory, join(relaySource, directory), { recursive: true,
+  filter: path => !/[/\\](?:node_modules|target|secrets|\.env)(?:[/\\]|$)/.test(path) });
+mkdirSync(join(relaySource, 'docs'), { recursive: true });
+for (const file of ['REMOTE_GUIDE.md', 'M10_R_VALIDATION.md']) copyFileSync(`docs/${file}`, join(relaySource, 'docs', file));
+writeFileSync(join(relaySource, 'SOURCE.txt'), execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }));
 writeFileSync(join(out, 'BUILD.txt'), `Shot2Agent M9-L ${APP_VERSION}\nCommit: ${execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()}\nNode: ${process.version}\nWindows x64 portable build. WebView2 required.\nLaunch Shot2Agent.exe for Local GUI setup, capture, result delivery and history; no Relay or Fake task execution.\nStart Codex.cmd is an optional compatibility launcher. Start legacy Local.cmd opens the original Shot2Agent history root.\nStart acceptance.cmd is a developer-only isolated Fake root, delayed 8s.\nClose hides to tray. 托盘 > 退出 Shot2Agent stops coordinator and Agent.\n`);
 cpSync('docs/LOCAL_V1_GUIDE.md', join(out, 'Windows instructions.md'));
 cpSync('docs/LOCAL_V1_GUIDE.md', join(out, 'LOCAL_V1_GUIDE.md'));

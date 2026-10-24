@@ -11,6 +11,8 @@ export interface TaskStore {
   put(task: Task): void;
   attempts(taskId: string): Attempt[];
   putAttempt(attempt: Attempt): void;
+  metadata(prefix: string): { key: string; value: string }[];
+  putMetadata(key: string, value: string): void;
   deleteTasks(ids: readonly string[]): void;
   pendingBlobCleanup(): FileReference[];
   finishBlobCleanup(fileId: string): void;
@@ -71,6 +73,12 @@ export class SqliteTaskStore implements TaskStore {
   putAttempt(attempt: Attempt): void {
     this.db.prepare('INSERT INTO attempts VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET record=excluded.record')
       .run(attempt.attemptId, attempt.taskId, JSON.stringify(attempt));
+  }
+  metadata(prefix: string): { key: string; value: string }[] {
+    return this.db.prepare('SELECT key,value FROM settings WHERE substr(key,1,?)=?').all(prefix.length, prefix) as { key: string; value: string }[];
+  }
+  putMetadata(key: string, value: string): void {
+    this.db.prepare('INSERT INTO settings VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, value);
   }
   /** Must be called in a store transaction. The journal lets file removal resume after a crash. */
   deleteTasks(ids: readonly string[]): void {

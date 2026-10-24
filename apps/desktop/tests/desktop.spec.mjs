@@ -6,6 +6,10 @@ import sharp from "sharp";
 import { DesktopController } from "../../../packages/desktop/src/controller.ts";
 import { FakeAgent, FAKE_PROFILE } from "../../../packages/worker/src/fake.ts";
 import { makeCli, credentialStore } from "./fixtures.mjs";
+import { openCore } from '../../../packages/core/src/core.ts';
+import { createRelay } from '../../../services/relay/src/server.ts';
+import { RemoteClient } from '../../../services/relay/src/client.ts';
+import { runOnce } from '../../../packages/worker/src/worker.ts';
 
 let desktop, root, workspace, testsSent, gatewayFailureCode, pickerSelection;
 const previousLocalAppData = process.env.LOCALAPPDATA;
@@ -91,6 +95,38 @@ const nav = (page, name) =>
     .getByRole("navigation")
     .getByRole("button", { name, exact: true })
     .click();
+
+for (const width of [1040, 720, 480]) test(`M10 Remote GUI setup, secure token, target selection, batch/history and Local return ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 760 });
+  const core = openCore(join(root, 'relay-test'), 'remote');
+  const relay = await createRelay(core, [ { ownerId: 'ui-test', deviceId: 'a', role: 'desktop', token: 'a'.repeat(40) }, { ownerId: 'ui-test', deviceId: 'b', role: 'desktop', token: 'b'.repeat(40) } ]);
+  try {
+    const url = await relay.listen({ host: '127.0.0.1', port: 0 }); const worker = new RemoteClient(url, 'b'.repeat(40));
+    await worker.presence('合成测试电脑 B', [{ id: FAKE_PROFILE.id, version: FAKE_PROFILE.version, fingerprint: FAKE_PROFILE.fingerprint, provider: 'fake' }], true);
+    await nav(page, '设置');
+    await page.getByLabel('Relay HTTPS 地址', { exact: true }).fill(url); await page.getByLabel('设备 Token', { exact: true }).fill('a'.repeat(40));
+    await page.getByRole('button', { name: '保存连接', exact: true }).click();
+    await expect(page.getByLabel('设备 Token', { exact: true })).toHaveValue('');
+    await page.getByRole('button', { name: '测试连接 / 刷新电脑', exact: true }).click();
+    await expect(page.getByText('Relay 已连接', { exact: false })).toBeVisible();
+    await page.getByLabel('远程电脑及已批准 Agent', { exact: true }).selectOption(JSON.stringify(['b', FAKE_PROFILE.id, FAKE_PROFILE.version]));
+    await page.getByLabel('新任务处理位置', { exact: true }).selectOption('remote');
+    await expect.poll(() => desktop.settings.remote.mode).toBe('remote');
+    expect(JSON.stringify(await desktop.dispatch({ v: 1, command: 'snapshot' }))).not.toContain('a'.repeat(40));
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.getByRole('group', { name: '跨设备处理', exact: true }).screenshot({ path: `build/ui-evidence/m10-remote-${width}.png` });
+    const paths = [];
+    for (let i = 0; i < 2; i++) { const path = join(root, `remote-${i}.png`); writeFileSync(path, await sharp({ create: { width: 16, height: 16, channels: 3, background: i ? 'blue' : 'red' } }).png().toBuffer()); paths.push(path); }
+    pickerSelection = paths; await nav(page, '首页');
+    await expect(page.getByRole('heading', { name: 'b · fake-readonly', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: '添加图片文件…', exact: true }).click(); await page.getByRole('button', { name: '提交 2 张为一个任务', exact: true }).click();
+    await expect.poll(() => desktop.app.list().length).toBe(1); expect(desktop.app.core.store.tasks()).toHaveLength(0);
+    await desktop.dispatch({ v: 1, command: 'remote-test' }); await runOnce(worker, new FakeAgent(), [FAKE_PROFILE]); await desktop.dispatch({ v: 1, command: 'remote-test' });
+    await nav(page, '历史记录'); await expect(page.locator('.tasks li')).toHaveCount(1); await expect(page.locator('.tasks li')).toContainText('处理完成');
+    await nav(page, '设置'); await page.getByLabel('新任务处理位置', { exact: true }).selectOption('local'); await page.getByRole('button', { name: '删除设备 Token', exact: true }).click();
+    await expect(page.getByText('尚未配置 Relay', { exact: true })).toBeVisible(); expect(desktop.app.list()[0].status).toBe('succeeded');
+  } finally { await relay.close(); core.close(); }
+});
 
 test('hotkeys save before Agent setup even when CLI discovery is invalid', async ({ page }) => {
   desktop.discovery = [{ provider: 'codex', path: '', status: 'invalid' }];

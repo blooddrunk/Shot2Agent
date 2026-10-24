@@ -68,3 +68,14 @@ jobs:
             build/ui-evidence
             build/ui-report
             build/ui-test-results
+
+  relay-container:
+    name: Remote Relay Compose persistence and restore
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: docker build -f deploy/relay/Dockerfile -t shot2agent-relay:m10-test .
+      - run: node scripts/relay-container.mjs shot2agent-relay:m10-test

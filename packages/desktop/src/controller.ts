@@ -1,5 +1,7 @@
 import { fileCacheUsage } from '../../local/src/file-cache.ts';
 import { APP_VERSION } from './version.ts';
+import { RemoteQueue, remoteDefaults, validateRemote } from './remote.ts';
+import { RemoteClient } from '../../../services/relay/src/client.ts';
 import { FolderSource, validateCaptureFolder } from './folder.ts';
 import { displayInventory } from './inventory.ts';
 import { ACTIONS, completedResults, retryableDelivery, retryableChannels, validateHotkeys } from './actions.ts';
@@ -64,10 +66,14 @@ export class DesktopController {
   private preview?: string; private previewImage?: object;
   private credentials: DesktopCredentialStore;
   private testGateway: GatewayVisionTest;
+  readonly remote: RemoteQueue;
+  private remoteConnection?: { url: string; reference: string; client: RemoteClient };
+  private remoteSync?: Promise<void>; private nextRemoteSync = 0;
   constructor(root: string, clipboard: ClipboardPort, injected?: { adapter: AgentAdapter; profile: Profile }, launchMode: 'codex' | 'staging' | 'legacy' = 'legacy', inventory: typeof discover = discover,
     dependencies: { credentials?: DesktopCredentialStore; testGateway?: GatewayVisionTest } = {}) {
     this.launchMode = launchMode; this.inventory = inventory;
     this.root = root; this.settings = loadSettings(root);
+    this.remote = new RemoteQueue(root);
     requireValue(launchMode !== 'staging' || this.settings.adapter === 'fake', 'FAKE_ACCEPTANCE_PROFILE_REQUIRED');
     this.credentials = dependencies.credentials ?? { save: saveGatewayToken, read: readGatewayToken, delete: deleteGatewayToken };
     this.testGateway = dependencies.testGateway ?? testGatewayVision;
@@ -80,7 +86,7 @@ export class DesktopController {
     this.app = new LocalApp(root, injected?.adapter ?? selected?.adapter ?? fallback.adapter,
       injected?.profile ?? selected?.profile ?? fallback.profile,
       // A fresh desktop preselects Always, but cannot write until overwrite consent.
-      effectiveDelivery(this.settings), clipboard, registry);
+      effectiveDelivery(this.settings), clipboard, registry, this.remotePort());
     for (const profile of this.settings.agents?.profiles ?? []) {
       const gateway = profile.provider === 'claude-compatible-endpoint' ? profile.policy.gateway : undefined;
       if (gateway) this.gatewayTests.set(gateway.credentialRef,
@@ -97,7 +103,31 @@ export class DesktopController {
     })().finally(() => { this.discovering = undefined; });
     return this.discovering;
   }
-  private isConfigured() { return this.launchMode !== 'codex' || !!(this.settings.agents?.profiles.length || this.settings.codex); }
+  private isLocalConfigured() { return this.launchMode !== 'codex' || !!(this.settings.agents?.profiles.length || this.settings.codex); }
+  private isConfigured() { return this.settings.remote?.mode === 'remote' ? !!(this.settings.remote.identity && this.settings.remote.target && this.settings.remote.credentialRef) : this.isLocalConfigured(); }
+  private remotePort(): LocalApp['remote'] {
+    const settings = structuredClone(this.settings.remote ?? remoteDefaults()); const queue = this.remote;
+    return { enabled: () => settings.mode === 'remote', binding: () => {
+      requireValue(settings.target, 'REMOTE_SETUP_REQUIRED'); const t = settings.target;
+      return { profileId: t.id, profileVersion: t.version, profileFingerprint: t.fingerprint, provider: t.provider, targetWorkerId: t.deviceId };
+    }, enqueue: (metadata, images) => queue.enqueue(settings, metadata, images), list: () => queue.list(), get: id => queue.get(id), delete: ids => queue.delete(ids) };
+  }
+  private async remoteClient(settings = this.settings.remote): Promise<RemoteClient> {
+    requireValue(settings?.url && settings.credentialRef, 'REMOTE_SETUP_REQUIRED');
+    if (this.remoteConnection?.url === settings.url && this.remoteConnection.reference === settings.credentialRef) return this.remoteConnection.client;
+    const client = new RemoteClient(settings.url, await this.credentials.read(settings.credentialRef), this.controller.signal);
+    this.remoteConnection = { url: settings.url, reference: settings.credentialRef, client }; return client;
+  }
+  private remoteRegistry() { return this.isLocalConfigured() ? this.app.registry : []; }
+  private async syncRemote() {
+    const settings = structuredClone(this.settings.remote);
+    if (!settings?.credentialRef || !settings.url || !settings.identity) return;
+    try {
+      const client = await this.remoteClient(settings); const registry = this.remoteRegistry();
+      await client.presence(settings.label, registry.map(e => ({ id: e.profile.id, version: e.profile.version, fingerprint: e.profile.fingerprint, provider: e.adapter.name })), settings.receive && registry.length > 0);
+      await this.remote.sync(settings, client);
+    } catch (e) { this.remote.status = 'disconnected'; this.remote.error = safeError(e) === 'LOCAL_OPERATION_FAILED' ? 'REMOTE_NETWORK_UNAVAILABLE' : safeError(e); }
+  }
   private currentPolicy(): ApprovedPolicy | undefined {
     const selected = this.settings.agents?.selected;
     if (selected) return this.settings.agents?.profiles.find(p => p.policy.id === selected.id && p.policy.version === selected.version);
@@ -242,6 +272,18 @@ export class DesktopController {
     requireValue(this.settings.agents && keys.length > 0 && new Set(keys).size === keys.length, 'PROFILE_NOT_FOUND');
     const profiles = this.settings.agents.profiles;
     const latest = this.selectableProfileKeys(); const referenced = this.referencedProfileKeys();
+    if (this.settings.remote?.credentialRef && this.settings.remote.identity) {
+      // A version still queued on the Relay is as immutable as a Local queued version.
+      try {
+        const client = await this.remoteClient(); let cursor: string | undefined;
+        do {
+          const page = await client.list(cursor);
+          for (const task of page.tasks) if (task.submission.targetWorkerId === this.settings.remote.identity.deviceId &&
+            ['queued', 'leased', 'running', 'execution_unknown'].includes(task.status)) referenced.add(profileKey(task.submission.profileId, task.submission.profileVersion));
+          cursor = page.nextCursor;
+        } while (cursor);
+      } catch { throw new Error('REMOTE_PROFILE_REFERENCES_UNAVAILABLE'); }
+    }
     const selected = this.settings.agents.selected;
     const removed = profiles.filter(profile => keys.includes(profileKey(profile.policy.id, profile.policy.version)));
     requireValue(removed.length === keys.length, 'PROFILE_NOT_FOUND');
@@ -287,6 +329,10 @@ export class DesktopController {
   }
   async tick() {
     if (this.closed) return;
+    if (!this.remoteSync && Date.now() >= this.nextRemoteSync && this.settings.remote?.credentialRef && (this.settings.remote.mode === 'remote' || this.settings.remote.receive || this.remote.hasPending())) {
+      this.nextRemoteSync = Date.now() + 3000;
+      this.remoteSync = this.syncRemote().finally(() => { this.remoteSync = undefined; });
+    }
     if (this.isConfigured() && !this.captureError && this.armed && (this.settings.desktop.enabled || this.settings.desktop.folderEnabled) && !this.settings.desktop.paused) {
       try {
         const auto = this.settings.desktop.mode === 'auto';
@@ -299,7 +345,16 @@ export class DesktopController {
       catch (error) { this.captureError = safeError(error); this.armed = false; this.app.discard(); }
     }
     if (!this.worker && !this.workerError) {
-      this.worker = this.app.work(this.controller.signal).catch(error => { this.workerError = safeError(error); }).finally(() => { this.worker = undefined; });
+      this.worker = (async () => {
+        if (await this.app.work(this.controller.signal)) return;
+        if (this.settings.remote?.receive && this.remote.status === 'connected' && this.remoteRegistry().length) {
+          try { await this.app.work(this.controller.signal, await this.remoteClient(), this.remoteRegistry()); }
+          catch (error) {
+            if (safeError(error) === 'AGENT_STOP_UNCONFIRMED') throw error;
+            this.remote.error = safeError(error); this.remote.status = 'disconnected';
+          }
+        }
+      })().catch(error => { this.workerError = safeError(error); }).finally(() => { this.worker = undefined; });
     }
   }
   async dispatch(raw: unknown): Promise<unknown> {
@@ -307,7 +362,7 @@ export class DesktopController {
     requireValue(raw && typeof raw === 'object' && !Array.isArray(raw), 'INVALID_REQUEST');
     const r = raw as Record<string, unknown>;
     requireValue(r.v === 1 && typeof r.command === 'string', 'INVALID_PROTOCOL');
-    const allowed: Record<string, string[]> = { 'staging-fault': ['kind'], snapshot: ['offset', 'query'], 'configure-hotkeys': ['hotkeys'], action: ['action'], configure: ['capture', 'delivery', 'autoConsent', 'alwaysConsent'],
+    const allowed: Record<string, string[]> = { 'remote-configure': ['mode', 'url', 'label', 'receive', 'token'], 'remote-delete-token': [], 'remote-test': [], 'remote-select': ['deviceId', 'id', 'version'], 'remote-retry': [], 'staging-fault': ['kind'], snapshot: ['offset', 'query'], 'configure-hotkeys': ['hotkeys'], action: ['action'], configure: ['capture', 'delivery', 'autoConsent', 'alwaysConsent'],
       'composer-add-files': ['paths'], 'composer-add-clipboard': [], 'composer-add-pending': [], 'composer-move': ['index', 'to'], 'composer-remove': ['index'], 'composer-discard': [], 'composer-submit': [], 'copy-files': ['id'], 'clean-file-cache': ['confirm'],
       submit: [], current: [], discard: [], pause: ['paused'], copy: ['id'], detail: ['id'], 'retry-delivery': ['id'], recover: [], 'select-agent': ['id', 'version'],
       'archive-agent': ['id', 'version', 'archived', 'confirm'], 'delete-agent': ['id', 'version', 'confirm'], 'cleanup-unused-agents': [],
@@ -321,6 +376,48 @@ export class DesktopController {
       return this.snapshot(Number(r.offset ?? 0), String(r.query ?? ''));
     }
     switch (r.command) {
+      case 'remote-configure': {
+        await this.remoteSync;
+        requireValue(!this.worker || (r.url === undefined && r.token === undefined), 'REMOTE_WAIT_FOR_IDLE');
+        const next = structuredClone(this.settings); const remote = next.remote ?? remoteDefaults(); const oldRef = remote.credentialRef;
+        for (const key of ['mode', 'url', 'label', 'receive'] as const) if (r[key] !== undefined) (remote as unknown as Record<string, unknown>)[key] = r[key];
+        if (remote.url !== this.settings.remote?.url) { delete remote.identity; delete remote.target; }
+        if (r.token !== undefined) {
+          requireValue(typeof r.token === 'string' && /^[\x21-\x7e]{32,256}$/.test(r.token), 'INVALID_REMOTE_TOKEN');
+          remote.credentialRef = `Shot2Agent-Relay-${randomUUID()}`;
+        }
+        validateRemote(remote);
+        if (r.token !== undefined) await this.credentials.save(remote.credentialRef!, r.token as string);
+        next.remote = remote;
+        try { saveSettings(this.root, next); } catch (e) { if (remote.credentialRef !== oldRef && remote.credentialRef) await this.credentials.delete(remote.credentialRef).catch(() => {}); throw e; }
+        const connectionChanged = remote.url !== this.settings.remote?.url || r.token !== undefined;
+        this.settings = next; this.app.remote = this.remotePort(); this.nextRemoteSync = 0;
+        if (connectionChanged) { this.remoteConnection = undefined; this.remote.status = 'disconnected'; }
+        if (oldRef && oldRef !== remote.credentialRef) await this.credentials.delete(oldRef);
+        break;
+      }
+      case 'remote-delete-token': {
+        await this.remoteSync; requireValue(!this.worker, 'REMOTE_WAIT_FOR_IDLE');
+        const next = structuredClone(this.settings); const reference = next.remote?.credentialRef;
+        if (reference) await this.credentials.delete(reference);
+        if (next.remote) { delete next.remote.credentialRef; next.remote.receive = false; next.remote.mode = 'local'; }
+        saveSettings(this.root, next); this.settings = next; this.app.remote = this.remotePort(); this.remoteConnection = undefined; this.remote.status = 'unconfigured'; this.remote.lastSync = undefined; this.remote.error = undefined; this.remote.workers = []; break;
+      }
+      case 'remote-test': {
+        await this.remoteSync;
+        const client = await this.remoteClient(); const session = await client.session(); requireValue(session.role === 'desktop', 'REMOTE_DESKTOP_TOKEN_REQUIRED');
+        const next = structuredClone(this.settings); next.remote!.identity = { ownerId: session.ownerId, deviceId: session.deviceId };
+        saveSettings(this.root, next); this.settings = next; this.app.remote = this.remotePort();
+        await this.syncRemote(); requireValue(this.remote.status === 'connected', this.remote.error ?? 'REMOTE_NETWORK_UNAVAILABLE');
+        this.remote.retry(); this.nextRemoteSync = 0; break;
+      }
+      case 'remote-select': {
+        const device = this.remote.workers.find(w => w.deviceId === r.deviceId); const profile = device?.profiles.find(p => p.id === r.id && p.version === r.version);
+        requireValue(device && profile, 'UNAPPROVED_TARGET');
+        const next = structuredClone(this.settings); requireValue(next.remote?.identity, 'REMOTE_SETUP_REQUIRED');
+        next.remote.target = { deviceId: device.deviceId, ...profile }; saveSettings(this.root, next); this.settings = next; this.app.remote = this.remotePort(); break;
+      }
+      case 'remote-retry': this.remote.retry(); this.nextRemoteSync = 0; break;
       case 'configure-hotkeys': {
         validateHotkeys(r.hotkeys);
         const next = structuredClone(this.settings); next.hotkeys = r.hotkeys;
@@ -563,12 +660,13 @@ export class DesktopController {
     try { fileCache = fileCacheUsage(this.root); } catch { fileCache = { error: 'UNSAFE_FILE_CACHE' }; }
     const snapshot = { appVersion: APP_VERSION, fileCache, composer: this.composer.map(({ id, preview }) => ({ id, preview })), folderError: this.folder.error, activity: { running: tasks.filter(t => ['leased', 'running'].includes(t.status)).length, queued: tasks.filter(t => t.status === 'queued').length }, hotkeys: this.settings.hotkeys ?? {}, lastAction: this.lastAction, lastHistoryCleanup: this.lastHistoryCleanup, canReviewUnknownHistory: this.app.canReviewUnknownHistory,
       settings: this.settings.desktop, delivery: this.settings.delivery, root: this.root, launchMode: this.launchMode, setupRequired: !this.isConfigured(),
+      remote: { ...Object.fromEntries(Object.entries(this.settings.remote ?? remoteDefaults()).filter(([key]) => key !== 'credentialRef')), hasToken: !!this.settings.remote?.credentialRef, status: this.remote.status, error: this.remote.error, lastSync: this.remote.lastSync, workers: this.remote.workers },
       agents, discovery: this.discovery.map(candidate => ({ provider: candidate.provider, path: candidate.path, selectionPath: candidate.selectionPath ?? candidate.path, version: candidate.version, status: candidate.status })),
       profile: { adapter: selectedAgent?.adapter.name ?? current?.provider ?? 'fake', id: this.isConfigured() ? this.app.profile.id : '', profileVersion: this.isConfigured() ? this.app.profile.version : '',
         workspace: current?.policy.workspace ?? this.settings.codex?.workspace, version: current?.policy.cliVersion ?? this.settings.codex?.cliVersion, sandbox: 'read-only' }, workspaceSuggestion: this.workspaceSuggestion(),
       status: this.workerError ? 'worker_error' : this.captureError ? 'capture_error' : !this.isConfigured() ? 'setup_required' : this.settings.desktop.paused ? 'paused' : !(this.settings.desktop.enabled || this.settings.desktop.folderEnabled) ? 'capture_off' : 'monitoring',
       error: this.workerError ?? this.captureError, pending: this.preview ?? null, captureStatus: this.app.lastCaptureStatus,
-      total: tasks.length, historyTotal: matching.length, historyOffset, tasks: matching.slice(historyOffset, historyOffset + 50).map(t => ({ id: t.submission.taskId, createdAt: t.createdAt, status: t.status, provider: t.submission.provider ?? t.attempts[0]?.adapterName, profileId: t.submission.profileId, summary: t.result?.summary, error: t.result?.errorCode ?? (t.status === 'queued' && !this.app.registry.some(e => e.profile.id === t.submission.profileId && e.profile.version === t.submission.profileVersion) ? 'PROFILE_UNAVAILABLE' : undefined),
+      total: tasks.length, historyTotal: matching.length, historyOffset, tasks: matching.slice(historyOffset, historyOffset + 50).map(t => ({ id: t.submission.taskId, mode: t.mode, remote: this.remote.info(t.submission.taskId), createdAt: t.createdAt, status: t.status, provider: t.submission.provider ?? t.attempts[0]?.adapterName, profileId: t.submission.profileId, summary: t.result?.summary, error: t.result?.errorCode ?? (t.mode === 'local' && t.status === 'queued' && !this.app.registry.some(e => e.profile.id === t.submission.profileId && e.profile.version === t.submission.profileVersion) ? 'PROFILE_UNAVAILABLE' : undefined),
         retryableChannels: t.status === 'succeeded' ? retryableChannels(this.app, t) : [], save: this.app.state.get(t.submission.taskId, 'save'), imageCount: t.submission.images.length, notification: this.app.state.get(t.submission.taskId, 'notification'), clipboard: this.app.state.get(t.submission.taskId, 'clipboard') })) };
     const results = completedResults(this.app);
     const actions = { copy: results.length > 0, retry: results.some(t => retryableDelivery(this.app, t)),
@@ -578,6 +676,6 @@ export class DesktopController {
   }
   async close() {
     if (this.closed) return; this.closed = true; this.controller.abort();
-    await this.worker; await this.discovering; this.app.close();
+    await this.worker; await this.remoteSync; await this.discovering; this.app.close(); this.remote.close();
   }
 }

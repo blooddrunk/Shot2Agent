@@ -1,0 +1,42 @@
+services:
+  relay:
+    build:
+      context: ../..
+      dockerfile: deploy/relay/Dockerfile
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs: [/tmp:size=64m,mode=1777]
+    volumes:
+      - relay-data:/data
+      - ./secrets:/run/shot2agent:ro
+    networks: [backend]
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options: { max-size: 5m, max-file: '2' }
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      RELAY_DOMAIN: ${RELAY_DOMAIN:?Set RELAY_DOMAIN in .env}
+    ports: ['443:443', '80:80']
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [backend, public]
+    depends_on:
+      relay: { condition: service_healthy }
+    logging:
+      driver: json-file
+      options: { max-size: 5m, max-file: '2' }
+networks:
+  backend: { internal: true }
+  public: {}
+volumes:
+  relay-data:
+  caddy-data:
+  caddy-config:

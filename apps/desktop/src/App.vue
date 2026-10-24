@@ -15,6 +15,8 @@ type Receipt = {
   stopReason?: string;
 };
 type Task = {
+  mode?: string;
+  remote?: { upload: string; error?: string; targetWorkerId?: string };
   id: string;
   createdAt: number;
   status: string;
@@ -58,6 +60,11 @@ type Discovery = {
   status: string;
 };
 type Snapshot = {
+  remote?: {
+    mode: string; url: string; label: string; receive: boolean; hasToken: boolean; status: string; error?: string; lastSync?: number;
+    target?: { deviceId: string; id: string; version: string; provider: string };
+    workers: { deviceId: string; label: string; accepting: boolean; lastSeen: number; profiles: { id: string; version: string; provider: string }[] }[];
+  };
   tray: TrayViewState;
   appVersion?: string;
   fileCache?: { directory?: string; files?: number; bytes?: number; maxFiles?: number; maxBytes?: number; error?: string };
@@ -214,6 +221,19 @@ const errorText: Record<string, string> = {
     "Agent 配置无法保存到本机设置。请确认应用数据目录可写。",
 };
 const data = ref<Snapshot>();
+const remoteUrl = ref(''); const remoteLabel = ref('Windows PC'); const remoteToken = ref(''); const remoteDirty = ref(false);
+const remoteOptions = computed(() => (data.value?.remote?.workers ?? []).flatMap(w => w.profiles.map(p => ({
+  key: JSON.stringify([w.deviceId, p.id, p.version]), label: `${w.label} · ${p.id} (${providerText[p.provider] ?? p.provider}) · ${w.accepting && Date.now() - w.lastSeen < 60000 ? '在线' : '离线 / 已暂停'}`, deviceId: w.deviceId, ...p,
+}))));
+const remoteSelection = computed(() => { const t = data.value?.remote?.target; return t ? JSON.stringify([t.deviceId, t.id, t.version]) : ''; });
+async function saveRemote() {
+  await action('remote-configure', { url: remoteUrl.value, label: remoteLabel.value, ...(remoteToken.value ? { token: remoteToken.value } : {}) });
+  remoteToken.value = ''; if (!error.value) remoteDirty.value = false;
+}
+async function selectRemote(event: Event) {
+  const option = remoteOptions.value.find(o => o.key === (event.target as HTMLSelectElement).value);
+  if (option) await action('remote-select', { deviceId: option.deviceId, id: option.id, version: option.version });
+}
 const transportError = ref("");
 const error = ref("");
 const message = ref("");
@@ -273,6 +293,10 @@ const captureSummary = computed(() => {
   return `${snapshot.settings.mode === "auto" ? "自动提交" : "确认后提交"} · ${presentation.value?.capture}`;
 });
 function friendlyError(code: string) {
+  if (/^RELAY_40[13]$|CREDENTIAL_UNAVAILABLE/.test(code)) return 'Relay 拒绝了设备 Token。请在跨设备设置更新 Token，再测试连接；已有任务保持原样。';
+  if (code === 'REMOTE_WAIT_FOR_IDLE') return '请等待当前任务结束后再保存连接；暂停接收会保留已经开始的任务。';
+  if (/HTTPS_REQUIRED/.test(code)) return '请输入完整的 HTTPS Relay 地址。只有本机隔离测试支持 HTTP。';
+  if (/^REMOTE_|^RELAY_|UNAPPROVED_TARGET|ARTIFACT_INTEGRITY/.test(code)) return '远程同步未完成。请检查 Relay 连接及远程电脑的 Agent 配置，然后测试连接或重试同步；不会改用本机执行。';
   if (/COORDINATOR|^Error: COORDINATOR/.test(code)) return "本地处理服务失联。请从托盘退出并重新打开应用；结果不确定的任务不会自动重跑。";
   return errorText[code] ?? "操作未完成。请检查本机程序、目录及网络后再试；执行结果不确定的任务不会自动重跑。";
 }
@@ -388,6 +412,7 @@ function chooseDetectedPath() {
 }
 function hydrate(snapshot: Snapshot) {
   data.value = snapshot;
+  if (!remoteDirty.value) { remoteUrl.value = snapshot.remote?.url ?? ''; remoteLabel.value = snapshot.remote?.label ?? 'Windows PC'; }
   if (page.value === "history")
     historyOffset.value = snapshot.historyOffset ?? 0;
   if (!hotkeyDirty.value) hotkeys.value = { ...snapshot.hotkeys };
@@ -919,17 +944,17 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener("shot2agent
           <div>
             <span class="hint">当前 AI 助手</span>
             <h2>
-              {{ selectedAgent ? selectedAgent.id : "添加你的第一个 AI 助手" }}
+              {{ data?.remote?.mode === 'remote' ? `${data.remote.target?.deviceId} · ${data.remote.target?.id}` : selectedAgent ? selectedAgent.id : "添加你的第一个 AI 助手" }}
             </h2>
             <p class="hint">
               {{
-                selectedAgent
+                data?.remote?.mode === 'remote' ? 'Remote · 截图经私人 Relay 发送到所选电脑' : selectedAgent
                   ? providerText[selectedAgent.provider]
                   : "支持 Codex、Claude Code 和 GLM"
               }}
             </p>
           </div>
-          <button @click="page = 'agents'">
+          <button @click="page = data?.remote?.mode === 'remote' ? 'settings' : 'agents'">
             <AppIcon name="agent" />{{ data?.setupRequired ? "开始设置" : "更换助手" }}
           </button>
         </div>
@@ -1155,6 +1180,35 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener("shot2agent
         class="settings-page"
         aria-label="应用设置"
       >
+        <fieldset aria-label="跨设备处理">
+          <legend>跨设备处理</legend>
+          <p class="hint">Remote 会将截图经你的私人 VPS 发送给所选电脑。Local 使用本机助手；现有任务保持原来的处理位置。</p>
+          <label>新任务处理位置
+            <select aria-label="新任务处理位置" :value="data?.remote?.mode ?? 'local'" :disabled="busy" @change="action('remote-configure', { mode: ($event.target as HTMLSelectElement).value })">
+              <option value="local">Local · 本机</option><option value="remote" :disabled="!data?.remote?.target || !data.remote.hasToken">Remote · 远程电脑</option>
+            </select>
+          </label>
+          <label>Relay HTTPS 地址<input aria-label="Relay HTTPS 地址" v-model="remoteUrl" placeholder="https://relay.example.com" @input="remoteDirty = true" /></label>
+          <label>这台电脑的名称<input aria-label="这台电脑的名称" v-model="remoteLabel" maxlength="80" @input="remoteDirty = true" /></label>
+          <label>设备 Token<input aria-label="设备 Token" type="password" v-model="remoteToken" autocomplete="off" :placeholder="data?.remote?.hasToken ? '已安全保存；输入新 Token 可更新' : '填写部署时为这台电脑生成的 Token'" /></label>
+          <p class="hint">Token 仅保存在 Windows 凭据管理器中。A、B 使用各自的设备 Token。</p>
+          <div class="button-row">
+            <button :disabled="busy" @click="saveRemote">保存连接</button>
+            <button :disabled="busy || !data?.remote?.hasToken || remoteDirty" @click="action('remote-test')">测试连接 / 刷新电脑</button>
+            <button :disabled="busy || !data?.remote?.hasToken" @click="action('remote-delete-token')">删除设备 Token</button>
+          </div>
+          <p role="status">{{ data?.remote?.status === 'connected' ? 'Relay 已连接' : data?.remote?.hasToken ? 'Relay 未连接 / 等待同步' : '尚未配置 Relay' }}<span v-if="data?.remote?.lastSync"> · 上次同步 {{ new Date(data.remote.lastSync).toLocaleTimeString() }}</span></p>
+          <p v-if="data?.remote?.error" class="error">{{ friendlyError(data.remote.error) }} · {{ data.remote.error }}</p>
+          <label>远程电脑及已批准 Agent
+            <select aria-label="远程电脑及已批准 Agent" :value="remoteSelection" :disabled="busy || !data?.remote?.hasToken" @change="selectRemote">
+              <option value="" disabled>先测试连接，再选择远程 Agent</option>
+              <option v-for="option in remoteOptions" :key="option.key" :value="option.key">{{ option.label }}</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" :checked="data?.remote?.receive" :disabled="busy || !data?.remote?.hasToken || data.setupRequired" @change="action('remote-configure', { receive: ($event.target as HTMLInputElement).checked })" />在本机接收远程任务（与本机任务共用一个执行槽）</label>
+          <button :disabled="busy || !data?.remote?.hasToken" @click="action('remote-retry')">重试上传 / 同步结果</button>
+          <p class="hint">离线任务保留在这台电脑上，不会转到 Local 执行。暂停接收仅影响下一项远程任务，当前 Agent 会继续完成。</p>
+        </fieldset>
         <fieldset class="theme-picker">
           <legend>外观</legend>
           <p class="hint">主题立即生效，并在下次打开时保留。</p>
@@ -1450,7 +1504,7 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener("shot2agent
                   }}
                   · {{ providerText[task.provider || ""] || task.provider }} ·
                   {{ task.profileId }} · {{ task.id.slice(0, 8) }} ·
-                  {{ taskStatus[task.status] || task.status }}</span
+                  {{ task.remote?.upload === 'pending_upload' ? '等待上传' : task.remote?.upload === 'upload_failed' ? '上传失败' : taskStatus[task.status] || task.status }} · {{ task.mode === 'remote' ? `Remote → ${task.remote?.targetWorkerId}` : 'Local' }}</span
                 ></button
               ><button
                 v-if="

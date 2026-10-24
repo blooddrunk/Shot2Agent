@@ -109,6 +109,7 @@ export class TaskCore {
       // M1 is deliberately a single-execution coordinator, even across Worker identities.
       if (tasks.some(t => t.status === 'leased' || t.status === 'running')) return null;
       const task = tasks.find(t => t.ownerId === identity.ownerId && t.status === 'queued' &&
+        (!t.submission.targetWorkerId || t.submission.targetWorkerId === identity.deviceId) &&
         profiles.some(p => p.id === t.submission.profileId && p.version === t.submission.profileVersion));
       if (!task) return null;
       const attempt: Attempt = { attemptId: randomUUID(), taskId: task.submission.taskId, workerId: identity.deviceId,
@@ -134,6 +135,7 @@ export class TaskCore {
       Number.isSafeInteger(info.timeoutMs) && info.timeoutMs >= 10 && info.timeoutMs <= 3_600_000, 'INVALID_START');
     this.store.transaction(() => {
       this.recover(); const { task, attempt } = this.fenced(identity, id, proof);
+      requireValue(!task.submission.targetWorkerId || task.submission.profileFingerprint === info.profileFingerprint, 'PROFILE_BINDING_CHANGED', 409);
       if (task.status === 'running') {
         requireValue(attempt.profileFingerprint === info.profileFingerprint && attempt.adapterName === info.adapterName && attempt.adapterVersion === info.adapterVersion &&
           attempt.deadline === attempt.startedAt! + info.timeoutMs, 'START_CONFLICT', 409); return;

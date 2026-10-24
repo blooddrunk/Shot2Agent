@@ -1,5 +1,7 @@
 # Deployment modes: Local and Remote
 
+M10 development implements optional GUI-to-Relay-to-approved-Worker-to-origin return; [guide](REMOTE_GUIDE.md), [Compose](../deploy/relay/README.md), [validation](M10_R_VALIDATION.md). Local remains the default and needs no Relay. Enabling the independent receive role or completing existing Remote tasks can keep Remote polling active while new submissions target Local; that does not transfer Local tasks. M10 shows Remote history locally at its origin; Web history/push below remain M11 proposals. Stable published Local v1.0.2 is unchanged.
+
 > M3-L desktop update: Tauri 2/Vue 3 uses a restricted anonymous-pipe Node child; no network listener or Relay. Windows Job containment owns descendants; EOF/quit aborts and settles work. Versioned capture settings share M2 settings with backup; SQLite tasks are retained. Worker exclusion is transactional and PID-aware. See [desktop operation](M3_WINDOWS_RUN.md) and [evidence](M3_VALIDATION.md).
 
 **Status:** confirmed V1 requirements as of 2026-10-20. M1 core plus M2-L Local clipboard/Codex/delivery and M3-L Local desktop are implemented. M2 minimum-loop operator acceptance is retained; M3 native acceptance is pending. Remote delivery remains planned. See [M3 evidence](M3_VALIDATION.md).
