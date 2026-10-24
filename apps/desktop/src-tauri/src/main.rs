@@ -308,6 +308,12 @@ fn call(state: &State, request: Value) -> Result<Value, String> {
 #[tauri::command]
 async fn rpc(app: tauri::AppHandle, request: Value) -> Result<Value, String> {
     if request["v"] == 1
+        && request["command"] == "quit"
+        && request.as_object().map(|r| r.len() == 2).unwrap_or(false)
+    {
+        app.state::<native::Runtime>().typing.shutdown();
+    }
+    if request["v"] == 1
         && (request["command"] == "stop-typing"
             || (request["command"] == "action" && request["action"] == "stop-typing"))
     {

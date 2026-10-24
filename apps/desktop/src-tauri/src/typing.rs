@@ -144,6 +144,10 @@ impl Typing {
                         return Err("TYPING_INVALID_TARGET".into());
                     }
                     if !this.wait(started + Duration::from_millis(delay), || {
+                        if platform::escape() {
+                            this.stop();
+                            return false;
+                        }
                         initial.as_ref().map(|w| w.focused()).unwrap_or(true)
                     }) {
                         return Err(if this.canceled() {

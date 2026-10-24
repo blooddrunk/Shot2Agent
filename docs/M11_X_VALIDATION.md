@@ -2,15 +2,31 @@
 
 Baseline `83a88bc2a80c8b4c03cd93bba540dafd57850bc1`; implementation branch `codex/m11-native-capture-typing`. No release/tag changes, no operator history or Tokens, no paid model requests. Exact committed SHA and CI artifacts are recorded in PR handoff after execution.
 
-## Executed development checks
+## Executed candidate gates
 
-- `corepack pnpm install --frozen-lockfile` (`CI=true`): exit 0, pnpm 10.19.0, lockfile unchanged.
-- First full `npm run check`: exit 0; 271 tests, 268 PASS, 3 SKIPPED, 0 FAIL. Includes 9 new controller/publication tests; TS/Vue, lint, build and compiled Local/Gateway synthetic smoke pass. Later edits require final rerun.
-- Isolated native-module probe, `cargo check --target x86_64-pc-windows-gnu`: exit 0 for capture/typing against the same windows 0.62 dependency. This is type-check evidence, not a Windows execution/build claim.
-- Isolated Linux native-module `cargo test`: exit 0, 3/3 PNG/Unicode/order/focus/cancel/failure tests. Full Windows Rust tests/package gates remain pending until CI runs.
-- First targeted Vue run: 3 FAIL; the native test fixture dropped its ephemeral state on refresh, and the locator assumed a region role while the progress UI uses status. Corrected fixture persistence/locator; final rerun pending.
+First completely green candidate: `254272c2739ef2dfc3b2b131483ac834fcd809d1` ([PR #27](https://github.com/blooddrunk/Shot2Agent/pull/27)). This table records that exact candidate, not a claim that later edits inherit its PASS. Final HEAD checks and the exact ZIP BUILD/manifest source identity are recorded in the PR handoff. PR checkout builds a merge-test commit, which must not be mislabeled as branch HEAD.
 
-Windows/Linux Node matrix, full Vue, Windows Rust fmt/tests/build, complete ZIP/manifest and extracted EXE IPC/quit/helper checks, and Linux Docker Relay regression must all run on the final source. An unexecuted gate is NOT VERIFIED. CI is linked in the PR, and hosted clipboard/API checks are not physical paste/typing evidence.
+| Command / gate | Actual result and scope |
+| --- | --- |
+| `corepack pnpm install --frozen-lockfile` with `CI=true` | Local exit 0; pnpm 10.19.0 / Node v24.22.1; pnpm lockfile unchanged. All CI installs are frozen. |
+| `npm run check` | Local exit 0: 271 tests / 268 PASS / 3 SKIPPED / 0 FAIL; lint, TS/Vue, builds and compiled Local/Gateway synthetic resource smoke pass. Includes 9 new controller/publication tests. |
+| `npm run desktop:test-ui` | Local exit 0, 36/36; 1040/720/480px new settings and capture/typing controls, preparation/status/stop and file-only pause assertions. Settings screenshots visually inspected, no horizontal overflow. Browser fixture is not native Tauri proof. |
+| Windows/Linux × Node 22/24 `npm run check`, Vue and Relay Docker/Compose | [40091004003](https://github.com/blooddrunk/Shot2Agent/actions/runs/40091004003): every job SUCCESS, exit 0. Windows: 269 PASS / 2 SKIPPED; Linux: 239 PASS / 32 SKIPPED; each has 271 tests and 0 FAIL. Vue 36/36. Docker build, private Compose persistence/restart/claim/result/download, authentication, rotation and backup/restore pass. |
+| `npm run desktop:build`, Rust fmt/test, native API test, package + extracted EXE | [40091004015](https://github.com/blooddrunk/Shot2Agent/actions/runs/40091004015): every step SUCCESS, exit 0. Rust 13 PASS / 1 explicitly ignored hosted-only test; the next step explicitly runs that ignored test and passes 1/1. No ignored case is counted as executed by the ordinary run. |
+| `node scripts/windows/native-api-smoke.mjs` | Same Windows run: real hosted synthetic EDIT window, removed-monitor refusal, 3 real WGC captures across apartment teardown/another thread, complete PNG decode/dimensions/content variation, SendInput target readback for Chinese/ASCII/symbols/newlines/code fences/surrogate pairs, own-process target refusal and unchanged clipboard sequence/text. This is actual Windows API evidence, not physical multi-monitor/DPI/Notepad acceptance. |
+| `npm run desktop:package` and `scripts/windows/portable-verify.mjs` | Same Windows run: ZIP/build manifest/resources, helper ZoneId=3 handling, Credential Manager temporary Tokens, Fake 1/5-image tasks, native image clipboard roundtrip, file-only PNG with unchanged clipboard bytes/sequence, latest/history source without clipboard write or new attempt, file clipboard/cache, history cleanup/restart. Packaged and extracted EXE IPC/refusal/quit/descendant cleanup and native tray setter/eligibility/offline/cleanup gates all PASS. |
+| Isolated native-module probe | `cargo check --tests --target x86_64-pc-windows-gnu`: exit 0. Separate Linux native-module `cargo test`: exit 0, 4/4 PNG/Unicode/order/focus/cancel/failure/bounds tests. These supplemental checks do not replace full Windows gates. |
+
+Candidate Windows [artifact 12558858578](https://github.com/blooddrunk/Shot2Agent/actions/runs/40091004015/artifacts/12558858578) is available; outer artifact digest `64843e1dec07dd210e7bac18736df97331c985a4d86a3cc4af73e02ecac6d5d1`. This is the outer Actions artifact digest, not the inner portable ZIP digest. Final downloaded ZIP/manifest identity is recorded separately in the final PR handoff.
+
+## Failures found and corrected
+
+- Baseline main `83a88bc` package run [40088149398](https://github.com/blooddrunk/Shot2Agent/actions/runs/40088149398) failed when the read-only RemoteSigned negative-control process exceeded its 10s cold-start budget. The isolated smoke now permits 30s and still requires exact refusal and successful bypass-scoped read-only validation; production policy/timeouts are unchanged. Green candidate confirms both conditions.
+- Initial lint failed on an unqualified test global, then passed after correction. Initial Vue iterations failed on ephemeral native fixture state, a status/region locator, a duplicated label substring and the old 5-action count. All 36 tests now pass with 8 configured actions and persistent simulated native state.
+- Real hosted WGC acceptance in [40089811969](https://github.com/blooddrunk/Shot2Agent/actions/runs/40089811969) and [40090175706](https://github.com/blooddrunk/Shot2Agent/actions/runs/40090175706) exposed an access violation on a second apartment. Factories are now explicitly scoped to each capture rather than using process-wide projected static caches across RoUninitialize. Same-thread and cross-thread repeated real captures passed at `9e3105d` and again at `254272c`.
+- `9e3105d` then exposed `OFFLINE_TRAY_NOT_PUBLISHED`: new stop/capture menu fields were absent from the offline presentation. Defaults and boolean projection are now aligned; native packaged/extracted tray smoke verifies all new entries and offline publication. Intermediate capture files additionally use Windows delete-on-close, with native read/drop cleanup coverage.
+
+Tests use disposable roots, synthetic pixels/text, Fake/mock and temporary credentials. No production Token, operator history, personal screenshot or paid model request was used. Existing unchanged Local native observations remain valid only within their original scope. Unexecuted physical cases below remain NOT VERIFIED.
 
 ## Small physical Windows procedure — currently NOT VERIFIED
 
@@ -18,7 +34,7 @@ Use only the complete candidate ZIP from successful Windows CI, verify its BUILD
 
 ### A. Monitor screenshot / file-only / one task
 
-1. Put synthetic content on the chosen monitor (e.g. Notepad displaying `M11 capture 中文 123`); copy `M11 clipboard sentinel` to clipboard. Settings → 原生截图与直接输入: refresh displays, select the intended one, choose temporary directory, enable only PNG save. Save settings. Under shortcuts set 截取所选显示器 to an unused Ctrl+Alt+S, save, hide window.
+1. Use an isolated test desktop/monitor showing only synthetic content (e.g. a full-screen Notepad displaying `M11 capture 中文 123`); copy `M11 clipboard sentinel` to clipboard. Settings → 原生截图与直接输入: refresh displays, select the intended one, choose temporary directory, enable only PNG save. Save settings. Under shortcuts set 截取所选显示器 to an unused Ctrl+Alt+S, save, hide window.
 2. Press shortcut once. Inspect one complete PNG in Explorer and open it. PASS: correct monitor/content, actual monitor pixel dimensions including a 4K or mixed-DPI monitor if available, no partial PNG; paste sentinel into a second Notepad and confirm unchanged. Record display layout/scaling, filename/dimensions, observed text and candidate SHA. Clipboard byte/sequence preservation additionally uses the automated native API gate where available; visual paste alone does not prove all formats.
 3. In settings enable watching that same screenshot directory, leave submission in confirmation mode, enable “同时交给所选 Agent”. Capture: PASS = one preview and zero task before clicking 提交图片; after click one task/result. Repeat with explicit auto-consent/auto mode: PASS = one task per new synthetic screen, no second watched-file task. Paused capture must refuse. Repeat shortcut while capture busy must not overlap. Do not interpret byte-identical screenshots inside the existing dedupe window as separate tasks.
 4. Record missing monitor/DPI/permission cases as NOT VERIFIED. Restore manual/confirm and pause as needed; exit from tray and remove only the disposable root/output directory. Exported files are not removed by app history cleanup.
