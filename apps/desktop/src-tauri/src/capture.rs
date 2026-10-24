@@ -1,5 +1,61 @@
 //! SDR still capture via WGC desktop interop. No clipboard API is used here.
 use serde_json::Value;
+use std::sync::Mutex;
+#[derive(Default)]
+pub struct Capture {
+    state: Mutex<CaptureState>,
+}
+#[derive(Default)]
+struct CaptureState {
+    closed: bool,
+    #[cfg(windows)]
+    lease: Option<MtaLease>,
+}
+#[cfg(windows)]
+struct MtaLease(windows::Win32::System::Com::CO_MTA_USAGE_COOKIE);
+// Microsoft permits increment/decrement on different threads with the same cookie.
+#[cfg(windows)]
+unsafe impl Send for MtaLease {}
+#[cfg(windows)]
+impl Drop for MtaLease {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = windows::Win32::System::Com::CoDecrementMTAUsage(self.0);
+        }
+    }
+}
+impl Capture {
+    pub fn capture(&self, id: &str) -> Result<Vec<u8>, String> {
+        let mut state = self.state.lock().map_err(|_| "CAPTURE_STATE_UNAVAILABLE")?;
+        if state.closed {
+            return Err("APP_CLOSED".into());
+        }
+        #[cfg(windows)]
+        {
+            // Keep MTA infrastructure alive while pool threads can be idle. A
+            // per-shot RoUninitialize must never tear down the application's MTA.
+            if state.lease.is_none() {
+                state.lease = Some(MtaLease(unsafe {
+                    windows::Win32::System::Com::CoIncrementMTAUsage()
+                        .map_err(|_| "CAPTURE_INITIALIZATION_FAILED")?
+                }));
+            }
+            platform::capture(id)
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = (id, &mut state);
+            Err("WINDOWS_CAPTURE_REQUIRED".into())
+        }
+    }
+    pub fn shutdown(&self) {
+        if let Ok(mut state) = self.state.lock() {
+            state.closed = true;
+            #[cfg(windows)]
+            drop(state.lease.take());
+        }
+    }
+}
 pub fn monitors() -> Result<Value, String> {
     #[cfg(windows)]
     {
@@ -7,17 +63,6 @@ pub fn monitors() -> Result<Value, String> {
     }
     #[cfg(not(windows))]
     {
-        Err("WINDOWS_CAPTURE_REQUIRED".into())
-    }
-}
-pub fn capture(id: &str) -> Result<Vec<u8>, String> {
-    #[cfg(windows)]
-    {
-        platform::capture(id)
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = id;
         Err("WINDOWS_CAPTURE_REQUIRED".into())
     }
 }
@@ -283,6 +328,12 @@ mod platform {
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn shutdown_refuses_future_capture() {
+        let context = super::Capture::default();
+        context.shutdown();
+        assert_eq!(context.capture(""), Err("APP_CLOSED".into()));
+    }
     #[test]
     fn png_roundtrip_and_bounds() {
         let rgba = [255, 0, 128, 255, 0, 255, 0, 255];

@@ -326,6 +326,9 @@ async fn rpc(app: tauri::AppHandle, request: Value) -> Result<Value, String> {
             .lock()
             .map_err(|_| "HOTKEY_TRANSACTION_LOCK")?;
         let is_quit = request.get("command").and_then(Value::as_str) == Some("quit");
+        if is_quit {
+            app.state::<native::Runtime>().capture.shutdown();
+        }
         if request["command"] == "staging-fault" && request["kind"] == "coordinator" {
             if launch_mode(&std::env::args().skip(1).collect::<Vec<_>>())? != "staging" {
                 return Err("STAGING_ONLY".into());
@@ -448,6 +451,7 @@ fn quit(app: tauri::AppHandle) {
     app.state::<tray::Runtime>().shutdown();
 
     tauri::async_runtime::spawn_blocking(move || {
+        app.state::<native::Runtime>().capture.shutdown();
         let _ = call(&app.state::<State>(), json!({"v":1,"command":"quit"}));
         app.exit(0);
     });
@@ -653,6 +657,7 @@ fn main() {
         .expect("Shot2Agent startup failed")
         .run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<native::Runtime>().capture.shutdown();
                 app.state::<native::Runtime>().typing.shutdown();
                 app.state::<tray::Runtime>().shutdown();
                 let _ = app.remove_tray_by_id("local");

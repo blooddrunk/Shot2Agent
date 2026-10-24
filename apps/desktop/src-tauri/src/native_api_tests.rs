@@ -39,6 +39,7 @@ fn hosted_window_capture_and_unicode() {
         "M11 synthetic clipboard sentinel 中文 🧪"
     );
     let before = unsafe { GetClipboardSequenceNumber() };
+    let context = std::sync::Arc::new(crate::capture::Capture::default());
     let monitors = crate::capture::monitors().unwrap();
     eprintln!("NATIVE_TEST_MONITORS");
     let monitor = monitors
@@ -80,9 +81,10 @@ fn hosted_window_capture_and_unicode() {
         eprintln!("NATIVE_TEST_WINDOW_READY");
         // The production target selector refuses this own-process test window.
         assert!(crate::typing::platform::Window::selected().is_err());
-        assert!(crate::capture::capture("synthetic-removed-monitor").is_err());
+        assert!(context.capture("synthetic-removed-monitor").is_err());
         eprintln!("NATIVE_TEST_CAPTURE");
-        let png = crate::capture::capture(monitor["id"].as_str().unwrap())
+        let png = context
+            .capture(monitor["id"].as_str().unwrap())
             .expect("hosted WGC must produce a real frame");
         let mut reader = png::Decoder::new(std::io::Cursor::new(png))
             .read_info()
@@ -95,15 +97,19 @@ fn hosted_window_capture_and_unicode() {
         assert!(decoded[..info.buffer_size()]
             .chunks_exact(4)
             .any(|pixel| pixel != &decoded[..4]));
-        // Repeat across apartment teardown and on another thread.
-        assert!(!crate::capture::capture(monitor["id"].as_str().unwrap())
-            .unwrap()
-            .is_empty());
-        assert!(!std::thread::spawn(|| crate::capture::capture(""))
-            .join()
-            .unwrap()
-            .unwrap()
-            .is_empty());
+        // Stress serial operations and fresh worker threads under one MTA lease.
+        for _ in 0..12 {
+            assert!(!context
+                .capture(monitor["id"].as_str().unwrap())
+                .unwrap()
+                .is_empty());
+            let worker = context.clone();
+            assert!(!std::thread::spawn(move || worker.capture(""))
+                .join()
+                .unwrap()
+                .unwrap()
+                .is_empty());
+        }
         assert_eq!(GetClipboardSequenceNumber(), before);
         SetWindowTextW(window.0, wide("").as_ptr());
         eprintln!("NATIVE_TEST_TYPING");
@@ -127,4 +133,6 @@ fn hosted_window_capture_and_unicode() {
             "M11 synthetic clipboard sentinel 中文 🧪"
         );
     }
+    context.shutdown();
+    assert_eq!(context.capture(""), Err("APP_CLOSED".into()));
 }

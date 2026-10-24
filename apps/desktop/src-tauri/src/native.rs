@@ -9,6 +9,7 @@ use std::{
 use tauri::Manager;
 #[derive(Default)]
 pub struct Runtime {
+    pub capture: crate::capture::Capture,
     capture_busy: AtomicBool,
     capture_status: Mutex<String>,
     pub typing: crate::typing::Typing,
@@ -109,7 +110,9 @@ pub fn handle(
                         &app.state::<super::State>(),
                         json!({"v":1,"command":"capture-plan"}),
                     ))?;
-                    let png = crate::capture::capture(options["monitor"].as_str().unwrap_or(""))?;
+                    let png = state
+                        .capture
+                        .capture(options["monitor"].as_str().unwrap_or(""))?;
                     let mut temp = capture_tempfile().map_err(|_| "CAPTURE_STORAGE_FAILED")?;
                     temp.write_all(&png)
                         .and_then(|_| temp.as_file_mut().sync_all())
