@@ -1117,7 +1117,7 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener("shot2agent
           <span class="hint" role="status" aria-label="当前捕获状态">{{ captureSummary }}</span
           ><button @click="page = 'settings'"><AppIcon name="settings" />捕获与输出设置</button
           ><button
-            v-if="data && !data.setupRequired"
+            v-if="data && (!data.setupRequired || !!data.nativeOptions?.directory || data.nativeOptions?.clipboard)"
             @click="action('pause', { paused: !data.settings.paused })"
             :disabled="busy"
           >

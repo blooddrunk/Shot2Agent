@@ -20,7 +20,7 @@ impl Runtime {
 }
 pub fn offline() -> Value {
     json!({"icon":"error", "label":"处理服务失联", "tooltip":"Shot2Agent · 处理服务失联，请退出并重新打开 · 捕获和任务状态不可用", "pending":"", "feedback":"",
-        "menu":{"toggleLabel":"暂停截图监听","toggle":false,"copy":false,"retry":false,"cycle":false,"current":false}})
+        "menu":{"toggleLabel":"暂停截图监听","toggle":false,"copy":false,"retry":false,"cycle":false,"current":false,"capture":false,"stopTyping":false}})
 }
 pub fn view(response: &Result<Value, String>) -> Value {
     response
@@ -207,7 +207,7 @@ pub fn native_smoke(app: &tauri::AppHandle) -> Result<(), String> {
         } else {
             "恢复截图监听"
         });
-        for key in ["copy", "retry", "cycle", "current"] {
+        for key in ["copy", "retry", "cycle", "current", "capture", "stopTyping"] {
             v["menu"][key] = json!(i % 2 == 0);
         }
         apply(app, &v, previous.as_ref()).map_err(|e| e.to_string())?;
@@ -223,6 +223,9 @@ pub fn native_smoke(app: &tauri::AppHandle) -> Result<(), String> {
             ("retry-latest-delivery", "retry"),
             ("cycle-agent", "cycle"),
             ("current", "current"),
+            ("capture-monitor", "capture"),
+            ("type-latest", "copy"),
+            ("stop-typing", "stopTyping"),
         ] {
             let item = menu
                 .get(id)

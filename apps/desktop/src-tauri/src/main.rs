@@ -411,7 +411,7 @@ fn refresh_tray(app: &tauri::AppHandle) {
     let response = call(&app.state::<State>(), json!({"v":1,"command":"snapshot"}));
     let mut view = tray::view(&response);
     let native = native::snapshot(app);
-    view["menu"]["stopTyping"] = native["typing"]["active"].clone();
+    view["menu"]["stopTyping"] = json!(native["typing"]["active"] == true);
     if native["typing"]["active"] == true {
         view["feedback"] = json!(format!(
             "直接输入：{} / {} 字符 · Esc 停止",

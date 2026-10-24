@@ -995,6 +995,9 @@ for (const width of [1040, 720, 480]) test(`M11 native configuration and respons
   await page.getByRole('button', { name: '截取所选显示器', exact: true }).click();
   await expect(page.getByText('正在截取显示器…', { exact: true })).toBeVisible();
   await expect(page.getByText('截图完成；请查看文件、确认预览及各去向状态。', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '暂停捕获', exact: true }).click();
+  await expect(page.getByRole('button', { name: '截取所选显示器', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: '恢复捕获', exact: true }).click();
   await page.getByRole('button', { name: '输入剪贴板文本', exact: true }).click();
   await expect(page.getByLabel('直接输入进度')).toContainText('准备输入');
   await page.getByRole('button', { name: '停止输入', exact: true }).click();

@@ -23,6 +23,33 @@ fn value(response: Result<Value, String>) -> Result<Value, String> {
     }
     Ok(response["value"].clone())
 }
+fn capture_tempfile() -> std::io::Result<tempfile::NamedTempFile> {
+    let mut builder = tempfile::Builder::new();
+    builder.prefix("shot2agent-capture-").suffix(".png");
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::{
+            FILE_ATTRIBUTE_TEMPORARY, FILE_FLAG_DELETE_ON_CLOSE, FILE_SHARE_DELETE,
+            FILE_SHARE_READ, FILE_SHARE_WRITE,
+        };
+        // The OS deletes intermediate pixels even after process termination.
+        // Share-delete permits the inherited coordinator to read while we own it.
+        builder.make(|path| {
+            std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create_new(true)
+                .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+                .custom_flags(FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE)
+                .open(path)
+        })
+    }
+    #[cfg(not(windows))]
+    {
+        builder.tempfile()
+    }
+}
 pub fn snapshot(app: &tauri::AppHandle) -> Value {
     let state = app.state::<Runtime>();
     json!({"typing":state.typing.snapshot(),"capturing":state.capture_busy.load(Ordering::SeqCst),"captureStatus":state.capture_status.lock().map(|v|v.clone()).unwrap_or_default()})
@@ -83,11 +110,7 @@ pub fn handle(
                         json!({"v":1,"command":"capture-plan"}),
                     ))?;
                     let png = crate::capture::capture(options["monitor"].as_str().unwrap_or(""))?;
-                    let mut temp = tempfile::Builder::new()
-                        .prefix("shot2agent-capture-")
-                        .suffix(".png")
-                        .tempfile()
-                        .map_err(|_| "CAPTURE_STORAGE_FAILED")?;
+                    let mut temp = capture_tempfile().map_err(|_| "CAPTURE_STORAGE_FAILED")?;
                     temp.write_all(&png)
                         .and_then(|_| temp.as_file_mut().sync_all())
                         .map_err(|_| "CAPTURE_STORAGE_FAILED")?;
@@ -178,4 +201,18 @@ pub fn handle(
         json!({"v":1,"command":"native-feedback","action":label,"status":status}),
     );
     Some(result)
+}
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+    #[test]
+    fn intermediate_capture_is_readable_and_deleted_on_close() {
+        let mut file = capture_tempfile().unwrap();
+        file.write_all(b"synthetic-pixels").unwrap();
+        file.as_file_mut().sync_all().unwrap();
+        let path = file.path().to_path_buf();
+        assert_eq!(std::fs::read(&path).unwrap(), b"synthetic-pixels");
+        drop(file);
+        assert!(!path.exists());
+    }
 }

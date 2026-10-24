@@ -3,6 +3,7 @@ export interface TrayInput {
   setupRequired: boolean;
   status: string;
   folderError?: string;
+  nativeOptions?: { save: boolean; directory: string; clipboard: boolean };
   pending: unknown;
   activity: { running: number; queued: number };
   settings: { enabled: boolean; folderEnabled?: boolean; paused: boolean };
@@ -29,6 +30,7 @@ export function actionFeedback(status: string): string {
 export function trayView(s?: TrayInput) {
   const online = !!s;
   const enabled = !!s && (s.settings.enabled || !!s.settings.folderEnabled);
+  const nativeReady = !!s?.nativeOptions && ((s.nativeOptions.save && !!s.nativeOptions.directory) || s.nativeOptions.clipboard);
   const sources = s ? [s.settings.enabled && '剪贴板', s.settings.folderEnabled && '文件夹'].filter(Boolean).join(' + ') : '';
   const capture = !s ? '捕获状态不可用' : s.status === 'worker_error' ? '处理服务故障，请退出并重新打开' : s.status === 'capture_error' ? '捕获读取暂停，请重新连接剪贴板'
     : s.folderError ? '截图文件夹异常，请检查目录后应用设置'
@@ -45,7 +47,7 @@ export function trayView(s?: TrayInput) {
   const tooltip = ['Shot2Agent', !online ? '处理服务失联，请退出并重新打开' : '', work, capture, pending, feedback].filter(Boolean).join(' · ').slice(0, 127);
   return { icon, label, capture, work, pending, tooltip, feedback, menu: {
     toggleLabel: s?.settings.paused ? '恢复截图监听' : '暂停截图监听',
-    toggle: online && enabled && !s.setupRequired && !['worker_error', 'capture_error'].includes(s.status),
+    toggle: online && ((enabled && !s.setupRequired) || nativeReady) && !['worker_error', 'capture_error'].includes(s.status),
     copy: !!s?.actions.copy, retry: !!s?.actions.retry, cycle: !!s?.actions.cycle, current: !!s?.actions.current,
     capture: !!s && !s.settings.paused,
   } };
