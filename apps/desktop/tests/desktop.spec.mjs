@@ -91,6 +91,51 @@ const nav = (page, name) =>
     .getByRole("navigation")
     .getByRole("button", { name, exact: true })
     .click();
+
+test('hotkeys save before Agent setup even when CLI discovery is invalid', async ({ page }) => {
+  desktop.discovery = [{ provider: 'codex', path: '', status: 'invalid' }];
+  await nav(page, '设置');
+  const section = page.locator('.hotkeys');
+  await section.locator('summary').click();
+  await section.getByLabel('暂停 / 恢复捕获', { exact: true }).fill('Ctrl+Alt+P');
+  await section.getByRole('button', { name: '保存快捷键', exact: true }).click();
+  await expect(section.getByRole('status')).toHaveText('快捷键已保存。隐藏到托盘后仍有效。');
+  const snapshot = await desktop.dispatch({ v: 1, command: 'snapshot' });
+  expect(snapshot.setupRequired).toBe(true);
+  expect(snapshot.hotkeys['toggle-pause']).toBe('Ctrl+Alt+P');
+  expect(snapshot.total).toBe(0);
+  await page.reload();
+  await nav(page, '设置');
+  await section.locator('summary').click();
+  await expect(section.getByLabel('暂停 / 恢复捕获', { exact: true })).toHaveValue('Ctrl+Alt+P');
+});
+
+test('native hotkey failures stay beside Save with a specific explanation and safe error code', async ({ page }) => {
+  await page.evaluate(() => {
+    const original = window.__TAURI_INTERNALS__.invoke;
+    window.__TAURI_INTERNALS__.invoke = (command, args) =>
+      command === 'rpc' && args.request.command === 'configure-hotkeys'
+        ? Promise.reject('HOTKEY_CONFLICT_OLD_BINDINGS_RETAINED')
+        : original(command, args);
+  });
+  await nav(page, '设置');
+  const section = page.locator('.hotkeys');
+  await section.locator('summary').click();
+  for (const [width, height] of [[1040, 760], [720, 560], [480, 640]]) {
+    await page.setViewportSize({ width, height });
+    await section.getByLabel('暂停 / 恢复捕获', { exact: true }).fill('Ctrl+Alt+P');
+    await section.getByRole('button', { name: '保存快捷键', exact: true }).click();
+    const feedback = section.getByRole('alert');
+    await expect(feedback).toContainText('Windows 未能注册这组快捷键');
+    await expect(feedback).toContainText('错误代码：HOTKEY_CONFLICT_OLD_BINDINGS_RETAINED');
+    await expect(feedback).not.toContainText('网络');
+    await feedback.scrollIntoViewIfNeeded();
+    await expect(feedback).toBeInViewport();
+    await expect(section.getByText('快捷键已保存。隐藏到托盘后仍有效。')).toHaveCount(0);
+    expect((await desktop.dispatch({ v: 1, command: 'snapshot' })).hotkeys).toEqual({});
+    await page.screenshot({ path: `build/ui-evidence/hotkey-error-${width}.png`, fullPage: true });
+  }
+});
 async function add(page, provider, id) {
   await nav(page, "AI 助手");
   await page.getByRole("button", { name: "添加 AI 助手", exact: true }).click();

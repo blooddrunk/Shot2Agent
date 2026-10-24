@@ -135,6 +135,15 @@ const cliStatusText: Record<string, string> = {
   scan_incomplete: "检测未完成",
 };
 const errorText: Record<string, string> = {
+  INVALID_HOTKEY: "组合键格式无效。请使用 Ctrl+Alt、Ctrl+Shift 或 Alt+Shift 加一个字母或数字，例如 Ctrl+Alt+P。",
+  INVALID_HOTKEYS: "快捷键配置格式无效，请重新填写后保存。",
+  DUPLICATE_HOTKEY: "多个操作使用了相同的组合键。请为每个操作选择不同的快捷键。",
+  HOTKEY_CONFLICT_OLD_BINDINGS_RETAINED: "Windows 未能注册这组快捷键，可能已被其他程序占用。原快捷键保持不变，请换一组后保存。",
+  HOTKEY_THREAD_TIMEOUT: "快捷键注册服务未响应。请从托盘退出 Shot2Agent 后重新打开，再保存快捷键。",
+  HOTKEY_THREAD_STOPPED: "快捷键注册服务已停止。请从托盘退出 Shot2Agent 后重新打开。",
+  HOTKEY_SETTINGS_UNAVAILABLE: "无法读取当前快捷键设置。请从托盘退出 Shot2Agent 后重新打开。",
+  HOTKEY_SETTINGS_SAVE_FAILED: "快捷键设置未能写入本机数据目录，原设置未更改。请检查设置页显示的数据目录是否可写。",
+  HOTKEY_ROLLBACK_FAILED_DISABLED: "保存失败，且无法确认原快捷键已恢复。请从托盘退出 Shot2Agent 后重新打开，再配置快捷键。",
   CLIPBOARD_HELPER_STOPPED: "剪贴板连接已断开。请点“重新连接剪贴板”；已有任务继续处理。",
   STAGING_WORKER_STOPPED: "隔离测试的处理服务故障。请退出并重新启动 Start acceptance.cmd。",
   RESTART_APP_AFTER_CHECKING_AGENT: "请先确认 AI 助手进程已停止，再退出并重新打开应用；不要重复提交不确定的任务。",
@@ -226,6 +235,8 @@ const alwaysConsent = ref(false);
 const dirty = ref(false);
 const hotkeys = ref<Hotkeys>({});
 const hotkeyDirty = ref(false);
+const hotkeyErrorCode = ref("");
+const hotkeyMessage = ref("");
 const showProfileForm = ref(false);
 const profileDirty = ref(false);
 const setupProvider = ref("");
@@ -508,7 +519,9 @@ async function action(command: string, args: Record<string, unknown> = {}) {
             : "图片已提交到本地队列。";
   } catch (e) {
     const code = e instanceof Error ? e.message : String(e);
-    error.value = friendlyError(code);
+    if (command === "configure-hotkeys") {
+      hotkeyErrorCode.value = /^[A-Z][A-Z0-9_]{0,127}$/.test(code) ? code : "HOTKEY_SAVE_FAILED";
+    } else error.value = friendlyError(code);
   } finally {
     busy.value = false;
   }
@@ -638,14 +651,17 @@ async function saveProfile() {
   });
 }
 async function applyHotkeys() {
+  if (busy.value) return;
+  hotkeyErrorCode.value = "";
+  hotkeyMessage.value = "";
   await action("configure-hotkeys", {
     hotkeys: Object.fromEntries(
       Object.entries(hotkeys.value).filter(([, key]) => key),
     ),
   });
-  if (!error.value) {
+  if (!hotkeyErrorCode.value) {
     hotkeyDirty.value = false;
-    message.value = "快捷键已保存。隐藏到托盘后仍有效。";
+    hotkeyMessage.value = "快捷键已保存。隐藏到托盘后仍有效。";
     await refresh();
   }
 }
@@ -1231,8 +1247,8 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener("shot2agent
         </form>
         <details class="hotkeys">
           <summary><AppIcon name="keyboard" />全局快捷键与操作</summary>
-          <p class="hint">
-            默认关闭。支持 Ctrl+Alt、Ctrl+Shift 或 Alt+Shift 加字母/数字。
+          <p id="hotkey-format" class="hint">
+            默认关闭。填写组合键文字，例如 Ctrl+Alt+P；支持 Ctrl+Alt、Ctrl+Shift 或 Alt+Shift 加一个大写字母或数字。
           </p>
           <form @submit.prevent="applyHotkeys">
             <label v-for="item in globalActions" :key="item.id"
@@ -1240,11 +1256,19 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener("shot2agent
               }}<input
                 type="text"
                 v-model="hotkeys[item.id]"
-                @input="hotkeyDirty = true"
+                @input="hotkeyDirty = true; hotkeyErrorCode = ''; hotkeyMessage = ''"
+                aria-describedby="hotkey-format hotkey-feedback"
                 placeholder="未启用"
                 spellcheck="false" /></label
             ><button type="submit" :disabled="busy || !data"><AppIcon name="save" />保存快捷键</button>
           </form>
+          <div id="hotkey-feedback" aria-live="polite">
+            <p v-if="hotkeyErrorCode" class="error" role="alert">
+              {{ errorText[hotkeyErrorCode] || "快捷键未能保存。请保留下方错误代码，以便定位原因。" }}
+              <span class="hint path">错误代码：{{ hotkeyErrorCode }}</span>
+            </p>
+            <p v-else-if="hotkeyMessage" class="notice" role="status">{{ hotkeyMessage }}</p>
+          </div>
           <p class="hint">
             原生状态：{{ data?.hotkeyStatus || "尚未连接" }}
             <span v-if="hotkeyDirty">· 尚未保存</span>

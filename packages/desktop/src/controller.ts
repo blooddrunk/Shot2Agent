@@ -324,7 +324,9 @@ export class DesktopController {
       case 'configure-hotkeys': {
         validateHotkeys(r.hotkeys);
         const next = structuredClone(this.settings); next.hotkeys = r.hotkeys;
-        saveSettings(this.root, next); this.settings = next; break;
+        try { saveSettings(this.root, next); }
+        catch { throw new Error('HOTKEY_SETTINGS_SAVE_FAILED'); }
+        this.settings = next; break;
       }
       case 'action': {
         requireValue(ACTIONS.includes(r.action as typeof ACTIONS[number]), 'ACTION_REFUSED');
