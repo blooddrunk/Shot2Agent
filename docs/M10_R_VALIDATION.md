@@ -6,7 +6,7 @@
 
 ## 已通过的候选身份与门禁
 
-候选功能/测试源码为 `f777d00537501061769dd22f72fa0dfce19da50f`（[PR #26](https://github.com/blooddrunk/Shot2Agent/pull/26)）。本段后续收尾只更新验证记录和包内说明，不改变应用 runtime；最终 PR HEAD 的 CI/ZIP 身份另行报告于交付信息。PR CI checkout 使用合并测试提交，不能把包中的 SHA 冒称为分支 HEAD。
+首次完整通过全部门禁的功能/测试基线为 `f777d00537501061769dd22f72fa0dfce19da50f`（[PR #26](https://github.com/blooddrunk/Shot2Agent/pull/26)）。之后还补充了下述通知恢复修正；最终 PR HEAD 的 CI/ZIP 身份另行报告于 PR 描述与交付信息。下表的精确 SHA 和旧 ZIP 只证明其对应基线，不冒称最终包。PR CI checkout 使用合并测试提交，不能把包中的 SHA 冒称为分支 HEAD。
 
 | 实际命令/门禁 | 状态 | 精确结果与证据 |
 | --- | --- | --- |
@@ -26,6 +26,15 @@
 - BUILD.txt / MANIFEST.json / Relay source/SOURCE.txt 均指向 PR 合并测试提交 `92f791f0dc637f42a6c5e0b463765fd03ea62d5b`，版本 `1.1.0-dev.1`。`git fetch origin refs/pull/26/merge` 后与 f777d00 比较树无差异。
 - 外层 artifact 和内层 ZIP 的 CRC 全部 PASS；368 个 manifest 文件逐一 SHA-256 PASS。Remote client/capabilities/outbox 编译资源、两个验收入口、5 张合成图、使用/验证说明和独立 Relay 构建上下文都在包内。
 - 原生观察所用 df6e5bf 候选的 244 个 runtime 文件与本候选逐字节相同；只有测试/包身份有差异，不扩大原生观察结论。
+
+## 收尾通知恢复修正
+
+最终审计发现：A 已缓存成功结果、但还没预留通知就退出时，Local 历史升级分支会把新 Remote 通知标成 disabled。现在该分支仅处理 `task.mode === local`，保持旧 Local 升级行为；Remote 首次通知在重启后仍可执行。
+
+- 新增 `R04/R07 a result downloaded just before origin shutdown retains its first notification after restart`，断言：先缓存不交付、重启后首次通知成功、再次重启仍只有一次；不重跑 Agent。
+- `node --experimental-strip-types --test packages/desktop/test/remote.test.mjs packages/core/test/relay-deploy.test.mjs`：实际 PASS，退出 0，15/15（Remote 14 + provisioning 1）。
+- `npm run check`：实际 PASS，退出 0，256 tests / 253 PASS / 3 SKIPPED / 0 FAIL，lint、TS/Vue、构建和 compiled smoke 均通过。
+- 此修正需重新跑相同 Node 矩阵、Vue、Compose 与 Windows ZIP 门禁；最终结果和精确 source/BUILD/manifest SHA 在 PR 交付信息报告。上面的原生观察只对应原包，未对本次通知恢复作新的可见通知宣称。
 
 ## 开发阶段记录（保留实际失败）
 

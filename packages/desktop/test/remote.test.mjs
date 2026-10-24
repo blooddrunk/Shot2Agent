@@ -98,6 +98,16 @@ test('R04 paused B, Relay restart, offline A completion and reconnect persist ca
   await h.restartRelay(); await h.restartA(); await h.sync(h.a); assert.equal(h.a.app.get(id).status, 'succeeded'); assert.equal(h.calls, 1);
 });
 
+test('R04/R07 a result downloaded just before origin shutdown retains its first notification after restart', async t => {
+  const h = await harness(t); const { images } = await syntheticSubmission();
+  await rpc(h.a, 'configure', { delivery: { clipboard: 'off', notification: true } });
+  const id = await h.a.app.submitImages(images); await h.sync(h.a); await h.work(); await h.sync(h.a);
+  assert.equal(h.a.app.get(id).status, 'succeeded'); assert.equal(h.a.app.state.get(id, 'notification'), undefined); assert.equal(h.cb.notices, 0);
+  await h.restartA(); await h.a.app.work();
+  assert.equal(h.a.app.state.get(id, 'notification').status, 'succeeded'); assert.equal(h.cb.notices, 1);
+  await h.restartA(); await h.a.app.work(); assert.equal(h.cb.notices, 1);
+});
+
 test('R05 wrong target and stale proof denied; after-start interruption becomes execution_unknown without replay', async t => {
   const h = await harness(t); const { images } = await syntheticSubmission(); const id = await h.a.app.submitImages(images); await h.sync(h.a);
   const b = new RemoteClient(h.url, devices[1].token); const c = new RemoteClient(h.url, devices[2].token); await c.presence('C', caps, true);

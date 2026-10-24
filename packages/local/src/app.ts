@@ -46,7 +46,7 @@ export class LocalApp {
     this.core = openCore(root); this.state = new LocalState(root);
     this.recoverTaskDeletions();
     // Upgrade adds a destination without notifying old completed history.
-    for (const task of this.list()) if (task.status === 'succeeded' && !this.state.get(task.submission.taskId, 'notification'))
+    for (const task of this.list()) if (task.mode === 'local' && task.status === 'succeeded' && !this.state.get(task.submission.taskId, 'notification'))
       this.state.put(task.submission.taskId, 'notification', { status: 'disabled', attempts: 0 });
   }
   /** Atomically changes the configuration available to future claims; current task bindings stay pinned. */
