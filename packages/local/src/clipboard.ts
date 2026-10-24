@@ -11,6 +11,7 @@ export interface ClipboardPort {
   readImage(): Promise<ClipboardImage | undefined>;
   writeText(text: string, expected?: string, timeoutMs?: number): Promise<boolean>;
   writeFiles?(paths: string[], expected?: string, timeoutMs?: number): Promise<boolean>;
+  writeImage?(bytes: Buffer): Promise<string>;
   cleanFileCache?(directory: string): Promise<{ deleted: number; retained: number }>;
   notify?(): Promise<void>;
   close(): void;
@@ -87,6 +88,12 @@ export class WindowsClipboard implements ClipboardPort {
     const result = await this.request({ op: 'write', text, expected: expected ?? null }, timeoutMs);
     requireValue(typeof result.written === 'boolean', 'CLIPBOARD_PROTOCOL');
     return result.written;
+  }
+  async writeImage(bytes: Buffer): Promise<string> {
+    requireValue(bytes.length <= 60 * 1024 * 1024, 'CLIPBOARD_IMAGE_LIMIT');
+    const result = await this.request({ op: 'image', data: bytes.toString('base64') });
+    requireValue(result.written === true && typeof result.sequence === 'string', 'CLIPBOARD_PROTOCOL');
+    return result.sequence;
   }
   async writeFiles(paths: string[], expected?: string, timeoutMs?: number): Promise<boolean> {
     requireValue(expected === undefined || /^\d{1,10}$/.test(expected), 'INVALID_CLIPBOARD_SEQUENCE');

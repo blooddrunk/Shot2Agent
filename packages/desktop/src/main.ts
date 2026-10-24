@@ -25,7 +25,9 @@ try {
     adapter: { name: 'fake', version: 'm3-staging', async execute(task, profile, images, signal) {
       await delay(8000, undefined, { signal }).catch(() => {});
       if (signal.aborted) return { status: 'execution_unknown', summary: 'Staging execution interrupted', contentMarkdown: '', artifacts: [], errorCode: 'STAGING_STOPPED' };
-      return fake.execute(task, profile, images, signal);
+      const result = await fake.execute(task, profile, images, signal);
+      if (result.status === 'succeeded') result.contentMarkdown += '\nM11 输入测试 Chinese 中文 ASCII !© 🧪 𠀀\n\n```ts\nconst synthetic = true;\n```\n';
+      return result;
     } },
   } : undefined, staging ? 'staging' : mode === '--codex' ? 'codex' : 'legacy');
   process.stderr.write('PHASE_CLIPBOARD_START\n');

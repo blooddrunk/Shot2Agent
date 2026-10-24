@@ -12,7 +12,7 @@ import { RemoteClient } from '../../../services/relay/src/client.ts';
 import { runOnce } from '../../../packages/worker/src/worker.ts';
 import { APP_VERSION } from '../../../packages/desktop/src/version.ts';
 
-let desktop, root, workspace, testsSent, gatewayFailureCode, pickerSelection;
+let desktop, root, workspace, testsSent, gatewayFailureCode, pickerSelection, nativeRequests, nativeRuntime;
 const previousLocalAppData = process.env.LOCALAPPDATA;
 test.beforeEach(async ({ page }) => {
   root = realpathSync(mkdtempSync(join(tmpdir(), "shot2agent-ui-")));
@@ -22,6 +22,7 @@ test.beforeEach(async ({ page }) => {
   makeCli(root, "codex");
   makeCli(root, "claude");
   testsSent = 0;
+  nativeRequests = []; nativeRuntime = undefined;
   pickerSelection = null;
   gatewayFailureCode = "";
   const clipboard = {
@@ -71,7 +72,17 @@ test.beforeEach(async ({ page }) => {
     if (command !== "rpc") return undefined;
     const { request } = args;
     try {
-      return { ok: true, value: await desktop.dispatch(request) };
+      if (['capture-monitor', 'type-latest', 'type-result', 'type-clipboard', 'stop-typing', 'native-monitors'].includes(request.command)) {
+        nativeRequests.push(request);
+        if (request.command === 'native-monitors') return { ok: true, value: [{ id: 'synthetic-display', width: 3840, height: 2160, primary: true }] };
+        const value = await desktop.dispatch({ v: 1, command: 'snapshot' });
+        nativeRuntime = { capturing: false, captureStatus: 'saved', typing: { phase: request.command === 'stop-typing' ? 'TYPING_CANCELED' : 'preparing', active: request.command !== 'stop-typing', sent: 0, total: 20 } };
+        value.nativeRuntime = nativeRuntime;
+        return { ok: true, value };
+      }
+      const value = await desktop.dispatch(request);
+      if (nativeRuntime && request.command === 'snapshot') value.nativeRuntime = nativeRuntime;
+      return { ok: true, value };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -650,7 +661,7 @@ test("polish spacing and both themes across window sizes, with populated cleanup
       await hotkeys.locator("summary").click();
       const actions = page.getByRole("group", { name: "立即操作" });
       await actions.scrollIntoViewIfNeeded();
-      await expect(actions.getByRole("button")).toHaveCount(5);
+      await expect(actions.getByRole("button")).toHaveCount(8);
       const boxes = await actions.getByRole("button").evaluateAll((nodes) =>
         nodes.map((node) => {
           const r = node.getBoundingClientRect();
@@ -958,3 +969,35 @@ test("v1.0.1 isolated Fake controls expose recoverable capture and persistent Wo
   await page.screenshot({path:'build/ui-evidence/v101-fake-fault-tools.png',fullPage:true});
   expect(desktop.app.list()).toHaveLength(0); expect(testsSent).toBe(0);
 });
+
+for (const width of [1040, 720, 480]) test(`M11 native configuration and responsive controls ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 850 });
+  await page.getByRole('button', { name: '设置', exact: true }).click();
+  const settings = page.getByRole('group', { name: '原生截图与直接输入设置' });
+  await expect(settings.getByLabel('保存截图 PNG 文件')).toBeChecked();
+  await expect(settings.getByLabel('同时交给所选 Agent', { exact: false })).not.toBeChecked();
+  await settings.getByRole('button', { name: '刷新显示器' }).click();
+  await settings.getByLabel('截图显示器').selectOption('synthetic-display');
+  pickerSelection = join(root, 'capture-output');
+  await settings.getByRole('button', { name: '选择截图保存目录…' }).click();
+  await settings.getByLabel('输入准备时间（毫秒）').fill('1500');
+  await settings.getByLabel('输入速度（字符/秒）').fill('30');
+  await settings.getByRole('button', { name: '保存截图与输入设置' }).click();
+  await expect(page.getByText('截图与输入设置已保存。', { exact: true })).toBeVisible();
+  assertNativeSettings();
+  await expect(settings).toBeVisible();
+  expect(await page.evaluate(() => window.document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: `build/ui-evidence/m11-native-settings-${width}.png`, fullPage: true });
+  await page.getByRole('button', { name: '首页', exact: true }).click();
+  await expect(page.getByRole('button', { name: '截取所选显示器', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: '输入最新结果', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: '输入剪贴板文本', exact: true }).click();
+  await expect(page.getByLabel('直接输入进度')).toContainText('准备输入');
+  await page.getByRole('button', { name: '停止输入', exact: true }).click();
+  await expect(page.getByLabel('直接输入进度')).toContainText('输入已停止');
+  expect(nativeRequests.map(r => r.command)).toEqual(['native-monitors', 'type-clipboard', 'stop-typing']);
+  expect(testsSent).toBe(0);
+});
+function assertNativeSettings() {
+  expect(desktop.settings.native).toEqual({ monitor: 'synthetic-display', save: true, directory: join(root, 'capture-output'), submit: false, clipboard: false, delayMs: 1500, charsPerSecond: 30 });
+}

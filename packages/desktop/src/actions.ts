@@ -1,11 +1,11 @@
 import type { TaskView } from '../../core/src/model.ts';
 import { requireValue } from '../../core/src/model.ts';
 import type { LocalApp } from '../../local/src/app.ts';
-export const ACTIONS = ['toggle-pause', 'copy-latest', 'retry-latest-delivery', 'cycle-agent', 'current'] as const;
+export const ACTIONS = ['toggle-pause', 'copy-latest', 'retry-latest-delivery', 'cycle-agent', 'current', 'capture-monitor', 'type-latest', 'stop-typing'] as const;
 export type GlobalAction = typeof ACTIONS[number];
 export type Hotkeys = Partial<Record<GlobalAction, string>>;
 export function validateHotkeys(value: unknown): asserts value is Hotkeys {
-  requireValue(value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length <= 5, 'INVALID_HOTKEYS');
+  requireValue(value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length <= ACTIONS.length, 'INVALID_HOTKEYS');
   const seen = new Set();
   for (const [action, key] of Object.entries(value)) {
     requireValue(ACTIONS.includes(action as GlobalAction) && typeof key === 'string' && /^(?:Ctrl\+Alt|Ctrl\+Shift|Alt\+Shift)\+[A-Z0-9]$/.test(key), 'INVALID_HOTKEY');

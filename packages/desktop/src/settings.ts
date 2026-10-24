@@ -1,4 +1,6 @@
 import { validateHotkeys } from './actions.ts';
+import { validateNative } from './native.ts';
+import type { NativeOptions } from './native.ts';
 import type { Hotkeys } from './actions.ts';
 import { existsSync, lstatSync, readFileSync, writeFileSync, renameSync, copyFileSync, openSync, fsyncSync, closeSync } from 'node:fs';
 import { join, isAbsolute } from 'node:path';
@@ -13,6 +15,7 @@ import { validateRemote } from './remote.ts';
 import type { RemoteSettings } from './remote.ts';
 import type { DeliveryConfig } from '../../local/src/delivery.ts';
 export interface Settings {
+  native?: NativeOptions;
   remote?: RemoteSettings;
   hotkeys?: Hotkeys;
   /** Credential Manager references awaiting idempotent cleanup after profile deletion. */
@@ -24,6 +27,7 @@ export interface Settings {
 export const defaults = (): Settings => ({ adapter: 'fake', delivery: { clipboard: 'always' },
   desktop: { version: 1, enabled: false, mode: 'confirm', paused: false, autoConsent: false, alwaysConsent: false } });
 export function validate(settings: Settings, allowPendingAlways = false): void {
+  if (settings.native) validateNative(settings.native);
   if (settings.remote) validateRemote(settings.remote);
   requireValue(settings && ['fake', 'codex'].includes(settings.adapter) && settings.delivery &&
     ['off', 'manual', 'smart', 'always'].includes(settings.delivery.clipboard) &&

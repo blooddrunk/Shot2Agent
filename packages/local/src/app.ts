@@ -75,6 +75,7 @@ export class LocalApp {
     this.clearPending();
     this.lastSequence = await this.clipboard.sequence();
   }
+  skipClipboardSequence(sequence: string): void { this.lastSequence = sequence; }
   async submit(bytes: Buffer, baseline?: Baseline, force = false, source = 'clipboard'): Promise<string | undefined> {
     return this.submitImages([bytes], baseline, force, source);
   }

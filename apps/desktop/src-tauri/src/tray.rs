@@ -118,6 +118,9 @@ pub fn menu(app: &tauri::AppHandle, v: &Value) -> tauri::Result<Menu<tauri::Wry>
             m["cycle"] == true,
         ),
         ("current", "提交剪贴板图片", m["current"] == true),
+        ("capture-monitor", "截取所选显示器", m["capture"] == true),
+        ("type-latest", "输入最新结果", m["copy"] == true),
+        ("stop-typing", "停止输入（Esc）", m["stopTyping"] == true),
         ("feedback", text(v, "feedback"), false),
         ("quit", "退出 Shot2Agent", true),
     ];

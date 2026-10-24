@@ -56,6 +56,10 @@ Shot2Agent 自带运行环境，不需要另外为它安装 Node、pnpm 或 Git�
 
 从托盘退出应用，在“设置”显示的数据位置备份整个数据目录，然后把新版完整解压到另一个目录。新程序会继续使用原来的本地数据。Token 由 Windows 凭据管理器保管，不在目录备份里；换电脑时需要重新填写。[升级、备份与回退](docs/USER_GUIDE.md#升级备份与回退)
 
+## M11-X 开发候选：原生截图与直接输入
+
+当前分支增加整屏原生截图（可只保存 PNG、保持剪贴板不变），以及从最新/历史结果手动输入其他应用。均在 GUI 配置，快捷键默认关闭。独立 Local 与可选 Remote 保持原有流程；此功能不在旧 Local v1.0.2 ZIP 内。见[使用说明](docs/USER_GUIDE.md#原生截图与直接输入m11-x-开发候选)、[范围](docs/M11_X_SCOPE.md)和[验证与最小原生步骤](docs/M11_X_VALIDATION.md)。
+
 ## 当前范围
 
 当前开发分支增加可选的 **Remote 跨设备处理**：在设置中连接私人 HTTPS Relay、保存设备 Token、选择另一台电脑的已批准 Agent，由原电脑接收结果。默认仍为独立 Local；旧 Local v1.0.2 Release 不包含此开发功能。使用和限定验收见 [Remote 指南](docs/REMOTE_GUIDE.md)，[实际验证状态](docs/M10_R_VALIDATION.md)与 [VPS Compose 部署](deploy/relay/README.md)。尚未正式发布 v1.1.0。

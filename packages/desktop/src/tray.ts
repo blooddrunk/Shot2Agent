@@ -12,9 +12,11 @@ export interface TrayInput {
 export const actionLabels: Record<string, string> = {
   'toggle-pause': '暂停 / 恢复截图监听', 'copy-latest': '复制最新结果',
   'retry-latest-delivery': '重试失败投递', 'cycle-agent': '切换 AI 助手', current: '提交剪贴板图片',
+  'capture-monitor': '截取所选显示器', 'type-latest': '输入最新结果', 'type-history': '输入此结果', 'type-clipboard': '输入剪贴板文本', 'stop-typing': '停止输入',
 };
 export function actionFeedback(status: string): string {
   const known: Record<string, string> = {
+    preparing: '准备输入，请选择目标并松开快捷键', CAPTURE_PAUSED: '截图已暂停，请先恢复', CAPTURE_DIRECTORY_REQUIRED: '请先设置截图保存目录', CAPTURE_MONITOR_REMOVED: '显示器已断开，请重新选择',
     succeeded: '操作完成', NO_COMPLETED_RESULT: '还没有可复制的结果，请先提交图片',
     NO_ELIGIBLE_FAILED_DELIVERY: '没有可重试的失败投递，可在历史中手动复制',
     DELIVERY_STILL_FAILED: '投递仍未完成，请在历史中查看原因；没有重新请求 AI',
@@ -45,6 +47,7 @@ export function trayView(s?: TrayInput) {
     toggleLabel: s?.settings.paused ? '恢复截图监听' : '暂停截图监听',
     toggle: online && enabled && !s.setupRequired && !['worker_error', 'capture_error'].includes(s.status),
     copy: !!s?.actions.copy, retry: !!s?.actions.retry, cycle: !!s?.actions.cycle, current: !!s?.actions.current,
+    capture: !!s && !s.settings.paused,
   } };
 }
 export type TrayViewState = ReturnType<typeof trayView>;

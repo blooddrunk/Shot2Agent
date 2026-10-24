@@ -1,6 +1,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+mod capture;
 mod hotkeys;
+mod native;
 mod tray;
+mod typing;
 use serde_json::{json, Value};
 use std::{
     io::{BufRead, BufReader, Read, Write},
@@ -302,6 +305,12 @@ fn call(state: &State, request: Value) -> Result<Value, String> {
 }
 #[tauri::command]
 async fn rpc(app: tauri::AppHandle, request: Value) -> Result<Value, String> {
+    if request["v"] == 1
+        && (request["command"] == "stop-typing"
+            || (request["command"] == "action" && request["action"] == "stop-typing"))
+    {
+        app.state::<native::Runtime>().typing.stop();
+    }
     tauri::async_runtime::spawn_blocking(move || {
         let transaction_state = app.state::<State>();
         let _transaction = transaction_state
@@ -347,15 +356,19 @@ async fn rpc(app: tauri::AppHandle, request: Value) -> Result<Value, String> {
                     }
                 }
                 result
+            } else if let Some(result) = native::handle(&app, &request, true) {
+                result
             } else {
                 call(&app.state::<State>(), request)
             };
         if is_quit {
+            app.state::<native::Runtime>().typing.shutdown();
             app.state::<tray::Runtime>().shutdown();
             app.exit(0);
         }
         if let Ok(value) = response.as_mut() {
             if let Some(object) = value.get_mut("value").and_then(Value::as_object_mut) {
+                object.insert("nativeRuntime".into(), native::snapshot(&app));
                 object.insert(
                     "hotkeyStatus".into(),
                     json!(app
@@ -394,7 +407,20 @@ fn refresh_tray(app: &tauri::AppHandle) {
         return;
     }
     let response = call(&app.state::<State>(), json!({"v":1,"command":"snapshot"}));
-    let view = tray::view(&response);
+    let mut view = tray::view(&response);
+    let native = native::snapshot(app);
+    view["menu"]["stopTyping"] = native["typing"]["active"].clone();
+    if native["typing"]["active"] == true {
+        view["feedback"] = json!(format!(
+            "直接输入：{} / {} 字符 · Esc 停止",
+            native["typing"]["sent"], native["typing"]["total"]
+        ));
+    } else if let Some(phase) = native["typing"]["phase"].as_str() {
+        view["feedback"] = json!(format!("直接输入：{phase} · 打开应用查看详情"));
+    }
+    if native["capturing"] == true {
+        view["feedback"] = json!("正在截取显示器…");
+    }
     // Only cache a completed native update; a failed setter is retried next poll.
     if tray::apply(app, &view, previous.as_ref()).is_ok() {
         *previous = Some(view);
@@ -402,14 +428,15 @@ fn refresh_tray(app: &tauri::AppHandle) {
 }
 fn tray_action(app: tauri::AppHandle, action: String) {
     tauri::async_runtime::spawn_blocking(move || {
-        let _ = call(
-            &app.state::<State>(),
-            json!({"v":1,"command":"action","action":action}),
-        );
+        let request = json!({"v":1,"command":"action","action":action});
+        if native::handle(&app, &request, false).is_none() {
+            let _ = call(&app.state::<State>(), request);
+        }
         refresh_tray(&app);
     });
 }
 fn quit(app: tauri::AppHandle) {
+    app.state::<native::Runtime>().typing.shutdown();
     app.state::<tray::Runtime>().shutdown();
 
     tauri::async_runtime::spawn_blocking(move || {
@@ -499,6 +526,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(tray::Runtime::default())
+        .manage(native::Runtime::default())
         .manage(State {
             hotkey_transaction: Mutex::new(()),
             bridge: Mutex::new(Bridge::start()),
@@ -508,16 +536,15 @@ fn main() {
             let handle = app.handle().clone();
             let busy = Arc::new(std::sync::atomic::AtomicBool::new(false));
             let native = hotkeys::Hotkeys::start(move |action| {
+                if action == "stop-typing" { handle.state::<native::Runtime>().typing.stop(); return; }
                 if busy.swap(true, std::sync::atomic::Ordering::SeqCst) {
                     return;
                 }
                 let handle = handle.clone();
                 let busy = busy.clone();
                 tauri::async_runtime::spawn_blocking(move || {
-                    let _ = call(
-                        &handle.state::<State>(),
-                        json!({"v":1,"command":"action","action":action}),
-                    );
+                    let request=json!({"v":1,"command":"action","action":action});
+                    if native::handle(&handle,&request,false).is_none() { let _=call(&handle.state::<State>(),request); }
                     refresh_tray(&handle);
                     busy.store(false, std::sync::atomic::Ordering::SeqCst);
                 });
@@ -618,6 +645,7 @@ fn main() {
         .expect("Shot2Agent startup failed")
         .run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<native::Runtime>().typing.shutdown();
                 app.state::<tray::Runtime>().shutdown();
                 let _ = app.remove_tray_by_id("local");
                 let _ = app.state::<hotkeys::Hotkeys>().configure(json!({}));

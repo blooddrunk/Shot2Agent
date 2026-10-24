@@ -17,6 +17,12 @@ export class FolderSource {
   private entries = new Map<string, Observation>();
   private directory?: string;
   error?: string;
+  /** Suppress our published PNG before a watcher tick can observe it. */
+  suppress(path: string): void {
+    if (!this.directory) return;
+    const stamp = this.scan().get(path);
+    if (stamp) this.entries.set(path, { stamp, since: 0, consumed: true });
+  }
   private scan(): Map<string, string> {
     requireValue(realpathSync(this.directory!) === this.directory && !lstatSync(this.directory!).isSymbolicLink(), 'UNSAFE_CAPTURE_FOLDER');
     const names = readdirSync(this.directory!);
