@@ -18,6 +18,13 @@ function regular(path: string): string {
 }
 /** Never interpret shim text as code. Only map a known package's exact, contained bin entry. */
 export function resolveProgram(provider: Provider, path: string, node = process.execPath): Program {
+  // The standalone Windows Codex installer exposes bin through directory junctions.
+  // Resolve only a new native selection; stored programs and digest checks stay strict.
+  if (process.platform === 'win32' && provider === 'codex' && /\.exe$/i.test(path)) {
+    requireValue(isAbsolute(path) && !path.startsWith('\\\\') && !path.startsWith('//'), 'LOCAL_ABSOLUTE_PATH_REQUIRED');
+    requireValue(lstatSync(path).isFile() && !lstatSync(path).isSymbolicLink(), 'UNSAFE_CLI_PATH');
+    path = realpathSync(path);
+  }
   path = regular(path);
   if (/\.(cmd|ps1|bat)$/i.test(path) || (!/\.[^/\\]+$/.test(path) && process.platform === 'win32')) {
     const root = join(dirname(path), 'node_modules', packageNames[provider]);
@@ -78,7 +85,8 @@ export async function discover(provider: Provider, cwd: string, options: { manua
   const user = process.env.USERPROFILE ?? homedir();
   const dirs = options.directories ?? [...(process.env.PATH ?? process.env.Path ?? '').split(delimiter), join(user, '.local', 'bin'),
     join(user, '.claude', 'local'), ...(process.env.APPDATA ? [join(process.env.APPDATA, 'npm')] : []),
-    ...(process.env.LOCALAPPDATA ? [join(process.env.LOCALAPPDATA, 'Microsoft', 'WinGet', 'Links'), join(process.env.LOCALAPPDATA, 'Programs', provider)] : [])];
+    ...(process.env.LOCALAPPDATA ? [join(process.env.LOCALAPPDATA, 'Microsoft', 'WinGet', 'Links'), join(process.env.LOCALAPPDATA, 'Programs', provider),
+      ...(provider === 'codex' ? [join(process.env.LOCALAPPDATA, 'Programs', 'OpenAI', 'Codex', 'bin')] : [])] : [])];
   const deadline = Date.now() + 5000;
   const seen = new Set<string>(); const candidates: Candidate[] = [];
   for (const dir of dirs.slice(0, 128)) {
