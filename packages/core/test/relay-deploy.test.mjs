@@ -16,5 +16,9 @@ test('R10 private registry provisioning/rotation/revoke is repeatable, bounded a
   assert.notEqual(command('rotate', 'pc-a', 'missing').status, 0); assert.deepEqual(JSON.parse(readFileSync(join(root, 'devices.json'))), after);
   assert.equal(command('revoke', 'pc-a').status, 0); assert.equal(JSON.parse(readFileSync(join(root, 'devices.json'))).length, 1);
   assert.notEqual(command('revoke', 'pc-b').status, 0); assert.notEqual(command('add', '../bad').status, 0);
+  assert.equal(command('add-worker', 'linux').status, 0);
+  assert.equal(JSON.parse(readFileSync(join(root, 'devices.json'))).find(d => d.deviceId === 'linux').role, 'worker');
+  assert.equal(command('rotate', 'linux').status, 0);
+  assert.equal(JSON.parse(readFileSync(join(root, 'devices.json'))).find(d => d.deviceId === 'linux').role, 'worker');
   if (process.platform !== 'win32') assert.equal(statSync(join(root, 'devices.json')).mode & 0o777, 0o600);
 });

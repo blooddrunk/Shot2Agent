@@ -79,3 +79,19 @@ jobs:
           node-version: '24'
       - run: docker build -f deploy/relay/Dockerfile -t shot2agent-relay:m10-test .
       - run: node scripts/relay-container.mjs shot2agent-relay:m10-test
+
+  linux-worker:
+    name: Linux Worker Compose crash and no-replay acceptance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: docker build -f deploy/relay/Dockerfile -t shot2agent-relay:m10-test .
+      - run: docker build --build-arg SOURCE_SHA=${{ github.sha }} -f deploy/relay/Dockerfile.worker -t shot2agent-worker:m12-test .
+      - name: Actual installed Linux Claude transport with loopback mock, no network/model
+        run: |
+          docker run --rm --network none -v "$PWD/scripts/linux-cli-transport-probe.mjs:/app/probe.mjs:ro" shot2agent-worker:m12-test node /app/probe.mjs /usr/local/bin/claude success
+          docker run --rm --network none -v "$PWD/scripts/linux-cli-transport-probe.mjs:/app/probe.mjs:ro" shot2agent-worker:m12-test node /app/probe.mjs /usr/local/bin/claude refusal
+      - run: node scripts/linux-worker-container.mjs shot2agent-worker:m12-test shot2agent-relay:m10-test

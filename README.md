@@ -62,6 +62,8 @@ Shot2Agent 自带运行环境，不需要另外为它安装 Node、pnpm 或 Git�
 
 ## 当前范围
 
+M12-V 开发候选新增可选的 **Linux VPS Worker**，优先支持 Claude Code + GLM，也支持通过本机 sandbox 检查的 Codex 和个人 Claude 认证。它与 Relay 分开部署，Windows 端只需在现有 Remote 选择器选择 `Linux VPS` 的已批准助手。见 [VPS Worker 部署](deploy/relay/WORKER.md)和[验证记录](docs/M12_V_VALIDATION.md)；旧 Local Release 不受影响，未发布正式 v1.1.0。
+
 当前开发分支增加可选的 **Remote 跨设备处理**：在设置中连接私人 HTTPS Relay、保存设备 Token、选择另一台电脑的已批准 Agent，由原电脑接收结果。默认仍为独立 Local；旧 Local v1.0.2 Release 不包含此开发功能。使用和限定验收见 [Remote 指南](docs/REMOTE_GUIDE.md)，[实际验证状态](docs/M10_R_VALIDATION.md)与 [VPS Compose 部署](deploy/relay/README.md)。尚未正式发布 v1.1.0。
 
 已发布的 Local v1.0.x 提供同一台 Windows 电脑上的截图处理。模型是否支持图片、账号额度和网络连通性由所选提供商决定。文件复制提供 Markdown 结果；Windows 可能根据系统设置隐藏通知。执行结果不确定的任务不会自动重跑，避免重复请求或重复操作。

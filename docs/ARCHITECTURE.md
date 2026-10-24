@@ -14,6 +14,8 @@ M10 development adds the optional desktop Remote path; see [Remote guide](REMOTE
 
 ## Boundaries
 
+M12-V adds a separate outbound Linux daemon using the same `WorkerPort`, RemoteClient, registry, adapters and `runOnce`. Relay remains the sole remote task core. Linux state uses the existing SQLite store for an exclusive process identity and single pending start/result receipt; it never creates an executable copy of a remote task. Linux-owned approvals/secrets/child homes and process-group recovery are isolated from Windows Credential Manager and Local data. [Implementation](M12_V_PLAN.md) / [deployment](../deploy/relay/WORKER.md).
+
 **Local (default; no Relay service or task network transfer):**
 
 ```text

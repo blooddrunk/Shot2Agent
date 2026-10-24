@@ -4,6 +4,13 @@ build
 .git
 .local
 deploy/relay/secrets
+**/secrets
+**/worker-secrets
+**/.env
+**/.env.*
+**/*.token
+**/*.sqlite*
+**/workspace
 deploy/relay/.env
 apps/desktop
 *.log

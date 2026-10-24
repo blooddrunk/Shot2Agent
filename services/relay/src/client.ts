@@ -9,6 +9,14 @@ export function validateRelayUrl(url: string): void {
   requireValue(!parsed.username && !parsed.password && !parsed.search && !parsed.hash && parsed.pathname === '/' &&
     (parsed.protocol === 'https:' || (parsed.protocol === 'http:' && ['127.0.0.1', '[::1]', 'localhost'].includes(parsed.hostname))), 'HTTPS_REQUIRED');
 }
+/** Headless Linux deployment only; public/desktop validation never consumes this option. */
+export function validateWorkerRelayUrl(url: string, trustedInternalOrigin?: string): void {
+  if (!trustedInternalOrigin) { validateRelayUrl(url); return; }
+  let parsed: URL; try { parsed = new URL(url); } catch { throw new Error('INVALID_INTERNAL_RELAY'); }
+  requireValue(process.platform === 'linux' && url === trustedInternalOrigin && parsed.href === trustedInternalOrigin &&
+    parsed.protocol === 'http:' && !parsed.username && !parsed.password && !parsed.search && !parsed.hash && parsed.pathname === '/' &&
+    (parsed.hostname === 'relay' || /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(parsed.hostname) || /^192\.168\.\d{1,3}\.\d{1,3}$/.test(parsed.hostname) || /^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(parsed.hostname)), 'INVALID_INTERNAL_RELAY');
+}
 async function bounded(response: Response, max: number): Promise<Buffer> {
   const reader = response.body?.getReader(); requireValue(reader, 'INVALID_RELAY_RESPONSE');
   const chunks: Uint8Array[] = []; let size = 0;
@@ -19,9 +27,9 @@ async function bounded(response: Response, max: number): Promise<Buffer> {
 export class RemoteClient implements WorkerPort {
   private url: string; private token: string;
   private signal?: AbortSignal;
-  constructor(url: string, token: string, signal?: AbortSignal) {
+  constructor(url: string, token: string, signal?: AbortSignal, workerTransport?: { trustedInternalOrigin: string }) {
     this.url = url; this.token = token;
-    validateRelayUrl(url); this.signal = signal;
+    validateWorkerRelayUrl(url, workerTransport?.trustedInternalOrigin); this.signal = signal;
   }
   private async request(path: string, init: RequestInit = {}): Promise<Response> {
     const timeout = AbortSignal.timeout(15_000);

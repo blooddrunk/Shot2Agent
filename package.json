@@ -9,7 +9,7 @@
   },
   "packageManager": "pnpm@10.19.0",
   "scripts": {
-    "test": "node --experimental-strip-types --test packages/contracts/test/*.test.mjs packages/core/test/*.test.mjs packages/local/test/*.test.mjs packages/desktop/test/*.test.mjs",
+    "test": "node --experimental-strip-types --test packages/contracts/test/*.test.mjs packages/core/test/*.test.mjs packages/local/test/*.test.mjs packages/desktop/test/*.test.mjs packages/worker/test/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "build": "tsc -p tsconfig.build.json && node scripts/build.mjs",
@@ -17,6 +17,7 @@
     "local": "node --experimental-strip-types apps/cli/src/local.ts",
     "remote": "node --experimental-strip-types apps/cli/src/remote.ts",
     "relay": "node --experimental-strip-types services/relay/src/main.ts",
+    "worker:linux": "node --experimental-strip-types apps/cli/src/linux-worker.ts",
     "mvp": "node --experimental-strip-types apps/cli/src/mvp.ts",
     "smoke": "node scripts/smoke.mjs",
     "desktop:ui": "vite build --config apps/desktop/vite.config.mjs",

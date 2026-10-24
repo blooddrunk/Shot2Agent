@@ -1,0 +1,40 @@
+# Merge with compose.yaml: docker compose -f compose.yaml -f compose.worker.yaml ...
+services:
+  worker:
+    image: ${WORKER_IMAGE:-shot2agent-worker:m12}
+    build:
+      context: ../..
+      dockerfile: deploy/relay/Dockerfile.worker
+      args:
+        SOURCE_SHA: ${SOURCE_SHA:-unknown}
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    user: '1000:1000'
+    environment:
+      SHOT2AGENT_RELAY_URL: http://relay:3100/
+      SHOT2AGENT_TRUSTED_INTERNAL_RELAY: http://relay:3100/
+      SHOT2AGENT_WORKER_DEVICE: ${WORKER_DEVICE:-vps-worker}
+      SHOT2AGENT_WORKER_OWNER: ${WORKER_OWNER:-personal}
+      SHOT2AGENT_WORKER_LABEL: ${WORKER_LABEL:-Linux VPS}
+      SHOT2AGENT_WORKER_FAKE: ${WORKER_FAKE:-0}
+    volumes:
+      - worker-data:/data
+      - ./worker-secrets:/run/worker-secrets:ro
+      - ./workspace:/workspace:ro
+    tmpfs: ['/scratch:size=256m,mode=0700,uid=1000,gid=1000', '/tmp:size=16m,mode=1777']
+    networks: [backend, worker-egress]
+    mem_limit: 1g
+    cpus: 1.0
+    pids_limit: 128
+    stop_grace_period: 30s
+    depends_on:
+      relay: { condition: service_healthy }
+    logging:
+      driver: json-file
+      options: { max-size: 5m, max-file: '2' }
+networks:
+  worker-egress: {}
+volumes:
+  worker-data:

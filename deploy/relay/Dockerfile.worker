@@ -1,0 +1,27 @@
+FROM node:24-bookworm-slim AS build
+WORKDIR /app
+RUN corepack enable
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig*.json ./
+COPY packages ./packages
+COPY services ./services
+COPY apps/cli ./apps/cli
+RUN pnpm install --frozen-lockfile && pnpm exec tsc -p tsconfig.build.json
+
+FROM node:24-bookworm-slim
+ARG CLAUDE_VERSION=2.1.306
+ARG CODEX_VERSION=0.164.0
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates bubblewrap git tini \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install -g @anthropic-ai/claude-code@${CLAUDE_VERSION} @openai/codex@${CODEX_VERSION} \
+    && npm cache clean --force
+WORKDIR /app
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+COPY package.json ./package.json
+ARG SOURCE_SHA=unknown
+LABEL org.opencontainers.image.revision=$SOURCE_SHA
+ENV NODE_ENV=production TMPDIR=/scratch
+RUN mkdir /data /scratch /workspace && chown node:node /data /scratch /workspace && chmod 700 /data /scratch
+USER node
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["node", "dist/apps/cli/src/linux-worker.js", "run"]
