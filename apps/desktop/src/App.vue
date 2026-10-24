@@ -142,6 +142,12 @@ const cliStatusText: Record<string, string> = {
   scan_incomplete: "检测未完成",
 };
 const errorText: Record<string, string> = {
+  INVALID_REMOTE_TOKEN: "设备 Token 格式无效。请只粘贴 Token 内容（32–256 个可打印字符），不要包含文件名、说明或中间空格。",
+  INVALID_REMOTE_SETTINGS: "跨设备设置无效。请填写 Relay HTTPS 地址和这台电脑的名称（最多 80 个字符）。",
+  REMOTE_TOKEN_SAVE_FAILED: "Windows 凭据管理器未能保存设备 Token；连接设置未更改。请从托盘退出并重新打开应用后再试。",
+  REMOTE_TOKEN_VERIFY_FAILED: "设备 Token 保存后无法从 Windows 凭据管理器正确读回；连接设置未更改。请重新打开应用后再试。",
+  REMOTE_SETTINGS_SAVE_FAILED: "连接设置无法写入本机数据目录；原连接保持不变。请检查设置页显示的数据目录是否可写。",
+  FORMAL_PROFILE_REQUIRED: "当前是隔离 Fake 或旧版 Local 窗口。请从托盘退出，再直接打开 Shot2Agent.exe 配置真实 AI 助手。",
   INVALID_HOTKEY: "组合键格式无效。请使用 Ctrl+Alt、Ctrl+Shift 或 Alt+Shift 加一个字母或数字，例如 Ctrl+Alt+P。",
   INVALID_HOTKEYS: "快捷键配置格式无效，请重新填写后保存。",
   DUPLICATE_HOTKEY: "多个操作使用了相同的组合键。请为每个操作选择不同的快捷键。",
@@ -227,8 +233,11 @@ const remoteOptions = computed(() => (data.value?.remote?.workers ?? []).flatMap
 }))));
 const remoteSelection = computed(() => { const t = data.value?.remote?.target; return t ? JSON.stringify([t.deviceId, t.id, t.version]) : ''; });
 async function saveRemote() {
-  await action('remote-configure', { url: remoteUrl.value, label: remoteLabel.value, ...(remoteToken.value ? { token: remoteToken.value } : {}) });
-  remoteToken.value = ''; if (!error.value) remoteDirty.value = false;
+  await action('remote-configure', { url: remoteUrl.value.trim(), label: remoteLabel.value.trim(), ...(remoteToken.value ? { token: remoteToken.value.trim() } : {}) });
+  if (!error.value) {
+    remoteToken.value = ''; remoteDirty.value = false;
+    remoteUrl.value = data.value?.remote?.url ?? ''; remoteLabel.value = data.value?.remote?.label ?? 'Windows PC';
+  }
 }
 async function selectRemote(event: Event) {
   const option = remoteOptions.value.find(o => o.key === (event.target as HTMLSelectElement).value);
@@ -293,6 +302,7 @@ const captureSummary = computed(() => {
   return `${snapshot.settings.mode === "auto" ? "自动提交" : "确认后提交"} · ${presentation.value?.capture}`;
 });
 function friendlyError(code: string) {
+  if (errorText[code]) return errorText[code];
   if (/^RELAY_40[13]$|CREDENTIAL_UNAVAILABLE/.test(code)) return 'Relay 拒绝了设备 Token。请在跨设备设置更新 Token，再测试连接；已有任务保持原样。';
   if (code === 'REMOTE_WAIT_FOR_IDLE') return '请等待当前任务结束后再保存连接；暂停接收会保留已经开始的任务。';
   if (/HTTPS_REQUIRED/.test(code)) return '请输入完整的 HTTPS Relay 地址。只有本机隔离测试支持 HTTP。';
@@ -1190,7 +1200,7 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener("shot2agent
           </label>
           <label>Relay HTTPS 地址<input aria-label="Relay HTTPS 地址" v-model="remoteUrl" placeholder="https://relay.example.com" @input="remoteDirty = true" /></label>
           <label>这台电脑的名称<input aria-label="这台电脑的名称" v-model="remoteLabel" maxlength="80" @input="remoteDirty = true" /></label>
-          <label>设备 Token<input aria-label="设备 Token" type="password" v-model="remoteToken" autocomplete="off" :placeholder="data?.remote?.hasToken ? '已安全保存；输入新 Token 可更新' : '填写部署时为这台电脑生成的 Token'" /></label>
+          <label>设备 Token<input aria-label="设备 Token" type="password" v-model="remoteToken" autocomplete="off" @input="remoteDirty = true" :placeholder="data?.remote?.hasToken ? '已安全保存；输入新 Token 可更新' : '填写部署时为这台电脑生成的 Token'" /></label>
           <p class="hint">Token 仅保存在 Windows 凭据管理器中。A、B 使用各自的设备 Token。</p>
           <div class="button-row">
             <button :disabled="busy" @click="saveRemote">保存连接</button>

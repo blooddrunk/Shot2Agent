@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, realpathSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, realpathSync, existsSync, renameSync, mkdirSync, rmdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -25,6 +25,78 @@ function clipboard() { return { session: 'isolated-remote', seq: '1', image: und
   async writeFiles(files, expected) { if (expected && expected !== this.seq) return false; for (const f of files) assert.match(readFileSync(f, 'utf8'), /Fake result/); this.files.push(files); return true; },
   async notify() { this.notices++; }, close() {} }; }
 const rpc = (d, command, args = {}) => d.dispatch({ v: 1, command, ...args });
+
+test('Remote save trims pasted edges, rejects malformed tokens and preserves the previous connection', async t => {
+  const h = await harness(t);
+  await rpc(h.a, 'remote-configure', { url: ` ${h.url} \n`, label: '  Test PC  ', token: ` \r\n${devices[0].token}\r\n\t` });
+  assert.equal(h.a.settings.remote.url, h.url); assert.equal(h.a.settings.remote.label, 'Test PC');
+  const reference = h.a.settings.remote.credentialRef;
+  assert.equal(await h.credentials.read(reference), devices[0].token);
+  for (const token of ['short', 'a'.repeat(257), 'a'.repeat(35) + ' inside', 'a'.repeat(35) + '\u200b', '   ']) {
+    await assert.rejects(rpc(h.a, 'remote-configure', { token }), /INVALID_REMOTE_TOKEN/);
+    assert.equal(h.a.settings.remote.credentialRef, reference);
+  }
+  assert.equal(h.credentials.values.size, 1);
+  await rpc(h.a, 'remote-test'); assert.equal(h.a.remote.status, 'connected');
+  assert.equal(readFileSync(join(h.root, 'a', 'settings.json'), 'utf8').includes(devices[0].token), false);
+  assert.equal(JSON.stringify(await rpc(h.a, 'snapshot')).includes(devices[0].token), false);
+});
+
+test('Remote secure-store write and readback failures have safe codes and retain the old credentials', async t => {
+  const h = await harness(t); const reference = h.a.settings.remote.credentialRef;
+  const save = h.credentials.save; const read = h.credentials.read;
+  h.credentials.save = async () => { throw new Error('synthetic private provider detail'); };
+  await assert.rejects(rpc(h.a, 'remote-configure', { token: devices[2].token }), /^Error: REMOTE_TOKEN_SAVE_FAILED$/);
+  h.credentials.save = save;
+  for (const readback of [async () => { throw new Error('synthetic read failure'); }, async () => 'synthetic wrong readback']) {
+    h.credentials.read = readback;
+    await assert.rejects(rpc(h.a, 'remote-configure', { token: devices[2].token }), /^Error: REMOTE_TOKEN_VERIFY_FAILED$/);
+    assert.equal(h.a.settings.remote.credentialRef, reference); assert.equal(h.credentials.values.size, 1);
+  }
+  h.credentials.read = read;
+  assert.equal(await h.credentials.read(reference), devices[0].token);
+  await rpc(h.a, 'remote-test'); assert.equal(h.a.remote.status, 'connected');
+});
+
+test('Remote settings write failure removes the new credential and retains the previous saved connection', async t => {
+  const h = await harness(t); const reference = h.a.settings.remote.credentialRef;
+  const path = join(h.root, 'a', 'settings.json'); const backup = path + '.test-backup';
+  renameSync(path, backup); mkdirSync(path);
+  try {
+    await assert.rejects(rpc(h.a, 'remote-configure', { token: devices[2].token }), /^Error: REMOTE_SETTINGS_SAVE_FAILED$/);
+    assert.equal(h.a.settings.remote.credentialRef, reference); assert.equal(h.credentials.values.size, 1);
+  } finally { rmdirSync(path); renameSync(backup, path); }
+  await rpc(h.a, 'remote-test'); assert.equal(h.a.remote.status, 'connected');
+});
+
+test('Windows Remote controller saves, verifies, replaces and deletes disposable OS-backed device credentials', { skip: process.platform !== 'win32' }, async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'shot-remote-native-save-')));
+  const core = openCore(join(root, 'relay'), 'remote'); const relay = await createRelay(core, devices);
+  let desktop; const references = [];
+  try {
+    const url = await relay.listen({ host: '127.0.0.1', port: 0 });
+    desktop = new DesktopController(join(root, 'desktop'), clipboard(), undefined, 'codex', async () => []);
+    await desktop.start();
+    await rpc(desktop, 'remote-configure', { url: ` ${url} `, token: ` ${devices[0].token} ` });
+    references.push(desktop.settings.remote.credentialRef);
+    await rpc(desktop, 'remote-test'); assert.equal(desktop.settings.remote.identity.deviceId, 'a');
+    await desktop.close();
+    desktop = new DesktopController(join(root, 'desktop'), clipboard(), undefined, 'codex', async () => []);
+    await desktop.start(); await rpc(desktop, 'remote-test'); assert.equal(desktop.remote.status, 'connected');
+    await rpc(desktop, 'remote-configure', { token: devices[1].token }); references.push(desktop.settings.remote.credentialRef);
+    await rpc(desktop, 'remote-test'); assert.equal(desktop.settings.remote.identity.deviceId, 'b');
+    const { readGatewayToken } = await import('../../worker/src/gateway.ts');
+    await assert.rejects(readGatewayToken(references[0]), /GATEWAY_CREDENTIAL_UNAVAILABLE/);
+    assert.equal(readFileSync(join(root, 'desktop', 'settings.json'), 'utf8').includes(devices[1].token), false);
+    await rpc(desktop, 'remote-delete-token'); assert.equal((await rpc(desktop, 'snapshot')).remote.hasToken, false);
+    await assert.rejects(readGatewayToken(references[1]), /GATEWAY_CREDENTIAL_UNAVAILABLE/);
+  } finally {
+    const { deleteGatewayToken } = await import('../../worker/src/gateway.ts');
+    for (const reference of references) await deleteGatewayToken(reference);
+    await desktop?.close(); await relay.close(); core.close(); rmSync(root, { recursive: true, force: true });
+  }
+});
+
 async function harness(t) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'shot-m10-'))); let core = openCore(join(root, 'relay'), 'remote');
   let registry = JSON.parse(JSON.stringify(devices)); let server; let url; let requests = 0;

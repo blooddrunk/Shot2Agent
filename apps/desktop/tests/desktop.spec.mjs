@@ -105,9 +105,16 @@ for (const width of [1040, 720, 480]) test(`M10 Remote GUI setup, secure token, 
     const url = await relay.listen({ host: '127.0.0.1', port: 0 }); const worker = new RemoteClient(url, 'b'.repeat(40));
     await worker.presence('合成测试电脑 B', [{ id: FAKE_PROFILE.id, version: FAKE_PROFILE.version, fingerprint: FAKE_PROFILE.fingerprint, provider: 'fake' }], true);
     await nav(page, '设置');
-    await page.getByLabel('Relay HTTPS 地址', { exact: true }).fill(url); await page.getByLabel('设备 Token', { exact: true }).fill('a'.repeat(40));
+    await page.getByLabel('Relay HTTPS 地址', { exact: true }).fill(` ${url} `); await page.getByLabel('设备 Token', { exact: true }).fill(` ${'a'.repeat(40)} `);
     await page.getByRole('button', { name: '保存连接', exact: true }).click();
     await expect(page.getByLabel('设备 Token', { exact: true })).toHaveValue('');
+    await expect(page.getByLabel('Relay HTTPS 地址', { exact: true })).toHaveValue(url);
+    const connectionButtons = page.getByRole('group', { name: '跨设备处理', exact: true }).locator('.button-row');
+    expect(await connectionButtons.evaluate(row => {
+      const style = window.getComputedStyle(row), boxes = [...row.children].map(b => b.getBoundingClientRect());
+      return style.display === 'flex' && style.flexWrap === 'wrap' && parseFloat(style.gap) >= 8 &&
+        boxes.every((box, i) => i === 0 || box.left - boxes[i - 1].right >= 7.5 || box.top - boxes[i - 1].bottom >= 7.5);
+    })).toBe(true);
     await page.getByRole('button', { name: '测试连接 / 刷新电脑', exact: true }).click();
     await expect(page.getByText('Relay 已连接', { exact: false })).toBeVisible();
     await page.getByLabel('远程电脑及已批准 Agent', { exact: true }).selectOption(JSON.stringify(['b', FAKE_PROFILE.id, FAKE_PROFILE.version]));
@@ -127,6 +134,34 @@ for (const width of [1040, 720, 480]) test(`M10 Remote GUI setup, secure token, 
     await nav(page, '设置'); await page.getByLabel('新任务处理位置', { exact: true }).selectOption('local'); await page.getByRole('button', { name: '删除设备 Token', exact: true }).click();
     await expect(page.getByText('尚未配置 Relay', { exact: true })).toBeVisible(); expect(desktop.app.list()[0].status).toBe('succeeded');
   } finally { await relay.close(); core.close(); }
+});
+
+test('Remote save errors preserve masked input, explain the failing stage and allow correction', async ({ page }) => {
+  await nav(page, '设置');
+  await page.getByLabel('Relay HTTPS 地址', { exact: true }).fill('https://relay.example.com');
+  const tokenInput = page.getByLabel('设备 Token', { exact: true });
+  await tokenInput.fill('synthetic short');
+  await page.getByRole('button', { name: '保存连接', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('设备 Token 格式无效');
+  await expect(tokenInput).toHaveValue('synthetic short');
+  await expect(tokenInput).toHaveAttribute('type', 'password');
+  const store = desktop.credentials, save = store.save, read = store.read;
+  await tokenInput.fill('s'.repeat(40));
+  store.save = async () => { throw Error('synthetic-private-secret-must-not-show'); };
+  await page.getByRole('button', { name: '保存连接', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Windows 凭据管理器未能保存设备 Token');
+  await expect(page.getByRole('alert')).not.toContainText('synthetic-private-secret');
+  await expect(tokenInput).toHaveValue('s'.repeat(40));
+  store.save = save; store.read = async () => { throw Error('synthetic read failure'); };
+  await page.getByRole('button', { name: '保存连接', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('无法从 Windows 凭据管理器正确读回');
+  store.read = read;
+  await page.getByRole('button', { name: '保存连接', exact: true }).click();
+  await expect(tokenInput).toHaveValue('');
+  await expect(page.getByRole('button', { name: '测试连接 / 刷新电脑', exact: true })).toBeEnabled();
+  await tokenInput.fill('t'.repeat(40));
+  await expect(page.getByRole('button', { name: '测试连接 / 刷新电脑', exact: true })).toBeDisabled();
+  expect(testsSent).toBe(0);
 });
 
 test('hotkeys save before Agent setup even when CLI discovery is invalid', async ({ page }) => {

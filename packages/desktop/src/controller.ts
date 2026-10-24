@@ -381,15 +381,28 @@ export class DesktopController {
         requireValue(!this.worker || (r.url === undefined && r.token === undefined), 'REMOTE_WAIT_FOR_IDLE');
         const next = structuredClone(this.settings); const remote = next.remote ?? remoteDefaults(); const oldRef = remote.credentialRef;
         for (const key of ['mode', 'url', 'label', 'receive'] as const) if (r[key] !== undefined) (remote as unknown as Record<string, unknown>)[key] = r[key];
+        if (typeof remote.url === 'string') remote.url = remote.url.trim();
+        if (typeof remote.label === 'string') remote.label = remote.label.trim();
         if (remote.url !== this.settings.remote?.url) { delete remote.identity; delete remote.target; }
+        const token = typeof r.token === 'string' ? r.token.trim() : r.token;
         if (r.token !== undefined) {
-          requireValue(typeof r.token === 'string' && /^[\x21-\x7e]{32,256}$/.test(r.token), 'INVALID_REMOTE_TOKEN');
+          requireValue(typeof token === 'string' && /^[\x21-\x7e]{32,256}$/.test(token), 'INVALID_REMOTE_TOKEN');
           remote.credentialRef = `Shot2Agent-Relay-${randomUUID()}`;
         }
         validateRemote(remote);
-        if (r.token !== undefined) await this.credentials.save(remote.credentialRef!, r.token as string);
+        if (r.token !== undefined) {
+          let stage = 'REMOTE_TOKEN_SAVE_FAILED';
+          try {
+            await this.credentials.save(remote.credentialRef!, token as string);
+            stage = 'REMOTE_TOKEN_VERIFY_FAILED';
+            requireValue(await this.credentials.read(remote.credentialRef!) === token, stage);
+          } catch {
+            await this.credentials.delete(remote.credentialRef!).catch(() => {});
+            throw new Error(stage);
+          }
+        }
         next.remote = remote;
-        try { saveSettings(this.root, next); } catch (e) { if (remote.credentialRef !== oldRef && remote.credentialRef) await this.credentials.delete(remote.credentialRef).catch(() => {}); throw e; }
+        try { saveSettings(this.root, next); } catch { if (remote.credentialRef !== oldRef && remote.credentialRef) await this.credentials.delete(remote.credentialRef).catch(() => {}); throw new Error('REMOTE_SETTINGS_SAVE_FAILED'); }
         const connectionChanged = remote.url !== this.settings.remote?.url || r.token !== undefined;
         this.settings = next; this.app.remote = this.remotePort(); this.nextRemoteSync = 0;
         if (connectionChanged) { this.remoteConnection = undefined; this.remote.status = 'disconnected'; }

@@ -6,6 +6,10 @@
 
 ## 已通过的候选身份与门禁
 
+2026-10-24 配置反馈修正（基于 `28ec78c`）：在用户所用的同树打包程序中，用隔离临时目录和合成 Token 实际复现首尾空白导致 `INVALID_REMOTE_TOKEN`、无空白可成功保存；不读取用户输入，不把这个复现推定成用户实际失败的唯一原因。现在保存会去除地址/名称/Token 首尾空白，OS 凭据保存后校验读回，失败保留原连接并给出分阶段中文提示；GUI 失败时保留遮蔽输入，未保存的新 Token 禁止测试旧连接；三个连接按钮复用通用 8px flex gap 并可换行。
+
+该修正本机实际执行：`corepack pnpm install --frozen-lockfile` 退出 0；`npm run check` 退出 0，260 tests / 257 PASS / 3 SKIPPED / 0 FAIL；`npm run desktop:test-ui` 退出 0，32/32。新增 Windows 真实 Credential Manager/controller 测试只使用临时 Token/目录，覆盖保存、读回、重启、更新、测试连接与删除；另有损坏输入、写入/读回/设置落盘失败的原连接保护，以及三个窗口宽度的实际按钮间距断言。提取 ZIP 验证也新增实际打包 controller 的 Remote 保存/读回/删除（不联网）。首轮 lint 因浏览器测试中的裸 `getComputedStyle` 实际 FAIL，改为 `window.getComputedStyle` 后完整 check PASS。此修正精确 SHA 的后续 CI/ZIP 身份见 PR 当前交付；尚未实际运行的打包门禁不沿用旧包冒称通过。
+
 首次完整通过全部门禁的功能/测试基线为 `f777d00537501061769dd22f72fa0dfce19da50f`（[PR #26](https://github.com/blooddrunk/Shot2Agent/pull/26)）。之后还补充了下述通知恢复修正；最终 PR HEAD 的 CI/ZIP 身份另行报告于 PR 描述与交付信息。下表的精确 SHA 和旧 ZIP 只证明其对应基线，不冒称最终包。PR CI checkout 使用合并测试提交，不能把包中的 SHA 冒称为分支 HEAD。
 
 | 实际命令/门禁 | 状态 | 精确结果与证据 |

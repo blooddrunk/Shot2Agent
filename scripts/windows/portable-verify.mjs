@@ -19,12 +19,23 @@ const { DesktopController } = await moduleAt('packages/desktop/src/controller.js
 const { WindowsClipboard } = await moduleAt('packages/local/src/clipboard.js');
 const { FakeAgent, FAKE_PROFILE } = await moduleAt('packages/worker/src/fake.js');
 const { defaults, saveSettings } = await moduleAt('packages/desktop/src/settings.js');
+const { readGatewayToken, deleteGatewayToken } = await moduleAt('packages/worker/src/gateway.js');
+let remoteReference;
 const clipboard = new WindowsClipboard(); let desktop;
 try {
   desktop = new DesktopController(root, clipboard, undefined, 'codex', async () => []);
   await desktop.start();
   const first = await desktop.dispatch({ v: 1, command: 'snapshot' });
   assert.equal(first.setupRequired, true); assert.equal(first.total, 0); assert.equal(first.appVersion, APP_VERSION);
+  const syntheticToken = 'synthetic-packaged-device-token-only-123456';
+  const remote = await desktop.dispatch({ v: 1, command: 'remote-configure', url: ' https://relay.example.com ', token: ` ${syntheticToken} ` });
+  remoteReference = desktop.settings.remote.credentialRef;
+  assert.equal(remote.remote.hasToken, true); assert.equal(remote.remote.url, 'https://relay.example.com');
+  assert.equal(await readGatewayToken(remoteReference), syntheticToken);
+  assert.equal(JSON.stringify(remote).includes(syntheticToken), false);
+  assert.equal(readFileSync(join(root, 'settings.json'), 'utf8').includes(syntheticToken), false);
+  await desktop.dispatch({ v: 1, command: 'remote-delete-token' });
+  await assert.rejects(readGatewayToken(remoteReference), /GATEWAY_CREDENTIAL_UNAVAILABLE/);
   await desktop.close();
   const settings = defaults(); settings.delivery = { clipboard: 'manual' }; saveSettings(root, settings);
   desktop = new DesktopController(root, new WindowsClipboard(), { adapter: new FakeAgent(), profile: FAKE_PROFILE }, 'staging', async () => []);
@@ -40,6 +51,6 @@ try {
   await desktop.close();
   desktop = new DesktopController(root, new WindowsClipboard(), { adapter: new FakeAgent(), profile: FAKE_PROFILE }, 'staging', async () => []);
   assert.equal(desktop.app.get(id2).status, 'succeeded'); assert.equal(desktop.app.get(id2).attempts.length, 1);
-  const report = `PASS extracted ZIP ${APP_VERSION}: manifest hashes/resources, fresh GUI onboarding contract (no profile), isolated Fake one/five images, native files/cache, retained files after deletion, restart history. Interactive Explorer/focus is outside this automated check; see the operator acceptance record.`;
+  const report = `PASS extracted ZIP ${APP_VERSION}: manifest hashes/resources, fresh GUI onboarding contract (no profile), native Remote credential save/readback/delete with pasted whitespace and no network, isolated Fake one/five images, native files/cache, retained files after deletion, restart history. Interactive Explorer/focus is outside this automated check; see the operator acceptance record.`;
   writeFileSync(join(bundle, 'PORTABLE-VERIFY.txt'), report); process.stdout.write(report + '\n');
-} finally { await desktop?.close(); clipboard.close(); rmSync(root, { recursive: true, force: true }); }
+} finally { if (remoteReference) await deleteGatewayToken(remoteReference); await desktop?.close(); clipboard.close(); rmSync(root, { recursive: true, force: true }); }
