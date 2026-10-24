@@ -95,6 +95,15 @@ fn hosted_window_capture_and_unicode() {
         assert!(decoded[..info.buffer_size()]
             .chunks_exact(4)
             .any(|pixel| pixel != &decoded[..4]));
+        // Repeat across apartment teardown and on another thread.
+        assert!(!crate::capture::capture(monitor["id"].as_str().unwrap())
+            .unwrap()
+            .is_empty());
+        assert!(!std::thread::spawn(|| crate::capture::capture(""))
+            .join()
+            .unwrap()
+            .unwrap()
+            .is_empty());
         assert_eq!(GetClipboardSequenceNumber(), before);
         SetWindowTextW(window.0, wide("").as_ptr());
         eprintln!("NATIVE_TEST_TYPING");

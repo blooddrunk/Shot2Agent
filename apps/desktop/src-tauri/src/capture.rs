@@ -49,7 +49,10 @@ mod platform {
     use windows::{
         core::{factory, Interface, BOOL},
         Graphics::{
-            Capture::{Direct3D11CaptureFramePool, GraphicsCaptureItem, GraphicsCaptureSession},
+            Capture::{
+                Direct3D11CaptureFramePool, GraphicsCaptureItem, GraphicsCaptureSession,
+                IDirect3D11CaptureFramePoolStatics2, IGraphicsCaptureSessionStatics,
+            },
             DirectX::{Direct3D11::IDirect3DDevice, DirectXPixelFormat},
         },
         Win32::{
@@ -123,7 +126,15 @@ mod platform {
             #[cfg(test)]
             eprintln!("WGC_INITIALIZED");
             let _apartment = Apartment;
-            if !GraphicsCaptureSession::IsSupported().map_err(|_| "CAPTURE_UNSUPPORTED")? {
+            // Scope factories to this apartment; projected statics cache them past
+            // temporary background apartment teardown and may leave stale pointers.
+            let support = factory::<GraphicsCaptureSession, IGraphicsCaptureSessionStatics>()
+                .map_err(|_| "CAPTURE_UNSUPPORTED")?;
+            let mut supported = false;
+            (support.vtable().IsSupported)(support.as_raw(), &mut supported)
+                .ok()
+                .map_err(|_| "CAPTURE_UNSUPPORTED")?;
+            if !supported {
                 return Err("CAPTURE_UNSUPPORTED".into());
             }
             let list = inventory()?;
@@ -169,13 +180,24 @@ mod platform {
             let rt: IDirect3DDevice = CreateDirect3D11DeviceFromDXGIDevice(&dxgi)
                 .and_then(|d| d.cast())
                 .map_err(|_| "CAPTURE_DEVICE_FAILED")?;
-            let pool = Direct3D11CaptureFramePool::CreateFreeThreaded(
-                &rt,
+            let pool_factory =
+                factory::<Direct3D11CaptureFramePool, IDirect3D11CaptureFramePoolStatics2>()
+                    .map_err(|_| "CAPTURE_DEVICE_FAILED")?;
+            let mut pool_raw = std::ptr::null_mut();
+            (pool_factory.vtable().CreateFreeThreaded)(
+                pool_factory.as_raw(),
+                rt.as_raw(),
                 DirectXPixelFormat::B8G8R8A8UIntNormalized,
                 1,
                 size,
+                &mut pool_raw,
             )
+            .ok()
             .map_err(|_| "CAPTURE_DEVICE_FAILED")?;
+            if pool_raw.is_null() {
+                return Err("CAPTURE_DEVICE_FAILED".into());
+            }
+            let pool = Direct3D11CaptureFramePool::from_raw(pool_raw);
             let session = pool
                 .CreateCaptureSession(&item)
                 .map_err(|_| "CAPTURE_ACCESS_DENIED")?;
@@ -231,6 +253,10 @@ mod platform {
                     .Map(&staging, 0, D3D11_MAP_READ, 0, Some(&mut mapped))
                     .map_err(|_| "CAPTURE_DEVICE_FAILED")?;
                 let (w, h) = (size.Width as usize, size.Height as usize);
+                if mapped.pData.is_null() || (mapped.RowPitch as usize) < w * 4 {
+                    context.Unmap(&staging, 0);
+                    return Err("CAPTURE_DEVICE_FAILED".into());
+                }
                 #[cfg(test)]
                 eprintln!("WGC_MAPPED");
                 let mut rgba = vec![0u8; w * h * 4];
