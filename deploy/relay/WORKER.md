@@ -12,8 +12,8 @@ export SOURCE_SHA=$(git rev-parse HEAD)
 dc() { docker compose -f compose.yaml -f compose.worker.yaml "$@"; }
 dc build relay worker
 mkdir -p secrets worker-secrets workspace
-dc run --rm --no-deps --user 0 relay node /app/relay-devices.mjs /run/shot2agent init pc-a pc-b
-dc run --rm --no-deps --user 0 relay node /app/relay-devices.mjs /run/shot2agent add-worker vps-worker
+dc run --rm --no-deps --user 0 -v "$PWD/secrets:/provision" relay node /app/relay-devices.mjs /provision init pc-a pc-b
+dc run --rm --no-deps --user 0 -v "$PWD/secrets:/provision" relay node /app/relay-devices.mjs /provision add-worker vps-worker
 sudo install -m 600 -o 1000 -g 1000 secrets/vps-worker.token worker-secrets/worker.token
 sudo chown 1000:1000 worker-secrets
 sudo chmod 700 worker-secrets
