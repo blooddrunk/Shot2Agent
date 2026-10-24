@@ -10,21 +10,25 @@ import type { AgentAdapter, AgentResult, Profile, SubmissionMetadata } from '../
 import { sha256, verifyImage } from '../../core/src/blobs.ts';
 import { requireValue } from '../../core/src/model.ts';
 import { boundedProcess, claudePolicyCommand } from './process.ts';
-import type { Program, ProcessResult } from './process.ts';
+import type { Program, ProcessResult, ProcessRuntime } from './process.ts';
 import { inspectClaude, programDigest } from './discovery.ts';
+import { assertLinuxApproval, linuxRuntime, privateFile } from './linux-platform.ts';
+import type { LinuxApproval } from './linux-platform.ts';
 export interface ClaudePolicy {
   id: string; version: string; workspace: string; program: Program; cliVersion: string;
   timeoutMs: number; prompt: string; digest: string;
   /** Version-specific transport qualification, assigned only during explicit stopped-worker approval. */
   gateway?: GatewayConfig;
-  imageProtocol?: 'windows-jsonl-v1';
+  imageProtocol?: 'windows-jsonl-v1' | 'linux-jsonl-v1';
+  linux?: LinuxApproval;
 }
 export function claudeProfile(policy: ClaudePolicy, checkFiles = true): Profile {
+  if (policy.linux) { requireValue(process.platform === 'linux' && policy.imageProtocol === 'linux-jsonl-v1', 'LINUX_APPROVAL_IDENTITY'); if (checkFiles) assertLinuxApproval(policy.linux); }
   requireValue(/^[a-z][a-z0-9-]{0,63}$/.test(policy.id) && /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(policy.version), 'INVALID_PROFILE');
   requireValue(isAbsolute(policy.workspace) && (!checkFiles || (realpathSync(policy.workspace) === policy.workspace && lstatSync(policy.workspace).isDirectory())), 'UNAPPROVED_WORKSPACE');
   requireValue(isAbsolute(policy.program.executable) && !/\.(cmd|bat|ps1)$/i.test(policy.program.executable) && (!checkFiles || lstatSync(policy.program.executable).isFile()) && policy.program.args.length <= 1 && policy.program.args.every(p => isAbsolute(p) && /\.m?js$/i.test(p) && (!checkFiles || lstatSync(p).isFile())), 'INVALID_PROGRAM');
   requireValue(/^\d+\.\d+\.\d+ \(Claude Code\)$/.test(policy.cliVersion) && /^[a-f0-9]{64}$/.test(policy.digest) && Number.isInteger(policy.timeoutMs) && policy.timeoutMs >= 5000 && policy.timeoutMs <= 3600000 && typeof policy.prompt === 'string' && policy.prompt.length <= 10000, 'INVALID_CLAUDE_POLICY');
-  requireValue(policy.imageProtocol === undefined || policy.imageProtocol === 'windows-jsonl-v1', 'INVALID_IMAGE_PROTOCOL');
+  requireValue(policy.imageProtocol === undefined || policy.imageProtocol === 'windows-jsonl-v1' || (policy.imageProtocol === 'linux-jsonl-v1' && !!policy.linux), 'INVALID_IMAGE_PROTOCOL');
   if (policy.gateway) validateGateway(policy.gateway);
   return { id: policy.id, version: policy.version, sandbox: 'read-only', timeoutMs: policy.timeoutMs, fingerprint: sha256(JSON.stringify(policy)) };
 }
@@ -33,14 +37,23 @@ export const CLAUDE_ARGS = ['--restricted', '--safe-mode', '-p', '--input-format
   '--no-session-persistence', '--settings', '{"disableAllHooks":true,"autoUpdates":false}'];
 /** Fail closed on endpoint policy or credentials eligible for remote managed hooks.
  * Only personal Pro/Max subscription auth is supported in this bounded release. */
-export async function assertClaudeIsolation(program: Program, cwd: string, signal?: AbortSignal): Promise<void> {
-  requireValue(process.platform === 'win32', 'CLAUDE_WINDOWS_ONLY');
-  requireValue(!process.env.ANTHROPIC_API_KEY && !process.env.CLAUDE_CODE_OAUTH_TOKEN, 'CLAUDE_AUTH_ISOLATION_UNVERIFIED');
-  await assertClaudeMachinePolicy(signal);
-  const auth = await boundedProcess(program, ['--restricted', '--safe-mode', 'auth', 'status', '--json'], { cwd, signal, timeoutMs: 5000, maxBytes: 16384, provider: 'claude' }); await auth.settled;
+export async function assertClaudeIsolation(program: Program, cwd: string, signal?: AbortSignal, runtime?: ProcessRuntime): Promise<void> {
+  if (runtime) {
+    assertLinuxClaudePolicy();
+    assertAbsent(join(runtime.env.CLAUDE_CONFIG_DIR!, 'remote-settings.json'));
+  } else {
+    requireValue(process.platform === 'win32', 'CLAUDE_WINDOWS_ONLY');
+    requireValue(!process.env.ANTHROPIC_API_KEY && !process.env.CLAUDE_CODE_OAUTH_TOKEN, 'CLAUDE_AUTH_ISOLATION_UNVERIFIED');
+    await assertClaudeMachinePolicy(signal);
+  }
+  const auth = await boundedProcess(program, ['--restricted', '--safe-mode', 'auth', 'status', '--json'], { cwd, signal, runtime, timeoutMs: 5000, maxBytes: 16384, provider: 'claude' }); await auth.settled;
   requireValue(auth.code === 0 && !auth.stopped, 'CLAUDE_AUTH_UNVERIFIED');
   const status = JSON.parse(auth.output);
   requireValue(status.loggedIn === true && status.authMethod === 'claude.ai' && ['pro', 'max'].includes(status.subscriptionType), 'CLAUDE_AUTH_ISOLATION_UNVERIFIED');
+}
+export function assertLinuxClaudePolicy(): void {
+  requireValue(process.platform === 'linux', 'LINUX_REQUIRED');
+  for (const name of ['managed-settings.json', 'managed-settings.d', 'managed-mcp.json']) assertAbsent(join('/etc/claude-code', name));
 }
 export async function assertClaudeMachinePolicy(signal?: AbortSignal): Promise<void> {
   requireValue(process.platform === 'win32', 'CLAUDE_WINDOWS_ONLY');
@@ -91,15 +104,24 @@ export class ClaudeAgent implements AgentAdapter {
     requireValue(this.policies.size === policies.length, 'DUPLICATE_PROFILE');
   }
   execute(task: SubmissionMetadata, profile: Profile, images: readonly Uint8Array[], signal: AbortSignal): Promise<AgentResult> {
-    const operation = this.run(task, profile, images, signal); this.active.add(operation);
+    const operation = this.isolatedRun(task, profile, images, signal); this.active.add(operation);
     operation.then(() => this.active.delete(operation), () => this.active.delete(operation)); return operation;
+  }
+  private async isolatedRun(task: SubmissionMetadata, profile: Profile, images: readonly Uint8Array[], signal: AbortSignal): Promise<AgentResult> {
+    let session: ReturnType<typeof linuxRuntime> | undefined;
+    try {
+      const policy = this.policies.get(`${task.profileId}:${task.profileVersion}`)?.policy;
+      if (policy?.linux) session = linuxRuntime(policy.linux, 'claude', !!policy.gateway);
+      return await this.run(task, profile, images, signal, session?.runtime);
+    } catch { return fail('CLAUDE_LINUX_ISOLATION_REFUSED'); }
+    finally { session?.close(); }
   }
   async settle(): Promise<boolean> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try { return await Promise.race([Promise.allSettled([...this.active]).then(() => true), new Promise<boolean>(r => { timer = setTimeout(() => r(false), 10000); })]); }
     finally { clearTimeout(timer); }
   }
-  private async run(task: SubmissionMetadata, profile: Profile, images: readonly Uint8Array[], signal: AbortSignal): Promise<AgentResult> {
+  private async run(task: SubmissionMetadata, profile: Profile, images: readonly Uint8Array[], signal: AbortSignal, runtime?: ProcessRuntime): Promise<AgentResult> {
     const entry = this.policies.get(`${task.profileId}:${task.profileVersion}`);
     if (!entry || profile.fingerprint !== entry.profile.fingerprint || profile.sandbox !== 'read-only') return fail('UNAPPROVED_PROFILE');
     const { policy } = entry;
@@ -108,14 +130,14 @@ export class ClaudeAgent implements AgentAdapter {
     if (signal.aborted) return fail('ABORTED_BEFORE_LAUNCH');
     try {
       claudeProfile(policy);
-      if (programDigest(policy.program) !== policy.digest || await inspectClaude(policy.program, policy.workspace, signal) !== policy.cliVersion) return fail('CLAUDE_VERSION_CHANGED');
+      if (programDigest(policy.program) !== policy.digest || await inspectClaude(policy.program, policy.workspace, signal, runtime) !== policy.cliVersion) return fail('CLAUDE_VERSION_CHANGED');
       if (policy.gateway) {
         requireValue(['2.1.305 (Claude Code)', '2.1.306 (Claude Code)'].includes(policy.cliVersion), 'GATEWAY_CLI_NOT_QUALIFIED');
         const help = await boundedProcess(policy.program, ['--help'], { cwd: policy.workspace, signal, timeoutMs: 5000, maxBytes: 131072 }); await help.settled;
         requireValue(help.code === 0 && help.output.includes('--setting-sources'), 'GATEWAY_SETTINGS_ISOLATION_UNAVAILABLE');
-        await this.dependencies.machinePolicy(signal);
+        if (policy.linux) assertLinuxClaudePolicy(); else await this.dependencies.machinePolicy(signal);
       }
-      else await assertClaudeIsolation(policy.program, policy.workspace, signal);
+      else await assertClaudeIsolation(policy.program, policy.workspace, signal, runtime);
       requireValue(images.length === task.images.length, 'IMAGE_COUNT');
       for (let i = 0; i < images.length; i++) await verifyImage(Buffer.from(images[i]), task.images[i]);
     } catch (error) { return fail(error instanceof Error && /^[A-Z0-9_]{1,64}$/.test(error.message) ? error.message : 'CLAUDE_PREFLIGHT_REFUSED'); }
@@ -127,9 +149,10 @@ export class ClaudeAgent implements AgentAdapter {
       const input = JSON.stringify({ type: 'user', message: { role: 'user', content }, parent_tool_use_id: null }) + '\n';
       requireValue(Buffer.byteLength(input) <= 85 * 1024 * 1024, 'CLAUDE_INPUT_LIMIT');
       const gateway = policy.gateway;
-      const token = gateway ? await this.dependencies.token(gateway.credentialRef) : undefined;
+      const token = gateway ? policy.linux ? privateFile(policy.linux.credentialFile, 4096).toString('utf8').trim() : await this.dependencies.token(gateway.credentialRef) : undefined;
+      requireValue(!gateway || (typeof token === 'string' && /^[\x21-\x7e]{8,2048}$/.test(token)), 'GATEWAY_CREDENTIAL_UNAVAILABLE');
       if (gateway) privateHome = mkdtempSync(join(tmpdir(), 'shot2agent-gateway-'));
-      const result = await boundedProcess(policy.program, gateway ? [...CLAUDE_ARGS, '--model', gateway.model, '--setting-sources', ''] : CLAUDE_ARGS, { cwd: policy.workspace, input, signal, timeoutMs: Math.floor(profile.timeoutMs * 0.7), maxBytes: 1024 * 1024, provider: 'claude', ...(gateway ? { gateway: { config: gateway, token: token!, home: privateHome! } } : {}) });
+      const result = await boundedProcess(policy.program, gateway ? [...CLAUDE_ARGS, '--model', gateway.model, '--setting-sources', ''] : CLAUDE_ARGS, { cwd: policy.workspace, input, signal, runtime, timeoutMs: Math.floor(profile.timeoutMs * 0.7), maxBytes: 1024 * 1024, provider: 'claude', ...(gateway ? { gateway: { config: gateway, token: token!, home: privateHome! } } : {}) });
       launched = result.launched; await result.settled;
       if (result.stopped) return fail(result.overflow ? 'CLAUDE_LOG_LIMIT' : 'CLAUDE_INTERRUPTED', launched);
       if (result.code !== 0) return fail(gateway ? gatewayFailure(result.output) : 'CLAUDE_EXIT', launched);

@@ -1,5 +1,7 @@
 # 私人 VPS Relay（M10 开发版）
 
+可选的独立 Linux Worker 见 [M12-V 部署说明](WORKER.md)。它使用另一个服务、持久卷、独立 worker Token 和凭据文件；此处的 Relay 仍不执行 Agent。已有 Windows B Worker 与独立 Local 均继续可用。
+
 前置条件：一台 Linux VPS、Docker Engine 和 Compose v2；一个解析到 VPS 的域名；防火墙只允许 80/443 入站（以及你的管理通道）。Windows A/B 都只向 HTTPS 发起连接，不开放入站端口。此部署不调用模型；模型只在你批准的 B 电脑运行。真实公网 TLS 和双 Windows 验收见 [Remote 使用与验收](../../docs/REMOTE_GUIDE.md)，不能由容器测试替代。
 
 ## 首次部署

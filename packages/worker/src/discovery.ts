@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
-import { createReadStream, openSync, readSync, closeSync, existsSync, lstatSync, readFileSync, realpathSync } from 'node:fs';
+import { accessSync, constants, createReadStream, openSync, readSync, closeSync, existsSync, lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { delimiter, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
+import { createRequire } from 'node:module';
 import { requireValue } from '../../core/src/model.ts';
 import { inspectCodex } from './codex.ts';
 import { boundedProcess } from './process.ts';
-import type { Program } from './process.ts';
+import type { Program, ProcessRuntime } from './process.ts';
 export type Provider = 'codex' | 'claude';
 export type Availability = 'not_found' | 'invalid' | 'unsupported' | 'version_changed' | 'unverified_auth' | 'scan_incomplete';
 export interface Candidate { provider: Provider; path: string; selectionPath?: string; program?: Program; version?: string; status: Availability; digest?: string }
@@ -18,6 +19,33 @@ function regular(path: string): string {
 }
 /** Never interpret shim text as code. Only map a known package's exact, contained bin entry. */
 export function resolveProgram(provider: Provider, path: string, node = process.execPath): Program {
+  if (process.platform === 'linux' && !/\.(cmd|ps1|bat)$/i.test(path)) {
+    requireValue(isAbsolute(path), 'LOCAL_ABSOLUTE_PATH_REQUIRED');
+    path = realpathSync(path); // npm and native installers both publish symlinks.
+    regular(path); accessSync(path, constants.X_OK);
+    if (/\.(m?js|cjs)$/i.test(path)) {
+      const root = dirname(path.endsWith('/bin/codex.js') ? dirname(path) : path);
+      const pkg = JSON.parse(readFileSync(regular(join(root, 'package.json')), 'utf8'));
+      const bin = typeof pkg.bin === 'string' ? pkg.bin : pkg.bin?.[provider];
+      requireValue(pkg.name === packageNames[provider] && resolve(root, bin) === path, 'UNVERIFIED_NPM_ENTRY');
+      if (provider === 'codex') {
+        requireValue(['x64', 'arm64'].includes(process.arch), 'LINUX_ARCH_UNSUPPORTED');
+        const name = `@openai/codex-linux-${process.arch}`;
+        const metadata = createRequire(join(root, 'package.json')).resolve(`${name}/package.json`);
+        const triple = process.arch === 'x64' ? 'x86_64-unknown-linux-musl' : 'aarch64-unknown-linux-musl';
+        const vendor = join(dirname(metadata), 'vendor', triple);
+        const binary = [join(vendor, 'bin', 'codex'), join(vendor, 'codex', 'codex')].find(existsSync);
+        requireValue(binary, 'LINUX_CODEX_BINARY_UNAVAILABLE');
+        return resolveProgram(provider, binary, node); // Pin actual native payload, not its npm launcher.
+      }
+      return { executable: regular(realpathSync(node)), args: [path] };
+    }
+    // Refuse shell/python wrappers. Approve the actual ELF executable instead.
+    const fd = openSync(path, 'r'); const magic = Buffer.alloc(4);
+    try { readSync(fd, magic, 0, 4, 0); } finally { closeSync(fd); }
+    requireValue(magic.equals(Buffer.from([127, 69, 76, 70])), 'NATIVE_CLI_REQUIRED');
+    return { executable: path, args: [] };
+  }
   // The standalone Windows Codex installer exposes bin through directory junctions.
   // Resolve only a new native selection; stored programs and digest checks stay strict.
   if (process.platform === 'win32' && provider === 'codex' && /\.exe$/i.test(path)) {
@@ -61,10 +89,10 @@ async function discoveryDigest(program: Program): Promise<string> {
   return hash.digest('hex');
 }
 export const CLAUDE_FLAGS = ['--input-format', '--output-format', '--tools', '--disallowedTools', '--restricted', '--safe-mode', '--no-session-persistence', '--strict-mcp-config', '--mcp-config', '--settings'];
-export async function inspectClaude(program: Program, cwd: string, signal?: AbortSignal): Promise<string> {
-  const version = await boundedProcess(program, ['--version'], { cwd, signal, timeoutMs: 5000, maxBytes: 16384 }); await version.settled;
+export async function inspectClaude(program: Program, cwd: string, signal?: AbortSignal, runtime?: ProcessRuntime): Promise<string> {
+  const version = await boundedProcess(program, ['--version'], { cwd, signal, runtime, timeoutMs: 5000, maxBytes: 16384 }); await version.settled;
   requireValue(version.code === 0 && !version.stopped && /^\d+\.\d+\.\d+ \(Claude Code\)$/.test(version.output.trim()), 'CLAUDE_VERSION_UNAVAILABLE');
-  const help = await boundedProcess(program, ['--help'], { cwd, signal, timeoutMs: 5000, maxBytes: 131072 }); await help.settled;
+  const help = await boundedProcess(program, ['--help'], { cwd, signal, runtime, timeoutMs: 5000, maxBytes: 131072 }); await help.settled;
   requireValue(help.code === 0 && !help.stopped && CLAUDE_FLAGS.every(f => help.output.includes(f)), 'CLAUDE_FLAGS_UNSUPPORTED');
   return version.output.trim();
 }

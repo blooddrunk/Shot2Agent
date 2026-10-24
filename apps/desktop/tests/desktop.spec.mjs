@@ -190,12 +190,13 @@ test('Remote save errors preserve masked input, explain the failing stage and al
 test('Remote picker groups other computers, hides historical versions and identifies their default Agent', async ({ page }) => {
   await add(page, 'codex', 'this-pc-agent');
   const core = openCore(join(root, 'picker-relay'), 'remote');
-  const relay = await createRelay(core, ['a', 'b', 'c'].map(id => ({ ownerId: 'picker', deviceId: id, role: 'desktop', token: id.repeat(40) })));
+  const relay = await createRelay(core, ['a', 'b', 'c', 'linux'].map(id => ({ ownerId: 'picker', deviceId: id, role: id === 'linux' ? 'worker' : 'desktop', token: id === 'linux' ? 'l'.repeat(40) : id.repeat(40) })));
   try {
     const url = await relay.listen({ host: '127.0.0.1', port: 0 });
     const profile = { id: 'remote-codex', version: 'current', fingerprint: FAKE_PROFILE.fingerprint, provider: 'codex' };
     await new RemoteClient(url, 'b'.repeat(40)).presence('Shared name', [{ ...profile, version: 'historical', selectable: false }, { ...profile, selectable: true, isDefault: true }], true);
     await new RemoteClient(url, 'c'.repeat(40)).presence('Shared name', [{ ...profile, id: 'other-agent' }], false);
+    await new RemoteClient(url, 'l'.repeat(40)).presence('Linux VPS', [{ ...profile, id: 'vps-glm', provider: 'claude-compatible-endpoint', isDefault: true }], true);
     await nav(page, '设置');
     await page.getByLabel('Relay HTTPS 地址', { exact: true }).fill(url);
     await page.getByLabel('这台电脑的名称', { exact: true }).fill('Shared name');
@@ -203,10 +204,11 @@ test('Remote picker groups other computers, hides historical versions and identi
     await page.getByRole('button', { name: '保存连接', exact: true }).click();
     await page.getByRole('button', { name: '测试连接 / 刷新电脑', exact: true }).click();
     const picker = page.getByLabel('远程电脑及已批准 Agent', { exact: true });
-    await expect(picker.locator('optgroup')).toHaveCount(2);
+    await expect(picker.locator('optgroup')).toHaveCount(3);
     await expect(picker.locator('optgroup').nth(0)).toHaveAttribute('label', 'Shared name · b · 在线');
     await expect(picker.locator('optgroup').nth(1)).toHaveAttribute('label', 'Shared name · c · 已暂停接收');
-    await expect(picker.locator('option')).toHaveCount(3);
+    await expect(picker.locator('optgroup').nth(2)).toHaveAttribute('label', 'Linux VPS · linux · 在线');
+    await expect(picker.locator('option')).toHaveCount(4);
     await expect(picker).toContainText('Codex CLI · remote-codex · 对方默认');
     await expect(picker).not.toContainText('historical'); await expect(picker).not.toContainText('this-pc-agent');
     await expect(page.getByText(/本机作为 B 接收任务时，无需选择远程目标/)).toBeVisible();
@@ -215,6 +217,10 @@ test('Remote picker groups other computers, hides historical versions and identi
     await expect(page.getByText('已选远程电脑：Shared name · b · 在线', { exact: true })).toBeVisible();
     await page.getByRole('group', { name: '跨设备处理', exact: true }).screenshot({ path: 'build/ui-evidence/m10-current-agents.png' });
     expect(desktop.settings.remote.target.version).toBe('current'); expect(testsSent).toBe(0);
+    await picker.selectOption(JSON.stringify(['linux', 'vps-glm', 'current']));
+    await expect(page.getByText('已选远程电脑：Linux VPS · linux · 在线', { exact: true })).toBeVisible();
+    expect(desktop.settings.remote.target).toMatchObject({ deviceId: 'linux', id: 'vps-glm', version: 'current', provider: 'claude-compatible-endpoint' });
+    await page.getByRole('group', { name: '跨设备处理', exact: true }).screenshot({ path: 'build/ui-evidence/m12-linux-picker.png' });
     // With only this computer online, receiving remains available without a target selection.
     desktop.remote.workers = desktop.remote.workers.filter(w => w.deviceId === 'a');
     await page.reload(); await nav(page, '设置');

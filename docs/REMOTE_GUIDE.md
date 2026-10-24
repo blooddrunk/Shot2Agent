@@ -1,5 +1,7 @@
 # 跨设备处理（M10 / 1.1.0-dev.1）
 
+M12-V：处理设备现在也可以是部署人员准备的 [Linux VPS Worker](../deploy/relay/WORKER.md)。在第 4 步选择 `Linux VPS` 下的已批准助手即可；无需在 Windows 配置 Linux 路径、CLI Profile 或 GLM Token。Worker 的 provider/精确版本仍绑定在提交时，旧任务不随选择变化。Linux [验证记录](M12_V_VALIDATION.md)与原 Windows/M11-X 物理 PASS 分开保存。
+
 这是开发候选版，不是正式 v1.1.0。Local 仍默认在本机处理，不需要 Relay；Remote 将你提交的截图经私人 VPS 交给另一台电脑上已批准的 Agent。网页版历史、移动推送及自动 Agent 重跑不在本轮范围。自动化与真实设备观察分别记录在 [验证记录](M10_R_VALIDATION.md)。
 
 ## 普通使用：A 截图，B 处理
