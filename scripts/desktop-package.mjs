@@ -51,12 +51,12 @@ for (const file of sourceFiles) { mkdirSync(dirname(join(relaySource, file)), { 
 mkdirSync(join(relaySource, 'docs'), { recursive: true });
 for (const file of ['REMOTE_GUIDE.md', 'M10_R_VALIDATION.md']) copyFileSync(`docs/${file}`, join(relaySource, 'docs', file));
 writeFileSync(join(relaySource, 'SOURCE.txt'), execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }));
-writeFileSync(join(out, 'BUILD.txt'), `Shot2Agent M9-L ${APP_VERSION}\nCommit: ${execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()}\nNode: ${process.version}\nWindows x64 portable build. WebView2 required.\nLaunch Shot2Agent.exe for Local GUI setup, capture, result delivery and history; no Relay or Fake task execution.\nStart Codex.cmd is an optional compatibility launcher. Start legacy Local.cmd opens the original Shot2Agent history root.\nStart acceptance.cmd is a developer-only isolated Fake root, delayed 8s.\nClose hides to tray. 托盘 > 退出 Shot2Agent stops coordinator and Agent.\n`);
+writeFileSync(join(out, 'BUILD.txt'), `Shot2Agent M10-R development candidate ${APP_VERSION}\nCommit: ${execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()}\nNode: ${process.version}\nWindows x64 portable build. WebView2 required.\nLaunch Shot2Agent.exe for GUI setup, capture, result delivery and history. Local is default; Remote is an explicit optional destination configured in Settings.\nStart Codex.cmd is an optional compatibility launcher. Start legacy Local.cmd opens the original Shot2Agent history root.\nStart acceptance.cmd is a fresh isolated Fake root, delayed 8s. Start Remote acceptance.cmd is a restartable isolated Fake root beside this ZIP; see REMOTE_GUIDE.md.\nClose hides to tray. 托盘 > 退出 Shot2Agent stops coordinator and Agent.\n`);
 cpSync('docs/LOCAL_V1_GUIDE.md', join(out, 'Windows instructions.md'));
 cpSync('docs/LOCAL_V1_GUIDE.md', join(out, 'LOCAL_V1_GUIDE.md'));
 cpSync('docs/USER_GUIDE.md', join(out, 'USER_GUIDE.md'));
 cpSync('THIRD_PARTY_NOTICES.md', join(out, 'THIRD_PARTY_NOTICES.md'));
-cpSync('docs/V1_0_2_VALIDATION.md', join(out, 'Validation and acceptance.md'));
+cpSync('docs/M10_R_VALIDATION.md', join(out, 'Validation and acceptance.md'));
 cpSync('docs/V1_0_2_VALIDATION.md', join(out, 'V1_0_2_VALIDATION.md'));
 process.stdout.write(`PASS portable layout: ${out}\n`);
 
