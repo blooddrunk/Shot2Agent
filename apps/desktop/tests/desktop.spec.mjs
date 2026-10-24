@@ -6,6 +6,11 @@ import sharp from "sharp";
 import { DesktopController } from "../../../packages/desktop/src/controller.ts";
 import { FakeAgent, FAKE_PROFILE } from "../../../packages/worker/src/fake.ts";
 import { makeCli, credentialStore } from "./fixtures.mjs";
+import { openCore } from '../../../packages/core/src/core.ts';
+import { createRelay } from '../../../services/relay/src/server.ts';
+import { RemoteClient } from '../../../services/relay/src/client.ts';
+import { runOnce } from '../../../packages/worker/src/worker.ts';
+import { APP_VERSION } from '../../../packages/desktop/src/version.ts';
 
 let desktop, root, workspace, testsSent, gatewayFailureCode, pickerSelection;
 const previousLocalAppData = process.env.LOCALAPPDATA;
@@ -91,6 +96,109 @@ const nav = (page, name) =>
     .getByRole("navigation")
     .getByRole("button", { name, exact: true })
     .click();
+
+for (const width of [1040, 720, 480]) test(`M10 Remote GUI setup, secure token, target selection, batch/history and Local return ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 760 });
+  const core = openCore(join(root, 'relay-test'), 'remote');
+  const relay = await createRelay(core, [ { ownerId: 'ui-test', deviceId: 'a', role: 'desktop', token: 'a'.repeat(40) }, { ownerId: 'ui-test', deviceId: 'b', role: 'desktop', token: 'b'.repeat(40) } ]);
+  try {
+    const url = await relay.listen({ host: '127.0.0.1', port: 0 }); const worker = new RemoteClient(url, 'b'.repeat(40));
+    await worker.presence('合成测试电脑 B', [{ id: FAKE_PROFILE.id, version: FAKE_PROFILE.version, fingerprint: FAKE_PROFILE.fingerprint, provider: 'fake' }], true);
+    await nav(page, '设置');
+    await page.getByLabel('Relay HTTPS 地址', { exact: true }).fill(` ${url} `); await page.getByLabel('设备 Token', { exact: true }).fill(` ${'a'.repeat(40)} `);
+    await page.getByRole('button', { name: '保存连接', exact: true }).click();
+    await expect(page.getByLabel('设备 Token', { exact: true })).toHaveValue('');
+    await expect(page.getByLabel('Relay HTTPS 地址', { exact: true })).toHaveValue(url);
+    const connectionButtons = page.getByRole('group', { name: '跨设备处理', exact: true }).locator('.button-row');
+    expect(await connectionButtons.evaluate(row => {
+      const style = window.getComputedStyle(row), boxes = [...row.children].map(b => b.getBoundingClientRect());
+      return style.display === 'flex' && style.flexWrap === 'wrap' && parseFloat(style.gap) >= 8 &&
+        boxes.every((box, i) => i === 0 || box.left - boxes[i - 1].right >= 7.5 || box.top - boxes[i - 1].bottom >= 7.5);
+    })).toBe(true);
+    await page.getByRole('button', { name: '测试连接 / 刷新电脑', exact: true }).click();
+    await expect(page.getByText('Relay 已连接', { exact: false })).toBeVisible();
+    await page.getByLabel('远程电脑及已批准 Agent', { exact: true }).selectOption(JSON.stringify(['b', FAKE_PROFILE.id, FAKE_PROFILE.version]));
+    await page.getByLabel('新任务处理位置', { exact: true }).selectOption('remote');
+    await expect.poll(() => desktop.settings.remote.mode).toBe('remote');
+    expect(JSON.stringify(await desktop.dispatch({ v: 1, command: 'snapshot' }))).not.toContain('a'.repeat(40));
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.getByRole('group', { name: '跨设备处理', exact: true }).screenshot({ path: `build/ui-evidence/m10-remote-${width}.png` });
+    const paths = [];
+    for (let i = 0; i < 2; i++) { const path = join(root, `remote-${i}.png`); writeFileSync(path, await sharp({ create: { width: 16, height: 16, channels: 3, background: i ? 'blue' : 'red' } }).png().toBuffer()); paths.push(path); }
+    pickerSelection = paths; await nav(page, '首页');
+    await expect(page.getByRole('heading', { name: 'b · fake-readonly', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: '添加图片文件…', exact: true }).click(); await page.getByRole('button', { name: '提交 2 张为一个任务', exact: true }).click();
+    await expect.poll(() => desktop.app.list().length).toBe(1); expect(desktop.app.core.store.tasks()).toHaveLength(0);
+    await desktop.dispatch({ v: 1, command: 'remote-test' }); await runOnce(worker, new FakeAgent(), [FAKE_PROFILE]); await desktop.dispatch({ v: 1, command: 'remote-test' });
+    await nav(page, '历史记录'); await expect(page.locator('.tasks li')).toHaveCount(1); await expect(page.locator('.tasks li')).toContainText('处理完成');
+    await nav(page, '设置'); await page.getByLabel('新任务处理位置', { exact: true }).selectOption('local'); await page.getByRole('button', { name: '删除设备 Token', exact: true }).click();
+    await expect(page.getByText('尚未配置 Relay', { exact: true })).toBeVisible(); expect(desktop.app.list()[0].status).toBe('succeeded');
+  } finally { await relay.close(); core.close(); }
+});
+
+test('Remote save errors preserve masked input, explain the failing stage and allow correction', async ({ page }) => {
+  await nav(page, '设置');
+  await page.getByLabel('Relay HTTPS 地址', { exact: true }).fill('https://relay.example.com');
+  const tokenInput = page.getByLabel('设备 Token', { exact: true });
+  await tokenInput.fill('synthetic short');
+  await page.getByRole('button', { name: '保存连接', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('设备 Token 格式无效');
+  await expect(tokenInput).toHaveValue('synthetic short');
+  await expect(tokenInput).toHaveAttribute('type', 'password');
+  const store = desktop.credentials, save = store.save, read = store.read;
+  await tokenInput.fill('s'.repeat(40));
+  store.save = async () => { throw Error('synthetic-private-secret-must-not-show'); };
+  await page.getByRole('button', { name: '保存连接', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Windows 凭据管理器未能保存设备 Token');
+  await expect(page.getByRole('alert')).not.toContainText('synthetic-private-secret');
+  await expect(tokenInput).toHaveValue('s'.repeat(40));
+  store.save = save; store.read = async () => { throw Error('synthetic read failure'); };
+  await page.getByRole('button', { name: '保存连接', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('无法从 Windows 凭据管理器正确读回');
+  store.read = read;
+  await page.getByRole('button', { name: '保存连接', exact: true }).click();
+  await expect(tokenInput).toHaveValue('');
+  await expect(page.getByRole('button', { name: '测试连接 / 刷新电脑', exact: true })).toBeEnabled();
+  await tokenInput.fill('t'.repeat(40));
+  await expect(page.getByRole('button', { name: '测试连接 / 刷新电脑', exact: true })).toBeDisabled();
+  expect(testsSent).toBe(0);
+});
+
+test('Remote picker groups other computers, hides historical versions and identifies their default Agent', async ({ page }) => {
+  await add(page, 'codex', 'this-pc-agent');
+  const core = openCore(join(root, 'picker-relay'), 'remote');
+  const relay = await createRelay(core, ['a', 'b', 'c'].map(id => ({ ownerId: 'picker', deviceId: id, role: 'desktop', token: id.repeat(40) })));
+  try {
+    const url = await relay.listen({ host: '127.0.0.1', port: 0 });
+    const profile = { id: 'remote-codex', version: 'current', fingerprint: FAKE_PROFILE.fingerprint, provider: 'codex' };
+    await new RemoteClient(url, 'b'.repeat(40)).presence('Shared name', [{ ...profile, version: 'historical', selectable: false }, { ...profile, selectable: true, isDefault: true }], true);
+    await new RemoteClient(url, 'c'.repeat(40)).presence('Shared name', [{ ...profile, id: 'other-agent' }], false);
+    await nav(page, '设置');
+    await page.getByLabel('Relay HTTPS 地址', { exact: true }).fill(url);
+    await page.getByLabel('这台电脑的名称', { exact: true }).fill('Shared name');
+    await page.getByLabel('设备 Token', { exact: true }).fill('a'.repeat(40));
+    await page.getByRole('button', { name: '保存连接', exact: true }).click();
+    await page.getByRole('button', { name: '测试连接 / 刷新电脑', exact: true }).click();
+    const picker = page.getByLabel('远程电脑及已批准 Agent', { exact: true });
+    await expect(picker.locator('optgroup')).toHaveCount(2);
+    await expect(picker.locator('optgroup').nth(0)).toHaveAttribute('label', 'Shared name · b · 在线');
+    await expect(picker.locator('optgroup').nth(1)).toHaveAttribute('label', 'Shared name · c · 已暂停接收');
+    await expect(picker.locator('option')).toHaveCount(3);
+    await expect(picker).toContainText('Codex CLI · remote-codex · 对方默认');
+    await expect(picker).not.toContainText('historical'); await expect(picker).not.toContainText('this-pc-agent');
+    await expect(page.getByText(/本机作为 B 接收任务时，无需选择远程目标/)).toBeVisible();
+    await expect(page.getByText(/本机可接收任务的当前助手/)).toContainText('this-pc-agent（本机默认）');
+    await picker.selectOption(JSON.stringify(['b', 'remote-codex', 'current']));
+    await expect(page.getByText('已选远程电脑：Shared name · b · 在线', { exact: true })).toBeVisible();
+    await page.getByRole('group', { name: '跨设备处理', exact: true }).screenshot({ path: 'build/ui-evidence/m10-current-agents.png' });
+    expect(desktop.settings.remote.target.version).toBe('current'); expect(testsSent).toBe(0);
+    // With only this computer online, receiving remains available without a target selection.
+    desktop.remote.workers = desktop.remote.workers.filter(w => w.deviceId === 'a');
+    await page.reload(); await nav(page, '设置');
+    await expect(picker.locator('optgroup')).toHaveCount(0);
+    await expect(page.getByText(/尚未发现其他电脑的当前助手/)).toBeVisible();
+  } finally { await relay.close(); core.close(); }
+});
 
 test('hotkeys save before Agent setup even when CLI discovery is invalid', async ({ page }) => {
   desktop.discovery = [{ provider: 'codex', path: '', status: 'invalid' }];
@@ -723,7 +831,7 @@ test("M8 Copy files distinguishes native replacement from verified success witho
 // Browser/controller evidence only. Actual locked clipboard cleanup runs in Windows CI.
 test("M9 settings show version, cache, backup guidance and confirmed cleanup", async ({ page }) => {
   await nav(page, "设置");
-  await expect(page.getByRole("heading", { name: "Shot2Agent 1.0.2" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: `Shot2Agent ${APP_VERSION}` })).toBeVisible();
   await expect(page.getByRole("region", { name: "文件复制缓存" })).toContainText("0 / 1000");
   await page.getByRole("button", { name: "清理旧复制缓存" }).click();
   await expect(page.getByText(/已清理 0 个旧缓存文件/)).toBeVisible();

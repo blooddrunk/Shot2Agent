@@ -37,7 +37,9 @@ export class PrivateBlobStore implements BlobStore {
   }
   read(reference: FileReference): Buffer {
     const path = this.path(reference.fileId);
-    requireValue(lstatSync(path).isFile() && !lstatSync(path).isSymbolicLink(), 'UNSAFE_FILE');
+    const st = lstatSync(path);
+    requireValue(st.isFile() && !st.isSymbolicLink(), 'UNSAFE_FILE');
+    requireValue(st.size === reference.byteSize && st.size <= IMAGE_LIMITS.maxTotalBytes, 'BLOB_INTEGRITY', 409);
     const fd = openSync(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
     let bytes: Buffer;
     try { bytes = readFileSync(fd); } finally { closeSync(fd); }

@@ -2,6 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { lstatSync, readFileSync } from 'node:fs';
 import sharp from 'sharp';
 import { openCore } from '../../core/src/core.ts';
+import type { WorkerPort } from '../../core/src/core.ts';
+import type { TaskView } from '../../core/src/model.ts';
+import type { SubmissionMetadata } from '../../contracts/src/index.ts';
 import { sha256, verifyImage, withImageDecode } from '../../core/src/blobs.ts';
 import { requireValue } from '../../core/src/model.ts';
 import type { AgentAdapter, ImageContentType, Profile } from '../../contracts/src/index.ts';
@@ -15,6 +18,12 @@ import { deliver, resultFiles, deliveryFailure } from './delivery.ts';
 import type { DeliveryConfig } from './delivery.ts';
 export const LOCAL_IDENTITY = { ownerId: 'local-user', deviceId: 'local-pc' };
 export class LocalApp {
+  remote?: {
+    enabled(): boolean;
+    binding(): Pick<SubmissionMetadata, 'profileId' | 'profileVersion' | 'profileFingerprint' | 'provider' | 'targetWorkerId'>;
+    enqueue(metadata: SubmissionMetadata, images: Buffer[]): Promise<void>;
+    list(): TaskView[]; get(id: string): TaskView | undefined; delete(ids: readonly string[]): void;
+  };
   readonly core: ReturnType<typeof openCore>; readonly state: LocalState;
   private pendingImage?: ClipboardImage & { source?: string };
   private pendingQueue: (ClipboardImage & { source?: string })[] = [];
@@ -28,7 +37,8 @@ export class LocalApp {
     requireValue(entry, 'UNAPPROVED_PROFILE'); this.selected = entry;
   } readonly config: DeliveryConfig; readonly clipboard?: ClipboardPort;
   constructor(root: string, adapter: AgentAdapter, profile: Profile,
-    config: DeliveryConfig, clipboard?: ClipboardPort, registry?: readonly ExecutionEntry[]) {
+    config: DeliveryConfig, clipboard?: ClipboardPort, registry?: readonly ExecutionEntry[], remote?: LocalApp['remote']) {
+    this.remote = remote;
     this.adapter = adapter; this.registry = Object.freeze((registry ?? [{ adapter, profile }]).map(e => Object.freeze({ adapter: e.adapter, profile: Object.freeze(structuredClone(e.profile)) })));
     requireValue(new Set(this.registry.map(e => `${e.profile.id}:${e.profile.version}`)).size === this.registry.length, 'DUPLICATE_PROFILE');
     this.selected = this.registry.find(e => e.profile.id === profile.id && e.profile.version === profile.version)!;
@@ -36,7 +46,7 @@ export class LocalApp {
     this.core = openCore(root); this.state = new LocalState(root);
     this.recoverTaskDeletions();
     // Upgrade adds a destination without notifying old completed history.
-    for (const task of this.list()) if (task.status === 'succeeded' && !this.state.get(task.submission.taskId, 'notification'))
+    for (const task of this.list()) if (task.mode === 'local' && task.status === 'succeeded' && !this.state.get(task.submission.taskId, 'notification'))
       this.state.put(task.submission.taskId, 'notification', { status: 'disabled', attempts: 0 });
   }
   /** Atomically changes the configuration available to future claims; current task bindings stay pinned. */
@@ -70,6 +80,9 @@ export class LocalApp {
   }
   async submitImages(inputs: readonly Buffer[], baseline?: Baseline, force = true, source = 'composer'): Promise<string | undefined> {
     const selected = this.selected;
+    // Snapshot mode and target before awaiting image preparation. Changes affect future submissions only.
+    const remote = this.remote?.enabled() ? this.remote : undefined;
+    const binding = remote ? remote.binding() : { profileId: selected.profile.id, profileVersion: selected.profile.version, provider: selected.adapter.name, profileFingerprint: selected.profile.fingerprint };
     requireValue(inputs.length >= 1 && inputs.length <= 5, 'BATCH_IMAGE_COUNT');
     requireValue(inputs.reduce((n, b) => n + b.length, 0) <= IMAGE_LIMITS.maxTotalBytes, 'BATCH_OVER_60_MIB');
     const prepared = [];
@@ -80,9 +93,9 @@ export class LocalApp {
       this.lastCaptureStatus = 'duplicate'; return undefined;
     }
     try {
-      await this.core.submit(LOCAL_IDENTITY, taskId, { taskId, profileId: selected.profile.id, profileVersion: selected.profile.version,
-        provider: selected.adapter.name, profileFingerprint: selected.profile.fingerprint,
-        images: prepared.map(i => i.metadata) }, prepared.map(i => i.bytes));
+      const metadata = { taskId, ...binding, images: prepared.map(i => i.metadata) };
+      if (remote) await remote.enqueue(metadata, prepared.map(i => i.bytes));
+      else await this.core.submit(LOCAL_IDENTITY, taskId, metadata, prepared.map(i => i.bytes));
     } catch (error) { this.state.forgetCapture(taskId); throw error; }
     this.lastCaptureStatus = 'queued'; return taskId;
   }
@@ -113,10 +126,10 @@ export class LocalApp {
     const id = await this.ingest(image.bytes, auto, { session: this.clipboard.session, sequence: image.sequence });
     return { changed: true, image: true, ...(id ? { id } : {}) };
   }
-  async work(signal?: AbortSignal): Promise<boolean> {
+  async work(signal?: AbortSignal, port?: WorkerPort, registry: readonly ExecutionEntry[] = this.registry): Promise<boolean> {
     if (this.working || this.cleanupBlocked) return false; this.state.acquireWorker(); this.working = true;
     try {
-      const worked = await runOnce(this.core.worker(LOCAL_IDENTITY), this.adapter, this.registry.map(e => e.profile), 5000, signal, this.registry);
+      const worked = await runOnce(port ?? this.core.worker(LOCAL_IDENTITY), registry[0]?.adapter ?? this.adapter, registry.map(e => e.profile), 5000, signal, registry);
       for (const task of this.list()) await deliver(task, this.config, this.state, this.clipboard);
       return worked;
     } catch (error) {
@@ -129,9 +142,9 @@ export class LocalApp {
     do {
       const page = this.core.list(LOCAL_IDENTITY.ownerId, cursor, 100); tasks.push(...page.tasks); cursor = page.nextCursor;
     } while (cursor);
-    return tasks;
+    return tasks.concat(this.remote?.list() ?? []);
   }
-  get(id: string) { return this.core.get(LOCAL_IDENTITY.ownerId, id); }
+  get(id: string) { return this.remote?.get(id) ?? this.core.get(LOCAL_IDENTITY.ownerId, id); }
   async copy(id: string, payload: 'text' | 'files' = 'text'): Promise<void> {
     const task = this.get(id); requireValue(task.result && this.clipboard, 'RESULT_OR_CLIPBOARD_UNAVAILABLE');
     const old = this.state.get(id, 'clipboard');
@@ -164,7 +177,9 @@ export class LocalApp {
     }
     // The durable intent is written only after review and stop checks pass.
     this.state.beginTaskDeletion(ids);
-    this.core.deleteTasks(LOCAL_IDENTITY.ownerId, ids, options);
+    const localIds = ids.filter(id => !this.remote?.get(id));
+    if (localIds.length) this.core.deleteTasks(LOCAL_IDENTITY.ownerId, localIds, options);
+    this.remote?.delete(ids.filter(id => !localIds.includes(id)));
     this.core.recoverBlobCleanup();
     this.state.finishTaskDeletion(ids);
     return ids.slice();
@@ -173,7 +188,10 @@ export class LocalApp {
     const pending = this.state.pendingTaskDeletions();
     if (!pending.length) return;
     // Journal entries already passed the review/stop checks before the crash.
-    this.core.deleteTasks(LOCAL_IDENTITY.ownerId, pending, { allowMissing: true, reviewedUnknown: true });
+    const remoteIds = pending.filter(id => this.remote?.get(id));
+    const localIds = pending.filter(id => !remoteIds.includes(id));
+    if (localIds.length) this.core.deleteTasks(LOCAL_IDENTITY.ownerId, localIds, { allowMissing: true, reviewedUnknown: true });
+    this.remote?.delete(remoteIds);
     this.core.recoverBlobCleanup();
     this.state.finishTaskDeletion(pending);
   }

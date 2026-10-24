@@ -76,6 +76,7 @@ export interface SubmissionMetadata {
   provider?: string;
   profileFingerprint?: string;
   taskInstructions?: string;
+  targetWorkerId?: string;
 }
 
 export type ValidationResult =
@@ -103,6 +104,7 @@ function isCleanFileName(input: unknown): input is string {
 export function validateSubmissionMetadata(input: unknown): ValidationResult {
   if (!isRecord(input)) return { ok: false, errors: ['submission must be an object'] };
   const errors: string[] = [];
+  if (input.targetWorkerId !== undefined && (typeof input.targetWorkerId !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(input.targetWorkerId) || !input.provider || !input.profileFingerprint)) errors.push('invalid target worker binding');
 
   if (typeof input.taskId !== 'string' ||
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.taskId)) {
@@ -159,6 +161,7 @@ export function validateSubmissionMetadata(input: unknown): ValidationResult {
       taskId: input.taskId as string,
       profileId: input.profileId as string,
       profileVersion: input.profileVersion as string,
+      ...(input.targetWorkerId === undefined ? {} : { targetWorkerId: input.targetWorkerId as string }),
       ...(input.provider === undefined ? {} : { provider: input.provider as string }),
       ...(input.profileFingerprint === undefined ? {} : { profileFingerprint: input.profileFingerprint as string }),
       images: (input.images as ImageMetadata[]).map((image) => ({

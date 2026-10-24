@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $stage = 'INPUT'
 try {
   if ($TokenFromPipe -and $Action -ne 'add') { exit 2 }
-  if ($Reference -notmatch '^Shot2Agent-Gateway-[0-9a-f-]{36}$') { exit 2 }
+  if ($Reference -notmatch '^Shot2Agent-(Gateway|Relay)-[0-9a-f-]{36}$') { exit 2 }
   $stage = 'NATIVE_TYPE'
   Add-Type -TypeDefinition @'
 using System;

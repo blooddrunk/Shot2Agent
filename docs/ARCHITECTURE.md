@@ -2,6 +2,8 @@
 
 # Architecture and trust boundaries
 
+M10 development adds the optional desktop Remote path; see [Remote guide](REMOTE_GUIDE.md) and [executed verification](M10_R_VALIDATION.md). `RemoteQueue` stores an isolated bounded outbox/mirror under `remote/`; Local executable tasks remain in the existing Core database. A LocalApp submission port snapshots destination/target at submission, while one existing working/cleanup gate and OS process-owned worker lock serialize Local and Remote execution. No local HTTP server is added. Outbound `RemoteClient` carries capabilities, task leases and verified results; only locally submitted origin IDs feed automatic delivery. The same LocalState capture baseline and independent delivery reservations service both histories. Historical design sections below retain later M11 web/push proposals, not completion claims.
+
 > M3-L desktop update: Tauri 2/Vue 3 uses a restricted anonymous-pipe Node child; no network listener or Relay. Windows Job containment owns descendants; EOF/quit aborts and settles work. Versioned capture settings share M2 settings with backup; SQLite tasks are retained. Worker exclusion is transactional and PID-aware. See [desktop operation](M3_WINDOWS_RUN.md) and [evidence](M3_VALIDATION.md).
 
 > M2-L update (2026-10-20): M2-L now adds a direct Local CLI/coordinator (`apps/cli/src/mvp.ts`), Windows clipboard helper, worker-owned Codex registry and independent Local delivery; no HTTP import/service. Core tasks remain in tasks.sqlite; Local baselines/provenance/channel reservations are in local.sqlite. See [Local operation and boundaries](LOCAL_MVP_USAGE.md). The M3-L Local tray shell now hosts this pipeline; Remote receivers below remain future V1 work.

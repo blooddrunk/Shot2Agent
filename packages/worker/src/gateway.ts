@@ -29,7 +29,7 @@ export function assertGatewayVision(g: GatewayConfig): void {
 export const credentialScript = fileURLToPath(new URL('./gateway-credential.ps1', import.meta.url));
 export function credentialCommand(action: 'add' | 'read' | 'delete', reference: string): { executable: string; args: string[]; env: NodeJS.ProcessEnv } {
   requireValue(process.platform === 'win32', 'WINDOWS_SECURE_STORE_REQUIRED');
-  requireValue(/^Shot2Agent-Gateway-[0-9a-f-]{36}$/.test(reference), 'INVALID_CREDENTIAL_REF');
+  requireValue(/^Shot2Agent-(Gateway|Relay)-[0-9a-f-]{36}$/.test(reference), 'INVALID_CREDENTIAL_REF');
   return { executable: join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
     // This is a fixed, app-bundled helper. Downloaded ZIPs carry Mark-of-the-Web,
     // so RemoteSigned would otherwise refuse it for some Windows users. Scope the

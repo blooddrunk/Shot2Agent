@@ -1,5 +1,13 @@
 # V1 logical protocol / task lifecycle
 
+## M10 Remote implementation delta
+
+Desktop Remote submissions additionally pin `targetWorkerId`, provider and profile fingerprint. The shared core matches the authenticated worker device on claim and enforces the pinned fingerprint on start for targeted tasks. Legacy unbound M1 fixtures remain supported; desktop-token submissions require an approved published target. New `desktop` device tokens can capture/read/work within one owner, while the original capture/viewer/worker role restrictions remain. Never infer a worker executable/workspace/secret from this metadata.
+
+`GET /v1/session` returns the authenticated owner/device/role. `POST /v1/worker/presence` accepts only label, accepting flag and bounded approved profile ID/version/fingerprint/provider records; device identity comes from auth. `GET /v1/workers` returns same-owner capabilities/last-seen only. Presence is durable in the existing versioned settings table, claims from desktop devices require accepting/fresh presence. `/healthz` is anonymous and contains only readiness/protocol. Registry rotation is read on every authenticated request. All other routes remain authenticated, private and no-store.
+
+Origin outbox state is separate from TaskState: `pending_upload`, `acknowledged`, `upload_failed`. Each separate Remote database record holds schema version 1, immutable normalized metadata/key/endpoint/origin and verified private image references before networking. Existing schema-2 Local SQLite files are not rewritten or repurposed; optional Remote settings migrate by absence/default Local. Transport retry reuses the original identity and digest; no mode fallback or new execution attempt. Response bodies and artifact bytes are bounded and checked before result publication. See [validation](M10_R_VALIDATION.md).
+
 > M2-L update (2026-10-20): M2-L preserves shared task transitions and adds local-only capture/delivery receipts outside task.status. Started Codex interruption/nonzero exit/missing bounded final output is conservatively execution_unknown and never auto-replayed. Input cap is now 64,000,000 pixels and 32,768 per dimension; 20 MiB/image, 60 MiB/task remain. See [Local usage](LOCAL_MVP_USAGE.md).
 
 **Status:** V1 logical contract. M1 serves task upload/history/files and Worker claim/start/heartbeat/complete/fail; cancel/review/retry remain planned. Exact M1 shapes, limits and decisions are documented in [M1](M1.md). **Local mode uses the shared task application service directly, without HTTP Relay/VPS or remote task upload.** See [Deployment modes](DEPLOYMENT_MODES.md).
@@ -75,3 +83,6 @@ For M4, Remote mode fetches pending results using authenticated outbound request
 - Atomically claim; leases expire using server time rather than trusting worker clocks.
 - Test idempotency same-input replay, key collision, double claim, stale heartbeat/complete, restart persistence, poisoned file names, and crash-before/after-start.
 - See the executable starter in `packages/contracts/src/index.ts`. It validates immutable submission metadata, shared lifecycle and bounded Agent results. The shared core and adapters enforce byte integrity, identity and attempt fencing.
+## Remote capability discovery
+
+Worker presence retains approved execution versions for immutable queued tasks. Optional capability booleans `selectable` and `isDefault` distinguish current new-task choices from retained historical/archived execution entries. `/v1/workers` returns other devices only and filters nonselectable entries; older publishers without flags are reduced to their last approved version per Agent id. Claims still validate against the retained full presence, and start/fencing still check the exact task fingerprint. Devices/workspaces/programs/credentials are never selected by these display hints. Capability and claim lists are bounded to 32 entries, matching the existing approved registry limit.

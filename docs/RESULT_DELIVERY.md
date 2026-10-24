@@ -110,3 +110,7 @@ Provider selection applies to new submissions only. Execution uses the approved 
 ## Default selection follow-up — 2026-10-21
 
 Fresh desktop settings preselect Always, requiring explicit overwrite consent before use; capture starts disabled and unapproved delivery remains manual. Existing installations retain their saved mode. This change follows the operator's report of repeated Smart sequence conflicts. It does not certify a Smart fix or change the sticky guard on existing Smart receipts. CLI initialization remains manual by default.
+
+## M10 Remote return to origin
+
+The development Remote receiver downloads only IDs already durably submitted by this origin. It checks endpoint/owner/device, the immutable normalized request, target Worker/profile provenance, result bounds, artifact filenames/sizes/SHA-256 before caching a terminal result. It never auto-delivers another device's same-owner history. The existing independent Markdown save, text/Markdown-file clipboard and notification reservations then apply, including sticky Smart baselines and history-only. File clipboard materializes the verified Markdown answer on A using the existing retained cache; arbitrary binary attachments and mobile push remain outside M10. Retry of delivery never claims or executes an Agent. See [Remote guide](REMOTE_GUIDE.md) and [verification](M10_R_VALIDATION.md).
