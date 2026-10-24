@@ -5,12 +5,24 @@ use std::sync::{
     Arc, Mutex,
 };
 use std::time::{Duration, Instant};
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct Typing {
     busy: Arc<AtomicBool>,
     cancel: Arc<AtomicBool>,
     closed: Arc<AtomicBool>,
     status: Arc<Mutex<Value>>,
+}
+impl Default for Typing {
+    fn default() -> Self {
+        Self {
+            busy: Arc::new(AtomicBool::new(false)),
+            cancel: Arc::new(AtomicBool::new(false)),
+            closed: Arc::new(AtomicBool::new(false)),
+            status: Arc::new(Mutex::new(
+                json!({"phase":"idle","active":false,"sent":0,"total":0}),
+            )),
+        }
+    }
 }
 #[derive(Debug, PartialEq)]
 pub struct Key {
@@ -344,6 +356,13 @@ pub mod platform {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn fresh_runtime_serializes_an_idle_object_before_any_action() {
+        assert_eq!(
+            Typing::default().snapshot(),
+            json!({"phase":"idle","active":false,"sent":0,"total":0})
+        );
+    }
     #[test]
     fn bounds_and_shutdown_cancel_preparation_without_input() {
         let t = Typing::default();

@@ -66,7 +66,7 @@ function record(directory, prefix = '') {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const relative = prefix + entry.name;
     if (entry.isDirectory()) record(join(directory, entry.name), relative + '/');
-    else if (!['MANIFEST.json', 'SMOKE.txt', 'PORTABLE-VERIFY.txt', 'TRAY-SMOKE.txt'].includes(relative)) files[relative] = createHash('sha256').update(readFileSync(join(directory, entry.name))).digest('hex');
+    else if (!['MANIFEST.json', 'SMOKE.txt', 'PORTABLE-VERIFY.txt', 'TRAY-SMOKE.txt', 'UI-SMOKE.txt'].includes(relative)) files[relative] = createHash('sha256').update(readFileSync(join(directory, entry.name))).digest('hex');
   }
 }
 record(out);

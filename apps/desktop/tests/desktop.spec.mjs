@@ -22,7 +22,7 @@ test.beforeEach(async ({ page }) => {
   makeCli(root, "codex");
   makeCli(root, "claude");
   testsSent = 0;
-  nativeRequests = []; nativeRuntime = undefined;
+  nativeRequests = []; nativeRuntime = { capturing: false, captureStatus: '', typing: { phase: 'idle', active: false, sent: 0, total: 0 } };
   pickerSelection = null;
   gatewayFailureCode = "";
   const clipboard = {
@@ -1010,3 +1010,16 @@ for (const width of [1040, 720, 480]) test(`M11 native configuration and respons
 function assertNativeSettings() {
   expect(desktop.settings.native).toEqual({ monitor: 'synthetic-display', save: true, directory: join(root, 'capture-output'), submit: false, clipboard: false, delayMs: 1500, charsPerSecond: 30 });
 }
+
+test('M11 native first snapshot with null typing state keeps the first window rendered', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  nativeRuntime = { capturing: false, captureStatus: '', typing: null };
+  await page.reload();
+  // Cross the initial successful native snapshot and at least one later poll.
+  await page.waitForTimeout(1300);
+  await expect(page.getByRole('button', { name: '截取所选显示器', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '输入剪贴板文本', exact: true })).toBeEnabled();
+  expect(errors).toEqual([]);
+  expect(testsSent).toBe(0);
+});

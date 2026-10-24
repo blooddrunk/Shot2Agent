@@ -116,14 +116,18 @@ fn launch_mode(args: &[String]) -> Result<&'static str, &'static str> {
             "--codex" => "codex",
             "--staging" => "staging",
             "--legacy" => "legacy",
-            "--smoke" | "--tray-smoke" => continue,
+            "--smoke" | "--tray-smoke" | "--ui-smoke" => continue,
             _ => return Err("INVALID_LAUNCH_MODE"),
         };
         if mode.replace(next).is_some() {
             return Err("CONFLICTING_LAUNCH_MODE");
         }
     }
-    if args.iter().any(|a| a == "--smoke" || a == "--tray-smoke") && mode != Some("staging") {
+    if args
+        .iter()
+        .any(|a| matches!(a.as_str(), "--smoke" | "--tray-smoke" | "--ui-smoke"))
+        && mode != Some("staging")
+    {
         return Err("SMOKE_REQUIRES_STAGING");
     }
     Ok(mode.unwrap_or("codex"))
@@ -426,7 +430,7 @@ fn refresh_tray(app: &tauri::AppHandle) {
             "直接输入：{} / {} 字符 · Esc 停止",
             native["typing"]["sent"], native["typing"]["total"]
         ));
-    } else if let Some(phase) = native["typing"]["phase"].as_str() {
+    } else if let Some(phase) = native["typing"]["phase"].as_str().filter(|p| *p != "idle") {
         view["feedback"] = json!(format!("直接输入：{phase} · 打开应用查看详情"));
     }
     if native["capturing"] == true {
@@ -454,6 +458,47 @@ fn quit(app: tauri::AppHandle) {
         app.state::<native::Runtime>().capture.shutdown();
         let _ = call(&app.state::<State>(), json!({"v":1,"command":"quit"}));
         app.exit(0);
+    });
+}
+// Exercise the actual packaged WebView after native snapshot hydration. IPC-only
+// smoke cannot detect a Vue render exception. Only disposable Fake launches qualify.
+fn ui_smoke(app: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
+        let mut consecutive = 0;
+        while std::time::Instant::now() < deadline && consecutive < 8 {
+            let (tx, rx) = mpsc::channel();
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.eval_with_callback(include_str!("ui-smoke.js"), move |result| {
+                    let _ = tx.send(result == "true");
+                });
+            }
+            if rx.recv_timeout(Duration::from_secs(1)) == Ok(true) {
+                consecutive += 1;
+            } else {
+                consecutive = 0;
+            }
+            std::thread::sleep(Duration::from_millis(500));
+        }
+        let passed = consecutive == 8;
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(dir) = exe.parent() {
+                let _ = std::fs::write(
+                    dir.join("UI-SMOKE.txt"),
+                    if passed {
+                        "PASS actual WebView first native snapshot and visible enabled capture/typing controls across eight polls; physical visual acceptance NOT VERIFIED"
+                    } else {
+                        "FAIL FIRST_WINDOW_NOT_RENDERED"
+                    },
+                );
+            }
+        }
+        app.state::<native::Runtime>().capture.shutdown();
+        app.state::<native::Runtime>().typing.shutdown();
+        app.state::<tray::Runtime>().shutdown();
+        let _ = call(&app.state::<State>(), json!({"v":1,"command":"quit"}));
+        let _ = std::fs::remove_dir_all(smoke_root());
+        app.exit(if passed { 0 } else { 1 });
     });
 }
 fn main() {
@@ -627,6 +672,9 @@ fn main() {
                 });
                 return Ok(());
             }
+            if std::env::args().any(|a| a == "--ui-smoke") && mode == "staging" {
+                ui_smoke(app.handle().clone());
+            }
             // Native polling continues while the WebView is hidden/throttled.
             // Setters marshal to Tauri's main thread; never block that thread on RPC.
             let handle = app.handle().clone();
@@ -689,9 +737,15 @@ mod launch_tests {
             Ok("staging")
         );
         assert_eq!(launch_mode(&args(&["--smoke", "--staging"])), Ok("staging"));
+        assert_eq!(
+            launch_mode(&args(&["--staging", "--ui-smoke"])),
+            Ok("staging")
+        );
         for a in [
             &["--smoke"][..],
             &["--tray-smoke"],
+            &["--ui-smoke"],
+            &["--codex", "--ui-smoke"],
             &["--codex", "--tray-smoke"],
             &["--staging", "--codex"],
             &["--root=private"],

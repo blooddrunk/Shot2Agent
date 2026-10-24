@@ -9,7 +9,7 @@
 ## Current status and next goal (2026-10-24)
 
 - Stable Local v1.0.2 is published at `5f0f7ab8e8d4f3cd30aa2b7351fa19aa499e11cb`; preserve its Tag/Release and independent Local behavior. Existing accepted Local native observations do not need another unchanged checklist.
-- M10-R planning #25 and implementation #26 are merged at `83a88bc2a80c8b4c03cd93bba540dafd57850bc1`. User-authorized current goal is **M11-X native capture + direct typing**, before M11-R. Read `docs/M11_X_SCOPE.md`, `docs/M11_X_VALIDATION.md` and the design-only `docs/M12_V_PLAN.md`, alongside the Remote guides. The `1.1.0-dev.2` candidate is not a formal Remote release; check actual PR/main/CI state before continuing.
+- M10-R planning #25 and implementation #26 are merged at `83a88bc2a80c8b4c03cd93bba540dafd57850bc1`. User-authorized current goal is **M11-X native capture + direct typing**, before M11-R. Read `docs/M11_X_SCOPE.md`, `docs/M11_X_VALIDATION.md` and the design-only `docs/M12_V_PLAN.md`, alongside the Remote guides. The `1.1.0-dev.3` candidate is not a formal Remote release; check actual PR/main/CI state before continuing.
 - Remote adds GUI configuration/OS-backed device Tokens, immutable target metadata, separate durable outbox, outbound approved Worker using the same Local execution slot, verified origin return and independent existing delivery, and bounded Compose deployment. Never silently execute Remote tasks in Local.
 - M11 web history, mobile push, provider failover, React migration and expanded infrastructure remain deferred. Do not publish v1.1.0 based only on Fake/CI. Record exact-SHA tests and the small prepared native/VPS observations separately; no paid model requests without specific user authorization.
 

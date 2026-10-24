@@ -64,7 +64,7 @@ type Snapshot = {
   typingAvailable?: boolean;
   nativeOptions?: NativeOptions;
   nativeCapture?: { path?: string; submission: string; clipboard: string };
-  nativeRuntime?: { capturing: boolean; captureStatus: string; typing: { phase?: string; active?: boolean; sent?: number; total?: number } };
+  nativeRuntime?: { capturing: boolean; captureStatus: string; typing: { phase?: string; active?: boolean; sent?: number; total?: number } | null };
   remote?: {
     mode: string; url: string; label: string; receive: boolean; hasToken: boolean; status: string; error?: string; lastSync?: number;
     identity?: { ownerId: string; deviceId: string };
@@ -290,7 +290,7 @@ const nativeCapturing = ref(false);
 const monitors = ref<{ id: string; width: number; height: number; primary: boolean }[]>([]);
 const typingLabel = computed(() => {
   const t = data.value?.nativeRuntime?.typing;
-  if (!t?.phase) return "";
+  if (!t?.phase || t.phase === 'idle') return "";
   if (t.phase === 'preparing') return "准备输入：请在倒计时结束前切换到目标应用的文字输入位置，并松开快捷键。";
   if (t.phase === 'typing') return `正在输入 ${t.sent ?? 0} / ${t.total ?? 0} 字符；按 Esc 可停止。`;
   if (t.phase === 'sent') return `已发送 ${t.sent ?? 0} 字符，请在目标应用核对；部分应用不接受模拟 Unicode 输入。`;
@@ -928,7 +928,7 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener("shot2agent
 </script>
 
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :data-backend-ready="!!data">
     <aside class="sidebar">
       <div class="brand">Shot2Agent<span>Local 桌面助手</span></div>
       <AppNavigation
@@ -996,20 +996,20 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener("shot2agent
             重新连接剪贴板
           </button>
         </p>
-        <p v-if="data?.tray.feedback && !(data.lastAction?.status === 'preparing' && data.nativeRuntime?.typing.phase)" class="hint" role="status">{{ data.tray.feedback }}</p>
+        <p v-if="data?.tray.feedback && !(data.lastAction?.status === 'preparing' && data.nativeRuntime?.typing?.phase)" class="hint" role="status">{{ data.tray.feedback }}</p>
         <p v-if="message" class="notice" role="status"><AppIcon name="check" />{{ message }}</p>
       </div>
       <section v-if="typingLabel" aria-label="直接输入进度" class="notice" role="status">
         <p>{{ typingLabel }}</p>
-        <button v-if="data?.nativeRuntime?.typing.active" @click="action('stop-typing')">停止输入</button>
+        <button v-if="data?.nativeRuntime?.typing?.active" @click="action('stop-typing')">停止输入</button>
       </section>
       <section v-if="page === 'home'" aria-label="截图处理">
         <section aria-label="原生截图与输入">
           <h2>原生截图与输入</h2>
           <div class="button-row">
             <button :disabled="busy || !data || data.settings.paused || data.nativeRuntime?.capturing" @click="action('capture-monitor')">截取所选显示器</button>
-            <button :disabled="busy || !data?.typingAvailable || data?.nativeRuntime?.typing.active" @click="action('type-latest')">输入最新结果</button>
-            <button :disabled="busy || !data || data.nativeRuntime?.typing.active" @click="action('type-clipboard')">输入剪贴板文本</button>
+            <button :disabled="busy || !data?.typingAvailable || data?.nativeRuntime?.typing?.active" @click="action('type-latest')">输入最新结果</button>
+            <button :disabled="busy || !data || data.nativeRuntime?.typing?.active" @click="action('type-clipboard')">输入剪贴板文本</button>
           </div>
           <p class="hint">整屏截图可只保存文件；在设置中选择显示器和去向。输入启动后，请在准备时间内切换到其他应用；Esc 停止。</p>
           <p v-if="nativeCapturing || data?.nativeRuntime?.capturing" role="status">正在截取显示器…</p>
@@ -1661,7 +1661,7 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener("shot2agent
             <div class="task-actions" v-if="task.status === 'succeeded'">
               <button @click="action('copy', { id: task.id })" :disabled="busy">
                 <AppIcon name="copy" />复制文本</button
-              ><button @click="action('type-result', { id: task.id })" :disabled="busy || data?.nativeRuntime?.typing.active">输入此结果</button
+              ><button @click="action('type-result', { id: task.id })" :disabled="busy || data?.nativeRuntime?.typing?.active">输入此结果</button
               ><button @click="action('copy-files', { id: task.id })" :disabled="busy"><AppIcon name="copy-file" />复制文件</button><button
                 v-if="task.retryableChannels?.length"
                 @click="action('retry-delivery', { id: task.id })"
