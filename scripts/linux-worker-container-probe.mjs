@@ -9,8 +9,10 @@ import { sha256 } from './dist/packages/core/src/blobs.js';
 import { approveLinux, loadLinuxProfiles, linuxCapabilities, linuxEntries } from './dist/packages/worker/src/linux-worker.js';
 import sharp from 'sharp';
 const action = process.argv[2];
-const devices = JSON.parse(readFileSync('/run/shot2agent/devices.json'));
-const a = new RemoteClient('http://127.0.0.1:3100/', devices[0].token);
+// Only the Relay-side probe can read the registry. The Worker never mounts it.
+const workerAction = ['setup-mock', 'hang', 'success', 'verify-single-execution', 'await-execution'].includes(action);
+const devices = workerAction ? [] : JSON.parse(readFileSync('/run/shot2agent/devices.json'));
+const a = workerAction ? undefined : new RemoteClient('http://127.0.0.1:3100/', devices[0].token);
 const config = { url: 'http://relay:3100/', trustedInternalOrigin: 'http://relay:3100/', ownerId: 'isolated', deviceId: 'linux', label: 'Linux VPS', stateRoot: '/data', scratchRoot: '/scratch', workspace: '/workspace', tokenFile: '/run/worker-secrets/worker.token', fake: false };
 async function waitFor(fn) { for (let i = 0; i < 240; i++) { const value = await fn(); if (value) return value; await delay(250); } throw Error('CONTAINER_WORKER_TIMEOUT'); }
 if (action === 'setup-mock') {
